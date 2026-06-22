@@ -8,8 +8,10 @@ import Cursos from './pages/Cursos.jsx'
 import Empresas from './pages/Empresas.jsx'
 import Participantes from './pages/Participantes.jsx'
 import Certificados from './pages/Certificados.jsx'
+import Auditoria from './pages/Auditoria.jsx'
 import Verificar from './pages/Verificar.jsx'
 import ExamenPublico from './pages/ExamenPublico.jsx'
+import { EmpresaLogin, EmpresaDashboard } from './pages/PortalEmpresa.jsx'
 import { AuthProvider } from './hooks/useAuth.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -22,6 +24,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/examen/:cursoId" element={<ExamenPublico />} />
           <Route path="/login" element={<Login />} />
 
+          {/* Portal empresa */}
+          <Route path="/empresa/login" element={<EmpresaLogin />} />
+          <Route path="/empresa/dashboard" element={<EmpresaDashboard />} />
+
           {/* Admin protegido */}
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Dashboard />} />
@@ -29,6 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="empresas" element={<Empresas />} />
             <Route path="participantes" element={<Participantes />} />
             <Route path="certificados" element={<Certificados />} />
+            <Route path="auditoria" element={<Auditoria />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />
