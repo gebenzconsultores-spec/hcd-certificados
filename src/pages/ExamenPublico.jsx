@@ -1,0 +1,241 @@
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { supabase, getExamenPorCurso, guardarResultadoExamen, crearParticipante, crearCertificado, siguienteConsecutivo } from '../lib/supabase'
+import { generarYAbrirCertificado } from '../lib/certificado'
+
+const MINIMO = 0.6
+
+export default function ExamenPublico() {
+  const { cursoId } = useParams()
+  const [fase, setFase] = useState('registro') // registro | examen | resultado
+  const [curso, setCurso] = useState(null)
+  const [preguntas, setPreguntas] = useState([])
+  const [participante, setParticipante] = useState({ nombre: '', correo: '', whatsapp: '', empresa: '', es_universitario: false, universidad: '', carrera: '' })
+  const [respuestas, setRespuestas] = useState({})
+  const [resultado, setResultado] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [intento, setIntento] = useState(1)
+
+  const p = k => v => setParticipante(prev => ({ ...prev, [k]: v }))
+
+  useEffect(() => {
+    async function cargar() {
+      const { data } = await supabase.from('cursos').select('*').eq('id', cursoId).single()
+      setCurso(data)
+      const pregs = await getExamenPorCurso(cursoId)
+      setPreguntas(pregs)
+    }
+    cargar()
+  }, [cursoId])
+
+  async function iniciarExamen() {
+    if (!participante.nombre || !participante.correo || !participante.whatsapp) return
+    setFase('examen')
+  }
+
+  function seleccionar(preguntaId, opcion) {
+    setRespuestas(p => ({ ...p, [preguntaId]: opcion }))
+  }
+
+  async function enviarExamen() {
+    setLoading(true)
+    let correctas = 0
+    preguntas.forEach(p => {
+      if (respuestas[p.id] !== undefined && Number(respuestas[p.id]) === Number(p.respuesta_correcta)) correctas++
+    })
+    const calificacion = correctas / preguntas.length
+    const aprobado = calificacion >= MINIMO
+
+    // Buscar o crear participante
+    let partId
+    const { data: existing } = await supabase.from('participantes').select('id').eq('correo', participante.correo).maybeSingle()
+    if (existing) {
+      partId = existing.id
+    } else {
+      const nuevo = await crearParticipante({
+        nombre: participante.nombre,
+        correo: participante.correo,
+        whatsapp: participante.whatsapp,
+        empresa_manual: participante.empresa,
+        es_universitario: participante.es_universitario,
+        universidad: participante.universidad || null,
+        carrera: participante.carrera || null,
+        tipo: 'individual'
+      })
+      partId = nuevo.id
+    }
+
+    // Guardar resultado
+    await guardarResultadoExamen({
+      participante_id: partId,
+      curso_id: cursoId,
+      calificacion: Math.round(calificacion * 100),
+      aprobado,
+      respuestas_json: respuestas,
+      intento
+    })
+
+    let certData = null
+    if (aprobado) {
+      const consec = await siguienteConsecutivo()
+      const id_unico = `HCD-${curso.numero_curso}-${consec}`
+      certData = await crearCertificado({
+        id_unico,
+        participante_id: partId,
+        curso_id: cursoId,
+        nombre_participante: participante.nombre,
+        nombre_curso: curso.nombre,
+        lugar: curso.lugar_online || 'Online',
+        duracion: curso.duracion,
+        modalidad: 'online',
+        instructor_nombre: 'Néstor Daniel Reyes Díaz',
+        instructor_rfc: 'REDN-770428-433-0005',
+        director_nombre: 'Mirna Rosas Delgado',
+        fecha_emision: new Date().toISOString(),
+      })
+    }
+
+    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData })
+    setFase('resultado')
+    setLoading(false)
+  }
+
+  function repetir() {
+    setRespuestas({})
+    setIntento(i => i + 1)
+    setFase('examen')
+    setResultado(null)
+  }
+
+  if (!curso) return <div style={{ textAlign: 'center', padding: 60, color: '#64748b' }}>Cargando...</div>
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f8f9fb' }}>
+      {/* Header */}
+      <div style={{ background: '#8B1A1A', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 8, height: 8, background: '#fff', borderRadius: '50%' }} />
+        <span style={{ color: '#fff', fontWeight: 800, fontSize: 15 }}>Hablando con Datos</span>
+        <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 13 }}>— Examen en línea</span>
+      </div>
+
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: '40px 24px' }}>
+        {/* FASE REGISTRO */}
+        {fase === 'registro' && (
+          <div>
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px', marginBottom: 24 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>{curso.nombre}</h1>
+              <p style={{ color: '#64748b', fontSize: 14 }}>Duración: {curso.duracion} horas · Mínimo aprobatorio: 60%</p>
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px' }}>
+              <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1e293b', marginBottom: 20 }}>Tus datos para el certificado</h2>
+              <Field label="Nombre completo *" value={participante.nombre} onChange={p('nombre')} placeholder="Como aparecerá en tu certificado" />
+              <Field label="Correo electrónico *" type="email" value={participante.correo} onChange={p('correo')} placeholder="correo@ejemplo.com" />
+              <Field label="WhatsApp *" value={participante.whatsapp} onChange={p('whatsapp')} placeholder="222 123 4567" />
+              <Field label="Empresa donde trabajas (opcional)" value={participante.empresa} onChange={p('empresa')} placeholder="Para estadísticas" />
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14 }}>
+                <input type="checkbox" checked={participante.es_universitario} onChange={e => p('es_universitario')(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#8B1A1A' }} />
+                <span style={{ color: '#374151', fontSize: 13 }}>Soy estudiante universitario</span>
+              </label>
+              {participante.es_universitario && (
+                <>
+                  <Field label="Universidad" value={participante.universidad} onChange={p('universidad')} placeholder="ej. BUAP, UDLAP" />
+                  <Field label="Carrera" value={participante.carrera} onChange={p('carrera')} placeholder="ej. Ingeniería Industrial" />
+                </>
+              )}
+
+              <button onClick={iniciarExamen}
+                disabled={!participante.nombre || !participante.correo || !participante.whatsapp}
+                style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
+                Comenzar examen →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* FASE EXAMEN */}
+        {fase === 'examen' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{curso.nombre}</h2>
+              <span style={{ color: '#64748b', fontSize: 13 }}>{Object.keys(respuestas).length}/{preguntas.length} respondidas</span>
+            </div>
+
+            {preguntas.map((p, idx) => {
+              const opciones = p.tipo === 'verdadero_falso' ? ['Verdadero', 'Falso'] : (p.opciones || [])
+              return (
+                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 24px', marginBottom: 14 }}>
+                  <p style={{ fontWeight: 600, color: '#1e293b', fontSize: 15, marginBottom: 14 }}>
+                    <span style={{ color: '#8B1A1A', marginRight: 8 }}>{idx + 1}.</span>{p.pregunta}
+                  </p>
+                  {opciones.map((op, oidx) => (
+                    <label key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', background: respuestas[p.id] === oidx ? '#f9f0f0' : '#f8f9fb', border: `1.5px solid ${respuestas[p.id] === oidx ? '#8B1A1A' : '#e2e8f0'}` }}>
+                      <input type="radio" name={`q_${p.id}`} checked={respuestas[p.id] === oidx}
+                        onChange={() => seleccionar(p.id, oidx)} style={{ accentColor: '#8B1A1A' }} />
+                      <span style={{ color: '#374151', fontSize: 14 }}>{op}</span>
+                    </label>
+                  ))}
+                </div>
+              )
+            })}
+
+            <button onClick={enviarExamen}
+              disabled={loading || Object.keys(respuestas).length < preguntas.length}
+              style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
+              {loading ? 'Enviando...' : 'Enviar examen'}
+            </button>
+            {Object.keys(respuestas).length < preguntas.length && (
+              <p style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, marginTop: 8 }}>
+                Responde todas las preguntas para poder enviar
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* FASE RESULTADO */}
+        {fase === 'resultado' && resultado && (
+          <div style={{ background: '#fff', border: `2px solid ${resultado.aprobado ? '#16a34a' : '#dc2626'}`, borderRadius: 16, padding: '36px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>{resultado.aprobado ? '🎉' : '😔'}</div>
+            <h2 style={{ fontSize: 24, fontWeight: 800, color: resultado.aprobado ? '#15803d' : '#dc2626', marginBottom: 8 }}>
+              {resultado.aprobado ? '¡Felicidades, aprobaste!' : 'No aprobaste esta vez'}
+            </h2>
+            <p style={{ color: '#64748b', fontSize: 15, marginBottom: 24 }}>
+              Obtuviste <strong>{resultado.calificacion}%</strong> — {resultado.correctas} de {resultado.total} respuestas correctas
+            </p>
+
+            {resultado.aprobado && resultado.cert && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
+                  <div style={{ color: '#15803d', fontSize: 13, marginBottom: 4 }}>Tu ID de certificado</div>
+                  <code style={{ color: '#166534', fontSize: 18, fontWeight: 800 }}>{resultado.cert.id_unico}</code>
+                </div>
+                <button onClick={() => generarYAbrirCertificado(resultado.cert)}
+                  style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
+                  📜 Descargar mi certificado en PDF
+                </button>
+              </div>
+            )}
+
+            {!resultado.aprobado && (
+              <button onClick={repetir}
+                style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                🔄 Intentar de nuevo
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, placeholder, type = 'text' }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', color: '#1e293b' }} />
+    </div>
+  )
+}
