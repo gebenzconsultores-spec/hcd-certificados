@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getCursos, crearCurso, actualizarCurso, siguienteNumeroCurso, guardarPreguntas, getExamenPorCurso, supabase } from '../lib/supabase'
+import { parsearExcelPreguntas } from '../lib/excelPreguntas'
 
 export default function Cursos() {
   const [cursos, setCursos] = useState([])
@@ -12,6 +13,7 @@ export default function Cursos() {
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
   const [borrandoId, setBorrandoId] = useState(null)
+  const [msgExcel, setMsgExcel] = useState(null)
 
   useEffect(() => { cargar() }, [])
 
@@ -66,6 +68,7 @@ export default function Cursos() {
   async function abrirExamen(curso) {
     const pregs = await getExamenPorCurso(curso.id)
     setPreguntas(pregs.length > 0 ? pregs.map(p => ({ ...p, opciones: p.opciones || ['', '', '', ''] })) : [preguntaVacia()])
+    setMsgExcel(null)
     setModalExamen(curso)
   }
 
@@ -85,6 +88,27 @@ export default function Cursos() {
       const ops = [...q.opciones]; ops[oidx] = valor
       return { ...q, opciones: ops }
     }))
+  }
+
+  async function cargarExcel(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setMsgExcel({ tipo: 'cargando', texto: 'Leyendo archivo...' })
+    try {
+      const { preguntas: nuevas, errores } = await parsearExcelPreguntas(file)
+      if (nuevas.length === 0) {
+        setMsgExcel({ tipo: 'error', texto: errores[0] || 'No se encontraron preguntas válidas' })
+        return
+      }
+      // Reemplazar las preguntas actuales con las del Excel
+      setPreguntas(nuevas)
+      let texto = `✅ ${nuevas.length} preguntas cargadas correctamente`
+      if (errores.length > 0) texto += `. ${errores.length} fila(s) con problemas se omitieron.`
+      setMsgExcel({ tipo: 'ok', texto })
+    } catch (err) {
+      setMsgExcel({ tipo: 'error', texto: 'No se pudo leer el archivo. Verifica que sea un Excel válido (.xlsx)' })
+    }
+    e.target.value = '' // reset input
   }
 
   async function guardarExamen() {
@@ -129,16 +153,10 @@ export default function Cursos() {
                 <span style={{ background: c.modalidad === 'presencial' ? '#eff6ff' : '#f0fdf4', color: c.modalidad === 'presencial' ? '#1d4ed8' : '#059669', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                   {c.modalidad === 'presencial' ? 'Presencial' : 'Online'}
                 </span>
-                {/* Botón editar */}
                 <button onClick={() => abrirEditar(c)} title="Editar curso"
-                  style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#475569' }}>
-                  ✏️
-                </button>
-                {/* Botón borrar */}
+                  style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#475569' }}>✏️</button>
                 <button onClick={() => setModalBorrar(c)} title="Eliminar curso"
-                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#dc2626' }}>
-                  🗑
-                </button>
+                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#dc2626' }}>🗑</button>
               </div>
             </div>
             <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h3>
@@ -146,9 +164,7 @@ export default function Cursos() {
             {c.aval_institucion && <p style={{ color: '#7c3aed', fontSize: 12, marginBottom: 10 }}>🏛 Aval: {c.nombre_aval}</p>}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button onClick={() => abrirExamen(c)} style={btnSecondary}>📝 Editar examen</button>
-              <a href={`/examen/${c.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                🔗 Ver examen
-              </a>
+              <a href={`/examen/${c.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
             </div>
           </div>
         ))}
@@ -188,8 +204,8 @@ export default function Cursos() {
         <div style={overlayStyle} onClick={() => setModalEditar(null)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Editar curso #{modalEditar.numero_curso}</h3>
-            <Field label="Nombre del curso *" value={form.nombre} onChange={f('nombre')} placeholder="ej. Core Tools, 8D, ISO 9001" />
-            <Field label="Duración en horas *" value={form.duracion} onChange={f('duracion')} placeholder="ej. 24" type="number" />
+            <Field label="Nombre del curso *" value={form.nombre} onChange={f('nombre')} />
+            <Field label="Duración en horas *" value={form.duracion} onChange={f('duracion')} type="number" />
             <div style={{ marginBottom: 16 }}>
               <label style={labelStyle}>Modalidad *</label>
               <select value={form.modalidad} onChange={e => f('modalidad')(e.target.value)} style={inputStyle}>
@@ -201,7 +217,7 @@ export default function Cursos() {
               <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} />
               <span style={{ color: '#374151', fontSize: 13 }}>¿Tiene aval de institución certificadora?</span>
             </label>
-            {form.aval_institucion && <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} placeholder="ej. Ceneval, UNAM, TEC" />}
+            {form.aval_institucion && <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} />}
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={() => setModalEditar(null)} style={btnGhost}>Cancelar</button>
               <button onClick={guardarEdicion} disabled={saving || !form.nombre || !form.duracion} style={btnPrimary}>
@@ -220,7 +236,7 @@ export default function Cursos() {
               <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
               <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>¿Eliminar este curso?</h3>
               <p style={{ color: '#64748b', fontSize: 14 }}>
-                Se eliminará <strong>"{modalBorrar.nombre}"</strong> y todas sus preguntas de examen. Los certificados ya emitidos no se afectan.
+                Se eliminará <strong>"{modalBorrar.nombre}"</strong> y todas sus preguntas. Los certificados ya emitidos no se afectan.
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -237,9 +253,31 @@ export default function Cursos() {
       {/* Modal examen */}
       {modalExamen && (
         <div style={overlayStyle}>
-          <div style={{ ...modalStyle, width: 700, maxHeight: '85vh', overflowY: 'auto' }}>
+          <div style={{ ...modalStyle, width: 720, maxHeight: '88vh', overflowY: 'auto' }}>
             <h3 style={modalTitle}>Examen: {modalExamen.nombre}</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Mínimo aprobatorio: 60%. Los participantes pueden repetirlo.</p>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Mínimo aprobatorio: 60%. Los participantes pueden repetirlo.</p>
+
+            {/* CARGA DESDE EXCEL */}
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ color: '#059669', fontWeight: 700, fontSize: 14, marginBottom: 2 }}>⚡ Carga rápida desde Excel</div>
+                  <div style={{ color: '#475569', fontSize: 12 }}>Sube tu archivo y se cargan todas las preguntas de golpe</div>
+                </div>
+                <label style={{ background: '#059669', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  📂 Subir Excel
+                  <input type="file" accept=".xlsx,.xls" onChange={cargarExcel} style={{ display: 'none' }} />
+                </label>
+              </div>
+              {msgExcel && (
+                <div style={{ marginTop: 12, padding: '8px 14px', borderRadius: 8, fontSize: 13,
+                  background: msgExcel.tipo === 'ok' ? '#dcfce7' : msgExcel.tipo === 'error' ? '#fef2f2' : '#f1f5f9',
+                  color: msgExcel.tipo === 'ok' ? '#15803d' : msgExcel.tipo === 'error' ? '#dc2626' : '#475569' }}>
+                  {msgExcel.texto}
+                </div>
+              )}
+            </div>
+
             {preguntas.map((p, idx) => (
               <div key={idx} style={{ background: '#f8f9fb', borderRadius: 10, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -248,8 +286,7 @@ export default function Cursos() {
                     style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}>✕</button>
                 </div>
                 <textarea value={p.pregunta} onChange={e => actualizarPregunta(idx, 'pregunta', e.target.value)}
-                  placeholder="Escribe la pregunta aquí..." rows={2}
-                  style={{ ...inputStyle, resize: 'none', marginBottom: 10 }} />
+                  placeholder="Escribe la pregunta aquí..." rows={2} style={{ ...inputStyle, resize: 'none', marginBottom: 10 }} />
                 <div style={{ marginBottom: 8 }}>
                   <label style={labelStyle}>Tipo</label>
                   <select value={p.tipo} onChange={e => actualizarPregunta(idx, 'tipo', e.target.value)} style={inputStyle}>
@@ -259,7 +296,7 @@ export default function Cursos() {
                 </div>
                 {p.tipo === 'opcion_multiple' && (
                   <div>
-                    <label style={labelStyle}>Opciones (selecciona la correcta con el círculo)</label>
+                    <label style={labelStyle}>Opciones (selecciona la correcta)</label>
                     {(p.opciones || ['', '', '', '']).map((op, oidx) => (
                       <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <input type="radio" name={`correcta_${idx}`} checked={Number(p.respuesta_correcta) === oidx}
@@ -281,12 +318,17 @@ export default function Cursos() {
                 )}
               </div>
             ))}
-            <button onClick={agregarPregunta} style={{ ...btnSecondary, marginBottom: 20 }}>+ Agregar pregunta</button>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <button onClick={() => setModalExamen(null)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardarExamen} disabled={saving} style={btnPrimary}>
-                {saving ? 'Guardando...' : 'Guardar examen'}
-              </button>
+
+            <button onClick={agregarPregunta} style={{ ...btnSecondary, marginBottom: 20 }}>+ Agregar pregunta manual</button>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#64748b', fontSize: 13 }}>{preguntas.filter(p => p.pregunta.trim()).length} preguntas en total</span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setModalExamen(null)} style={btnGhost}>Cancelar</button>
+                <button onClick={guardarExamen} disabled={saving} style={btnPrimary}>
+                  {saving ? 'Guardando...' : 'Guardar examen'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
