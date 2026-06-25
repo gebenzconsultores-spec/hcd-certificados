@@ -82,13 +82,15 @@ export default function EmpresaAcceso() {
 
       if (errIns) throw errIns
 
-      // Crear notificación para admin
-      await supabase.from('notificaciones').insert({
-        tipo: 'empresa_registro',
-        titulo: 'Nueva empresa en prueba',
-        mensaje: `${reg.nombre} se registró en periodo de prueba (${id_empresa})`,
-        link: '/admin/empresas'
-      }).catch(() => {})
+      // Crear notificación para admin (sin bloquear si falla)
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'empresa_registro',
+          titulo: 'Nueva empresa en prueba',
+          mensaje: `${reg.nombre} se registró en periodo de prueba (${id_empresa})`,
+          link: '/admin/empresas'
+        })
+      } catch (_) { /* ignorar si falla la notificación */ }
 
       sessionStorage.setItem('empresa_portal', JSON.stringify(emp))
       navigate('/empresa/dashboard')
