@@ -47,9 +47,9 @@ export default function EstudianteAcceso() {
         return
       }
 
-      // Generar ID de empleado automático
-      const { data: seqData } = await supabase.rpc('nextval', { seq_name: 'empleado_id_seq' }).single().catch(() => ({ data: null }))
-      const num = seqData?.nextval || Date.now() % 100000
+      // Generar ID de empleado automático basado en conteo
+      const { count } = await supabase.from('participantes').select('id', { count: 'exact', head: true })
+      const num = (count || 0) + 1
       const id_empleado = `ALU-${String(num).padStart(4, '0')}`
 
       const { data: part, error: errIns } = await supabase.from('participantes').insert({

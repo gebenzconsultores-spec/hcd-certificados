@@ -48,9 +48,17 @@ export default function EmpresaAcceso() {
     if (!reg.nombre || !reg.contacto_email || !reg.password) return
     setLoading(true); setError('')
     try {
-      // Generar ID de empresa automático
-      const { data: seqData } = await supabase.rpc('nextval', { seq_name: 'empresa_id_seq' }).single().catch(() => ({ data: null }))
-      const num = seqData?.nextval || Date.now() % 100000
+      // Verificar si el correo ya existe
+      const { data: existe } = await supabase.from('empresas').select('id').eq('contacto_email', reg.contacto_email).maybeSingle()
+      if (existe) {
+        setError('Este correo ya está registrado. Usa la opción "Ya soy cliente" para entrar.')
+        setLoading(false)
+        return
+      }
+
+      // Generar ID de empresa automático basado en conteo + aleatorio
+      const { count } = await supabase.from('empresas').select('id', { count: 'exact', head: true })
+      const num = (count || 0) + 1
       const id_empresa = `EMP-${String(num).padStart(4, '0')}`
 
       const fechaFin = new Date()
@@ -85,7 +93,8 @@ export default function EmpresaAcceso() {
       sessionStorage.setItem('empresa_portal', JSON.stringify(emp))
       navigate('/empresa/dashboard')
     } catch (e) {
-      setError('No se pudo completar el registro. Es posible que el correo ya esté registrado.')
+      console.error('Error registro:', e)
+      setError('No se pudo completar el registro: ' + (e.message || 'error desconocido') + '. Intenta de nuevo.')
     } finally { setLoading(false) }
   }
 
