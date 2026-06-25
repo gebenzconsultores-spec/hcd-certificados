@@ -9,7 +9,7 @@ export default function Cursos() {
   const [modalEditar, setModalEditar] = useState(null)
   const [modalExamen, setModalExamen] = useState(null)
   const [modalBorrar, setModalBorrar] = useState(null)
-  const [form, setForm] = useState({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '' })
+  const [form, setForm] = useState({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
   const [borrandoId, setBorrandoId] = useState(null)
@@ -31,15 +31,15 @@ export default function Cursos() {
     setSaving(true)
     try {
       const numero = await siguienteNumeroCurso()
-      await crearCurso({ ...form, numero_curso: numero, lugar_online: form.modalidad === 'online' ? 'Puebla, Pue.' : '' })
+      await crearCurso({ ...form, numero_curso: numero, lugar_online: form.modalidad === 'online' ? 'Puebla, Pue.' : '', temario: form.temario })
       await cargar()
       setModal(false)
-      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '' })
+      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
     } finally { setSaving(false) }
   }
 
   function abrirEditar(curso) {
-    setForm({ nombre: curso.nombre, duracion: String(curso.duracion), modalidad: curso.modalidad, aval_institucion: curso.aval_institucion || false, nombre_aval: curso.nombre_aval || '' })
+    setForm({ nombre: curso.nombre, duracion: String(curso.duracion), modalidad: curso.modalidad, aval_institucion: curso.aval_institucion || false, nombre_aval: curso.nombre_aval || '', temario: curso.temario || '' })
     setModalEditar(curso)
   }
 
@@ -47,10 +47,10 @@ export default function Cursos() {
     if (!form.nombre || !form.duracion || !modalEditar) return
     setSaving(true)
     try {
-      await actualizarCurso(modalEditar.id, { nombre: form.nombre, duracion: Number(form.duracion), modalidad: form.modalidad, aval_institucion: form.aval_institucion, nombre_aval: form.nombre_aval })
+      await actualizarCurso(modalEditar.id, { nombre: form.nombre, duracion: Number(form.duracion), modalidad: form.modalidad, aval_institucion: form.aval_institucion, nombre_aval: form.nombre_aval, temario: form.temario })
       await cargar()
       setModalEditar(null)
-      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '' })
+      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
     } finally { setSaving(false) }
   }
 
@@ -184,6 +184,10 @@ export default function Cursos() {
                 <option value="online">Online</option>
               </select>
             </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Temario / Descripción (se muestra a las empresas)</label>
+              <textarea value={form.temario} onChange={e => f('temario')(e.target.value)} rows={4} placeholder="Describe los temas que cubre el curso, uno por línea..." style={{ ...inputStyle, resize: 'vertical' }} />
+            </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} />
               <span style={{ color: '#374151', fontSize: 13 }}>¿Tiene aval de institución certificadora?</span>
@@ -212,6 +216,10 @@ export default function Cursos() {
                 <option value="presencial">Presencial</option>
                 <option value="online">Online</option>
               </select>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={labelStyle}>Temario / Descripción (se muestra a las empresas)</label>
+              <textarea value={form.temario} onChange={e => f('temario')(e.target.value)} rows={4} placeholder="Describe los temas que cubre el curso, uno por línea..." style={{ ...inputStyle, resize: 'vertical' }} />
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} />

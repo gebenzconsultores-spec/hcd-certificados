@@ -11,8 +11,9 @@ export default function EstudianteDashboard() {
   const [certificados, setCertificados] = useState([])
   const [resultados, setResultados] = useState([])
   const [cursosDisponibles, setCursosDisponibles] = useState([])
+  const [asignaciones, setAsignaciones] = useState([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('certificados')
+  const [tab, setTab] = useState('asignados')
 
   useEffect(() => {
     const data = sessionStorage.getItem('estudiante_portal')
@@ -24,14 +25,16 @@ export default function EstudianteDashboard() {
 
   async function cargar(est) {
     setLoading(true)
-    const [{ data: certs }, { data: res }, { data: cursos }] = await Promise.all([
+    const [{ data: certs }, { data: res }, { data: cursos }, { data: asig }] = await Promise.all([
       supabase.from('certificados').select('*, curso:cursos(nombre, aval_institucion, nombre_aval)').eq('participante_id', est.id).order('created_at', { ascending: false }),
       supabase.from('resultados_examen').select('*, curso:cursos(nombre, numero_curso)').eq('participante_id', est.id).order('created_at', { ascending: false }),
-      supabase.from('cursos').select('*').eq('activo', true).order('numero_curso', { ascending: false })
+      supabase.from('cursos').select('*').eq('activo', true).order('numero_curso', { ascending: false }),
+      supabase.from('asignaciones').select('*, microcurso:microcursos(titulo, descripcion, link_externo, duracion_min)').eq('empleado_id', est.id).order('created_at', { ascending: false })
     ])
     setCertificados(certs || [])
     setResultados(res || [])
     setCursosDisponibles(cursos || [])
+    setAsignaciones(asig || [])
     setLoading(false)
   }
 
@@ -109,6 +112,7 @@ export default function EstudianteDashboard() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20 }}>
           {[
+            { id: 'asignados', label: '⚡ Mis microcursos' },
             { id: 'certificados', label: '📜 Mis certificados' },
             { id: 'examenes', label: '📊 Mis exámenes' },
             { id: 'cursos', label: '🎓 Cursos disponibles' },
@@ -119,6 +123,45 @@ export default function EstudianteDashboard() {
             </button>
           ))}
         </div>
+
+        {/* TAB MICROCURSOS ASIGNADOS */}
+        {tab === 'asignados' && (
+          <div>
+            {asignaciones.length === 0 ? (
+              <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+                Tu empresa aún no te ha asignado microcursos. ¡Pronto verás aquí tus capacitaciones!
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
+                {asignaciones.map(a => (
+                  <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
+                        {a.modalidad_asignacion === 'autogestivo' ? '📱 Autogestivo' : '🎥 Zoom'}
+                      </span>
+                      <span style={{ background: a.estado === 'completado' ? '#f0fdf4' : '#fef9c3', color: a.estado === 'completado' ? '#059669' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
+                        {a.estado}
+                      </span>
+                    </div>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{a.microcurso_titulo || a.curso_nombre}</h3>
+                    {a.microcurso?.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{a.microcurso.descripcion}</p>}
+                    {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 10 }}>📅 {new Date(a.fecha_programada).toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
+                    {a.microcurso?.link_externo ? (
+                      <a href={a.microcurso.link_externo} target="_blank"
+                        style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '8px 18px', fontSize: 13, fontWeight: 700 }}>
+                        Tomar microcurso →
+                      </a>
+                    ) : a.tipo === 'microcurso' ? (
+                      <span style={{ color: '#f59e0b', fontSize: 12 }}>Enlace próximamente disponible</span>
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Curso programado por tu empresa</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* TAB CERTIFICADOS */}
         {tab === 'certificados' && (

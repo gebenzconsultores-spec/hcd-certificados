@@ -15,6 +15,7 @@ const NAV = [
   { to: '/admin/empresas', label: 'Empresas', icon: '🏢' },
   { to: '/admin/precios', label: 'Precios y catálogo', icon: '🏷️' },
   { to: '/admin/cotizaciones', label: 'Cotizaciones', icon: '💼' },
+  { to: '/admin/compras', label: 'Compras y solicitudes', icon: '🎫' },
   { to: '/admin/ventas', label: 'Ventas y comisiones', icon: '💰' },
   { to: '/admin/renta', label: 'Renta plataforma', icon: '💳' },
   { sep: 'Configuración' },

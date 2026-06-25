@@ -10,7 +10,8 @@ const COMO_LLEGO_OPCIONES = [
 
 export default function EmpresaAcceso() {
   const navigate = useNavigate()
-  const [modo, setModo] = useState('elegir') // elegir | registro | login
+  const [modo, setModo] = useState('elegir') // elegir | registro | login | exito
+  const [credenciales, setCredenciales] = useState(null) // {id_empresa, password, empData}
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -92,8 +93,9 @@ export default function EmpresaAcceso() {
         })
       } catch (_) { /* ignorar si falla la notificación */ }
 
-      sessionStorage.setItem('empresa_portal', JSON.stringify(emp))
-      navigate('/empresa/dashboard')
+      // Guardar credenciales para mostrar pantalla de éxito
+      setCredenciales({ id_empresa, password: reg.password, empData: emp })
+      setModo('exito')
     } catch (e) {
       console.error('Error registro:', e)
       setError('No se pudo completar el registro: ' + (e.message || 'error desconocido') + '. Intenta de nuevo.')
@@ -223,6 +225,41 @@ export default function EmpresaAcceso() {
               <p style={{ color: '#94a3b8', fontSize: 11, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
                 Al registrarte obtienes 30 días de acceso completo. Después podrás seguir usando el cotizador siempre gratis.
               </p>
+            </div>
+          )}
+
+          {/* PANTALLA DE ÉXITO CON ID */}
+          {modo === 'exito' && credenciales && (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '36px 40px', textAlign: 'center' }}>
+              <div style={{ fontSize: 48, marginBottom: 16 }}>🎉</div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>¡Registro exitoso!</h1>
+              <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Tu prueba de 30 días ha comenzado</p>
+
+              <div style={{ background: '#f9f0f0', border: '2px solid #8B1A1A', borderRadius: 14, padding: '24px', marginBottom: 16 }}>
+                <p style={{ color: '#8B1A1A', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 14 }}>⚠️ Guarda estos datos para acceder</p>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>Tu ID de empresa</div>
+                  <div style={{ color: '#8B1A1A', fontSize: 26, fontWeight: 800, letterSpacing: 1 }}>{credenciales.id_empresa}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>Tu contraseña</div>
+                  <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700 }}>{credenciales.password}</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
+                <p style={{ color: '#1e40af', fontSize: 12, lineHeight: 1.5 }}>
+                  📌 La próxima vez que entres, usa la opción <strong>"Ya soy cliente"</strong> con tu ID de empresa y contraseña.
+                </p>
+              </div>
+
+              <button onClick={() => {
+                  sessionStorage.setItem('empresa_portal', JSON.stringify(credenciales.empData))
+                  navigate('/empresa/dashboard')
+                }}
+                style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 12, padding: '15px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+                Entrar al portal →
+              </button>
             </div>
           )}
 
