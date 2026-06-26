@@ -48,9 +48,20 @@ export default function EstudianteAcceso() {
       }
 
       // Generar ID de empleado automático basado en conteo
-      const { count } = await supabase.from('participantes').select('id', { count: 'exact', head: true })
-      const num = (count || 0) + 1
-      const id_empleado = `ALU-${String(num).padStart(4, '0')}`
+      let id_empleado
+      try {
+        const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'ALU', p_tabla: 'participantes', p_columna: 'id_empleado' })
+        id_empleado = idData
+      } catch (_) {}
+      if (!id_empleado) {
+        const { data: existentes } = await supabase.from('participantes').select('id_empleado').not('id_empleado', 'is', null)
+        let maxNum = 0
+        ;(existentes || []).forEach(e => {
+          const m = (e.id_empleado || '').match(/ALU-(\d+)/)
+          if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+        })
+        id_empleado = `ALU-${String(maxNum + 1).padStart(4, '0')}`
+      }
 
       const { data: part, error: errIns } = await supabase.from('participantes').insert({
         nombre: reg.nombre,

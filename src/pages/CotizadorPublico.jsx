@@ -376,6 +376,10 @@ export default function CotizadorPublico() {
                     </div>
                   </div>
 
+                  <label style={lbl}>📅 Fecha deseada del curso</label>
+                  <input type="date" value={config.fecha_deseada} onChange={e => c('fecha_deseada')(e.target.value)} style={inp} />
+                  <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Propón una fecha; HCD confirmará disponibilidad.</p>
+
                   {/* Aviso de grupo cerrado */}
                   {config.tipo === 'grupo' && (
                     <div style={{ marginTop: 12, background: config.num_personas >= MIN_GRUPO ? '#f0fdf4' : '#fef9c3', border: `1px solid ${config.num_personas >= MIN_GRUPO ? '#bbf7d0' : '#fde047'}`, borderRadius: 8, padding: '12px 14px' }}>
@@ -478,10 +482,6 @@ export default function CotizadorPublico() {
                   </>
                 )}
                 <div style={{ marginTop: 12 }}>
-                  <label style={lbl}>📅 Fecha deseada del curso</label>
-                  <input type="date" value={config.fecha_deseada} onChange={e => c('fecha_deseada')(e.target.value)} style={inp} />
-                  <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Propón una fecha; HCD confirmará disponibilidad.</p>
-
                   <label style={lbl}>Notas adicionales</label>
                   <textarea value={config.notas} onChange={e => c('notas')(e.target.value)} placeholder="Requerimientos especiales..." rows={2} style={{ ...inp, resize: 'none' }} />
                 </div>
@@ -596,6 +596,19 @@ export default function CotizadorPublico() {
             </div>
 
             <p style={{ color: '#64748b', fontSize: 13, marginTop: 20 }}>Un ejecutivo de Hablando con Datos te contactará para confirmar disponibilidad y fechas.</p>
+
+            {/* Invitación a registrarse (solo si no es empresa logueada) */}
+            {!empresaPortal && (
+              <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '24px 28px', marginTop: 24, textAlign: 'left' }}>
+                <h3 style={{ color: '#fff', fontSize: 17, fontWeight: 800, marginBottom: 8 }}>🚀 Agiliza tu proceso de compra</h3>
+                <p style={{ color: 'rgba(255,255,255,.9)', fontSize: 13, lineHeight: 1.6, marginBottom: 16 }}>
+                  Regístrate gratis en nuestra plataforma y obtén: seguimiento de tus cotizaciones, gestión de la capacitación de tu personal, certificados digitales verificables y 30 días de prueba con todo incluido.
+                </p>
+                <a href="/empresa/acceso" style={{ display: 'inline-block', background: '#fff', color: '#8B1A1A', borderRadius: 10, padding: '11px 24px', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
+                  Crear mi cuenta gratis →
+                </a>
+              </div>
+            )}
           </div>
         )}
       </div>

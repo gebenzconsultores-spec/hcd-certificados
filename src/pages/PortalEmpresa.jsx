@@ -71,6 +71,7 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '🎓 Cursos y microcredenciales' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
+    { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
   ]
 
   return (
@@ -152,6 +153,7 @@ export function EmpresaDashboard() {
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} />}
+            {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} />}
           </>
         )}
       </div>
@@ -203,9 +205,7 @@ function TabEmpleados({ empresa, empleados, recargar }) {
     if (!form.nombre || !form.correo) return
     setSaving(true)
     try {
-      // Generar ID empleado
-      const { count } = await supabase.from('participantes').select('id', { count: 'exact', head: true })
-      const id_empleado = `ALU-${String((count || 0) + 1).padStart(4, '0')}`
+      const id_empleado = await generarIdEmpleado()
       await supabase.from('participantes').insert({
         nombre: form.nombre, correo: form.correo, whatsapp: form.whatsapp, puesto: form.puesto,
         id_empleado, empresa_id: empresa.id, registrado_por_empresa: empresa.id, tipo: 'empresa'
@@ -218,11 +218,92 @@ function TabEmpleados({ empresa, empleados, recargar }) {
     } finally { setSaving(false) }
   }
 
+  // Genera ID de empleado sin duplicados (busca el máximo)
+  async function generarIdEmpleado() {
+    try {
+      const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'ALU', p_tabla: 'participantes', p_columna: 'id_empleado' })
+      if (idData) return idData
+    } catch (_) {}
+    // Fallback
+    const { data: existentes } = await supabase.from('participantes').select('id_empleado').not('id_empleado', 'is', null)
+    let maxNum = 0
+    ;(existentes || []).forEach(e => {
+      const m = (e.id_empleado || '').match(/ALU-(\d+)/)
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `ALU-${String(maxNum + 1).padStart(4, '0')}`
+  }
+
+  // Importar empleados desde CSV
+  const [importando, setImportando] = useState(false)
+  const [resultadoImport, setResultadoImport] = useState(null)
+
+  async function importarCSV(file) {
+    if (!file) return
+    setImportando(true)
+    setResultadoImport(null)
+    try {
+      const texto = await file.text()
+      const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
+      if (lineas.length < 2) throw new Error('El archivo está vacío o no tiene datos')
+
+      // Detectar separador (coma o punto y coma)
+      const sep = lineas[0].includes(';') ? ';' : ','
+      const headers = lineas[0].split(sep).map(h => h.trim().toLowerCase())
+
+      // Mapear columnas
+      const idxNombre = headers.findIndex(h => h.includes('nombre'))
+      const idxCorreo = headers.findIndex(h => h.includes('correo') || h.includes('email') || h.includes('mail'))
+      const idxPuesto = headers.findIndex(h => h.includes('puesto') || h.includes('cargo'))
+      const idxWhats = headers.findIndex(h => h.includes('whats') || h.includes('tel') || h.includes('cel'))
+
+      if (idxNombre === -1 || idxCorreo === -1) {
+        throw new Error('El archivo debe tener al menos columnas "nombre" y "correo"')
+      }
+
+      let exitosos = 0
+      let errores = 0
+      const filas = lineas.slice(1)
+      for (const fila of filas) {
+        const cols = fila.split(sep).map(c => c.trim())
+        const nombre = cols[idxNombre]
+        const correo = cols[idxCorreo]
+        if (!nombre || !correo) { errores++; continue }
+        try {
+          const id_empleado = await generarIdEmpleado()
+          await supabase.from('participantes').insert({
+            nombre, correo,
+            puesto: idxPuesto >= 0 ? cols[idxPuesto] : null,
+            whatsapp: idxWhats >= 0 ? cols[idxWhats] : null,
+            id_empleado, empresa_id: empresa.id, registrado_por_empresa: empresa.id, tipo: 'empresa'
+          })
+          exitosos++
+        } catch (_) { errores++ }
+      }
+      setResultadoImport({ exitosos, errores })
+      await recargar()
+    } catch (e) {
+      setResultadoImport({ error: e.message })
+    } finally { setImportando(false) }
+  }
+
+  function descargarPlantilla() {
+    const csv = 'nombre,correo,puesto,whatsapp\nJuan Pérez,juan@empresa.com,Supervisor de Calidad,2221234567\nMaría López,maria@empresa.com,Ingeniera de Procesos,2229876543'
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'plantilla_empleados_HCD.csv'
+    a.click()
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <p style={{ color: '#64748b', fontSize: 14 }}>{empleados.length} empleados registrados</p>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Registrar empleado</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => setModalExcel(true)} style={btnSecondary}>📄 Importar Excel/CSV</button>
+          <button onClick={() => setModal(true)} style={btnPrimary}>+ Registrar empleado</button>
+        </div>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
@@ -250,6 +331,55 @@ function TabEmpleados({ empresa, empleados, recargar }) {
           </tbody>
         </table>
       </div>
+
+      {/* Modal importar CSV */}
+      {modalExcel && (
+        <div style={overlay} onClick={() => { setModalExcel(false); setResultadoImport(null) }}>
+          <div style={modalStyle} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>Importar empleados</h3>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Sube un archivo CSV o Excel (guardado como CSV) con tus empleados.</p>
+
+            <div style={{ background: '#eff6ff', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
+              <p style={{ color: '#1e40af', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+                El archivo debe tener columnas: <strong>nombre, correo</strong> (obligatorias) y opcionalmente <strong>puesto, whatsapp</strong>.
+              </p>
+              <button onClick={descargarPlantilla} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                ⬇️ Descargar plantilla de ejemplo
+              </button>
+            </div>
+
+            {resultadoImport ? (
+              resultadoImport.error ? (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px', color: '#991b1b', fontSize: 13 }}>
+                  ⚠️ {resultadoImport.error}
+                </div>
+              ) : (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '14px 16px' }}>
+                  <div style={{ color: '#15803d', fontWeight: 700, fontSize: 14 }}>✅ Importación completada</div>
+                  <div style={{ color: '#15803d', fontSize: 13, marginTop: 4 }}>
+                    {resultadoImport.exitosos} empleados registrados
+                    {resultadoImport.errores > 0 && ` · ${resultadoImport.errores} con error (filas incompletas)`}
+                  </div>
+                </div>
+              )
+            ) : (
+              <label style={{ display: 'block', border: '2px dashed #cbd5e1', borderRadius: 12, padding: '32px', textAlign: 'center', cursor: importando ? 'wait' : 'pointer', background: '#f8f9fb' }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>📁</div>
+                <div style={{ color: '#475569', fontSize: 14, fontWeight: 600 }}>{importando ? 'Importando...' : 'Haz clic para seleccionar tu archivo CSV'}</div>
+                <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>o arrastra el archivo aquí</div>
+                <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} disabled={importando}
+                  onChange={e => importarCSV(e.target.files[0])} />
+              </label>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button onClick={() => { setModalExcel(false); setResultadoImport(null) }} style={btnGhost}>
+                {resultadoImport && !resultadoImport.error ? 'Listo' : 'Cerrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div style={overlay} onClick={() => setModal(false)}>
@@ -666,6 +796,118 @@ function TabAsignaciones({ asignaciones }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ─── TAB COTIZACIONES (empresa) ───────────────────────────────
+function TabCotizaciones({ empresa }) {
+  const [cotizaciones, setCotizaciones] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [subiendo, setSubiendo] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    // Cotizaciones de esta empresa (por empresa_id o por nombre)
+    const { data } = await supabase.from('cotizaciones')
+      .select('*')
+      .or(`empresa_id.eq.${empresa.id},empresa_nombre.eq.${empresa.nombre}`)
+      .order('created_at', { ascending: false })
+    setCotizaciones(data || [])
+    setLoading(false)
+  }
+
+  // Vencimiento visual a 30 días
+  function estaVencida(cot) {
+    if (cot.estado === 'aceptada' || cot.orden_compra_url) return false
+    const dias = Math.floor((new Date() - new Date(cot.created_at)) / (1000 * 60 * 60 * 24))
+    return dias > 30
+  }
+  function diasRestantes(cot) {
+    const dias = 30 - Math.floor((new Date() - new Date(cot.created_at)) / (1000 * 60 * 60 * 24))
+    return dias
+  }
+
+  async function subirOC(cot, file) {
+    if (!file) return
+    if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
+    setSubiendo(cot.id)
+    try {
+      const nombreArchivo = `${cot.folio}_${Date.now()}.pdf`
+      const { error: upErr } = await supabase.storage.from('ordenes-compra').upload(nombreArchivo, file, { upsert: true })
+      if (upErr) throw upErr
+      const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
+      await supabase.from('cotizaciones').update({
+        orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name, estado: 'aceptada'
+      }).eq('id', cot.id)
+      await cargar()
+    } catch (e) {
+      alert('Error al subir: ' + (e.message || 'verifica el bucket en Supabase'))
+    } finally { setSubiendo(null) }
+  }
+
+  if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando cotizaciones...</div>
+
+  return (
+    <div>
+      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Tus cotizaciones solicitadas. Adjunta tu orden de compra para confirmar.</p>
+
+      {cotizaciones.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>💼</div>
+          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Aún no tienes cotizaciones. Cotiza un curso desde la pestaña "Cursos".</p>
+          <a href="/cotizar" target="_blank" style={{ display: 'inline-block', background: '#8B1A1A', color: '#fff', padding: '10px 20px', borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>Ir al cotizador</a>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {cotizaciones.map(cot => {
+            const vencida = estaVencida(cot)
+            const dias = diasRestantes(cot)
+            return (
+              <div key={cot.id} style={{ background: '#fff', border: `1px solid ${vencida ? '#fecaca' : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                      <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{cot.folio}</code>
+                      {cot.estado === 'aceptada' ? (
+                        <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>✓ Aceptada</span>
+                      ) : vencida ? (
+                        <span style={{ background: '#fef2f2', color: '#dc2626', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>⏳ Vencida</span>
+                      ) : (
+                        <span style={{ background: '#fef9c3', color: '#92400e', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>Vence en {dias} días</span>
+                      )}
+                    </div>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>{cot.curso_nombre}</h3>
+                    <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>
+                      {cot.num_personas} persona(s) · Total: <strong style={{ color: '#8B1A1A' }}>${cot.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
+                    </p>
+                    {cot.fecha_deseada && <p style={{ color: '#1d4ed8', fontSize: 12, marginTop: 4 }}>📅 Fecha deseada: {new Date(cot.fecha_deseada).toLocaleDateString('es-MX')}</p>}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                    {cot.orden_compra_url ? (
+                      <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
+                        📎 Orden de compra adjunta
+                      </a>
+                    ) : vencida ? (
+                      <a href={`/cotizar?curso=${cot.curso_id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
+                        Volver a cotizar
+                      </a>
+                    ) : (
+                      <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer' }}>
+                        {subiendo === cot.id ? 'Subiendo...' : '⬆️ Adjuntar orden de compra'}
+                        <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
+                          onChange={e => subirOC(cot, e.target.files[0])} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
