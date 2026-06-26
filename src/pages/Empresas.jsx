@@ -38,6 +38,17 @@ export default function Empresas() {
     await cargar()
   }
 
+  async function eliminarPermanente(emp) {
+    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE a "${emp.nombre}"?\n\nEsta acción NO se puede deshacer. Se borrará la empresa y sus datos asociados.`)) return
+    try {
+      await supabase.from('empresas').delete().eq('id', emp.id)
+      setDetalle(null)
+      await cargar()
+    } catch (e) {
+      alert('No se pudo eliminar: ' + (e.message || 'error') + '. Es posible que tenga registros vinculados.')
+    }
+  }
+
   async function cambiarTipoAcceso(emp, tipo) {
     const update = { tipo_acceso: tipo }
     // Si lo pasamos a cliente, quitar límite de prueba
@@ -191,6 +202,10 @@ export default function Empresas() {
               <button onClick={() => toggleActivo(detalle)}
                 style={{ background: detalle.activo ? '#fef2f2' : '#f0fdf4', color: detalle.activo ? '#dc2626' : '#059669', border: `1px solid ${detalle.activo ? '#fecaca' : '#bbf7d0'}`, borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 {detalle.activo ? 'Dar de baja esta empresa' : 'Reactivar empresa'}
+              </button>
+              <button onClick={() => eliminarPermanente(detalle)}
+                style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                🗑 Eliminar permanentemente
               </button>
             </div>
           </div>

@@ -7,6 +7,22 @@ const IVA = 0.16
 const MIN_GRUPO = 10
 const DESC_GRUPO = 0.20
 
+// Días equivalentes según duración del curso:
+// 8h = 1 día, 16h = 2 días, más de 16h = 3 días
+function diasPorHoras(horas) {
+  const h = Number(horas) || 8
+  if (h <= 8) return 1
+  if (h <= 16) return 2
+  return 3
+}
+
+// Precio por persona según los días equivalentes del curso
+function precioPorDias(curso, dias) {
+  if (dias === 1) return curso.precio_persona_1dia || 2830
+  if (dias === 2) return curso.precio_persona_2dias || 5660
+  return curso.precio_persona_3dias || 8090
+}
+
 export default function CotizadorPublico() {
   const [familias, setFamilias] = useState([])
   const [cursos, setCursos] = useState([])
@@ -59,24 +75,29 @@ export default function CotizadorPublico() {
 
   // ── CÁLCULOS ──
   function calcular() {
-    if (!cursoSel) return { subtotal: 0, iva_monto: 0, total: 0, comision: 0, precio_base: 0, desc: 0 }
+    if (!cursoSel) return { subtotal: 0, iva_monto: 0, total: 0, comision: 0, precio_base: 0, desc: 0, dias_curso: 1 }
+
+    // Días automáticos según las horas del curso (Opción B)
+    const dias_curso = cursoSel.id ? diasPorHoras(cursoSel.duracion) : 1
     let precio_base = 0
     let desc_grupo = 0
 
     if (config.tipo === 'persona') {
-      const p = config.dias === 1 ? (cursoSel.precio_persona_1dia || 2830)
-        : config.dias === 2 ? (cursoSel.precio_persona_2dias || 5660)
-        : (cursoSel.precio_persona_3dias || 8090)
+      const p = precioPorDias(cursoSel, dias_curso)
       precio_base = p * config.num_personas
     } else {
       // Grupo cerrado: precio por persona × personas, con 20% desc si >= 10
-      const precioPersona = cursoSel.precio_persona_1dia || 2830
-      const totalDias = config.dias
-      const precioUnit = totalDias === 1 ? precioPersona : totalDias === 2 ? (cursoSel.precio_persona_2dias || 5660) : (cursoSel.precio_persona_3dias || 8090)
+      const precioUnit = precioPorDias(cursoSel, dias_curso)
       precio_base = precioUnit * config.num_personas
       if (config.num_personas >= MIN_GRUPO) {
         desc_grupo = precio_base * DESC_GRUPO
       }
+    }
+
+    // Descuento configurado en el catálogo (Admin → Precios)
+    let desc_catalogo = 0
+    if (cursoSel.descuento_activo && cursoSel.descuento_porcentaje > 0) {
+      desc_catalogo = precio_base * (cursoSel.descuento_porcentaje / 100)
     }
 
     // Descuento de cupón
@@ -86,15 +107,19 @@ export default function CotizadorPublico() {
       else desc_cupon = precio_base * (config.cupon_validado.valor / 100)
     }
 
-    const desc = desc_grupo + desc_cupon
+    const desc = desc_grupo + desc_catalogo + desc_cupon
     const precio_con_desc = precio_base - desc
 
-    // Consultoría
+    // Consultoría: precio_hora × número de horas (exacto)
     let cons = 0
     if (config.incluye_consultoria && config.servicio_id) {
       const serv = servicios.find(s => s.id === config.servicio_id)
       if (serv) {
-        cons = serv.tipo_cobro === 'hora' ? serv.precio_hora * config.horas_consultoria : (serv.precio_proyecto || 0)
+        if (serv.tipo_cobro === 'hora') {
+          cons = Number(serv.precio_hora) * Number(config.horas_consultoria)
+        } else {
+          cons = Number(serv.precio_proyecto) || 0
+        }
       }
     }
 
@@ -110,7 +135,7 @@ export default function CotizadorPublico() {
     const total = subtotal + iva_monto
     const comision = total * (config.es_cliente_nuevo ? 0.15 : 0.10)
 
-    return { precio_base, desc_grupo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision }
+    return { precio_base, desc_grupo, desc_catalogo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision, dias_curso }
   }
 
   const nums = calcular()
@@ -133,7 +158,7 @@ export default function CotizadorPublico() {
         curso_nombre: cursoSel.nombre,
         tipo_precio: config.tipo,
         num_personas: config.num_personas,
-        dias: config.dias,
+        dias: nums.dias_curso,
         precio_base: nums.precio_base,
         descuento_tipo: config.cupon_validado ? config.cupon_validado.tipo : (nums.desc_grupo > 0 ? 'grupo' : null),
         descuento_valor: nums.desc,
@@ -286,12 +311,16 @@ export default function CotizadorPublico() {
                   <label style={lbl}>Número de personas</label>
                   <input type="number" min={1} value={config.num_personas} onChange={e => c('num_personas')(Number(e.target.value))} style={inp} />
 
-                  <label style={lbl}>Duración del curso</label>
-                  <select value={config.dias} onChange={e => c('dias')(Number(e.target.value))} style={inp}>
-                    <option value={1}>1 día — ${(cursoSel.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</option>
-                    <option value={2}>2 días — ${(cursoSel.precio_persona_2dias || 5660).toLocaleString('es-MX')} p/persona</option>
-                    <option value={3}>3 días — ${(cursoSel.precio_persona_3dias || 8090).toLocaleString('es-MX')} p/persona</option>
-                  </select>
+                  {/* Duración automática según horas del curso */}
+                  <div style={{ marginTop: 12, background: '#f8f9fb', borderRadius: 8, padding: '12px 14px' }}>
+                    <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>Duración del curso</div>
+                    <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>
+                      {cursoSel.duracion} horas — equivale a {nums.dias_curso} día{nums.dias_curso > 1 ? 's' : ''}
+                    </div>
+                    <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 600, marginTop: 4 }}>
+                      ${precioPorDias(cursoSel, nums.dias_curso).toLocaleString('es-MX')} por persona
+                    </div>
+                  </div>
 
                   {/* Aviso de grupo cerrado */}
                   {config.tipo === 'grupo' && (
@@ -409,7 +438,9 @@ export default function CotizadorPublico() {
                   ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                   <span style={{ color: '#64748b', fontSize: 13, fontWeight: 400 }}> {config.aplica_iva ? '(IVA incl.)' : '(sin IVA)'}</span>
                 </div>
-                {nums.desc > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>Ahorro: ${nums.desc.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
+                {nums.desc_catalogo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🏷️ Promoción {cursoSel.descuento_porcentaje}%: -${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
+                {nums.desc_grupo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>👥 Grupo cerrado 20%: -${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
+                {nums.desc_cupon > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🎟️ Cupón: -${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
               </div>
               <button onClick={() => setPaso(3)} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Continuar →</button>
             </div>
@@ -460,7 +491,7 @@ export default function CotizadorPublico() {
               <Row label="Empresa" value={contacto.empresa_nombre} />
               <Row label="Contacto" value={contacto.contacto_nombre} />
               <Row label="Curso" value={cursoSel?.nombre} bold />
-              <Row label="Tipo" value={config.tipo === 'persona' ? `Por persona (${config.num_personas} pers., ${config.dias} día${config.dias > 1 ? 's' : ''})` : `Grupo cerrado (${config.num_personas} pers.)`} />
+              <Row label="Tipo" value={config.tipo === 'persona' ? `Por persona (${config.num_personas} pers., ${nums.dias_curso} día${nums.dias_curso > 1 ? 's' : ''})` : `Grupo cerrado (${config.num_personas} pers.)`} />
               {config.requiere_viaticos && <Row label="Viáticos" value={viaticosZonas.find(z => z.id === config.zona_viaticos_id)?.estado || '—'} />}
               {config.incluye_consultoria && <Row label="Consultoría" value={servicios.find(s => s.id === config.servicio_id)?.nombre} />}
               <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 16, paddingTop: 16 }}>
@@ -560,8 +591,9 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
   <table>
     <thead><tr><th>Concepto</th><th>Detalle</th><th style="text-align:right">Importe</th></tr></thead>
     <tbody>
-      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.tipo === 'persona' ? `${config.num_personas} persona(s) · ${config.dias} día(s)` : `Grupo cerrado (${config.num_personas} pers.)`}</td><td style="text-align:right">$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.tipo === 'persona' ? `${config.num_personas} persona(s) · ${nums.dias_curso} día(s)` : `Grupo cerrado (${config.num_personas} pers.)`}</td><td style="text-align:right">$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
       ${nums.desc_grupo > 0 ? `<tr><td>Descuento grupo cerrado (20%)</td><td>Mínimo ${MIN_GRUPO} participantes</td><td style="text-align:right;color:#059669">-$${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      ${nums.desc_catalogo > 0 ? `<tr><td>Descuento promocional (${cursoSel.descuento_porcentaje}%)</td><td>Precio especial</td><td style="text-align:right;color:#059669">-$${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${nums.desc_cupon > 0 ? `<tr><td>Cupón ${config.cupon_validado?.codigo}</td><td>${config.cupon_validado?.tipo === '2x1' ? '2x1' : config.cupon_validado?.valor + '%'}</td><td style="text-align:right;color:#059669">-$${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${config.incluye_consultoria && nums.cons > 0 ? `<tr><td>Consultoría</td><td>${serv?.nombre || ''}</td><td style="text-align:right">$${nums.cons.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${config.requiere_viaticos && nums.viat > 0 ? `<tr><td>Viáticos / Traslado</td><td>${zona?.estado || ''}</td><td style="text-align:right">$${nums.viat.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}

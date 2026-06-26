@@ -9,6 +9,7 @@ export default function AdminPrecios() {
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
     cargar()
@@ -65,6 +66,8 @@ export default function AdminPrecios() {
     } finally { setSaving(false) }
   }
 
+  const cursosFiltrados = cursos.filter(c => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+
   if (loading) return <div style={{ color: '#64748b', padding: 40 }}>Cargando...</div>
 
   return (
@@ -78,6 +81,9 @@ export default function AdminPrecios() {
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 18px', marginBottom: 20, color: '#15803d' }}>{msg}</div>
       )}
 
+      <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar curso por nombre..."
+        style={{ width: '100%', maxWidth: 400, border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 14px', fontSize: 14, outline: 'none', marginBottom: 16 }} />
+
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -88,10 +94,10 @@ export default function AdminPrecios() {
             </tr>
           </thead>
           <tbody>
-            {cursos.length === 0 && (
+            {cursosFiltrados.length === 0 && (
               <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos. Créalos primero en la sección Cursos.</td></tr>
             )}
-            {cursos.map(c => {
+            {cursosFiltrados.map(c => {
               const fam = familias.find(x => x.id === c.familia_id)
               return (
                 <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
