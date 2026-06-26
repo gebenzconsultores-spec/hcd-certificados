@@ -342,7 +342,7 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
 // Modal asignar microcurso (gratis = directo)
 function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
   const [seleccionados, setSeleccionados] = useState([])
-  const [modalidad, setModalidad] = useState('autogestivo')
+  const [modalidad, setModalidad] = useState('zoom')
   const [fecha, setFecha] = useState('')
   const [hora, setHora] = useState('')
   const [saving, setSaving] = useState(false)
@@ -364,9 +364,9 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
           microcurso_id: item.id,
           microcurso_titulo: item.titulo,
           tipo: 'microcurso',
-          modalidad_asignacion: modalidad,
-          fecha_programada: modalidad === 'zoom' ? fecha : null,
-          hora_programada: modalidad === 'zoom' ? hora : null,
+          modalidad_asignacion: 'zoom',
+          fecha_programada: fecha,
+          hora_programada: hora,
           estado: 'asignado'
         }
       })
@@ -374,14 +374,18 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
 
       // Crear solicitud para que el admin la vea conectada
       try {
+        const nombresEmpleados = seleccionados.map(id => empleados.find(e => e.id === id)?.nombre).filter(Boolean)
         await supabase.from('solicitudes_microcursos').insert({
           empresa_id: empresa.id,
           empresa_nombre: empresa.nombre,
           microcurso_id: item.id,
           microcurso_titulo: item.titulo,
           num_empleados: seleccionados.length,
+          empleados_nombres: nombresEmpleados.join(', '),
+          fecha_sesion: fecha || null,
+          hora_sesion: hora || null,
           estado: 'aprobada',
-          notas: `Asignación ${modalidad}${fecha ? ' para ' + fecha : ''}`
+          notas: `Sesión Zoom${fecha ? ' para ' + fecha : ''}${hora ? ' a las ' + hora : ''}`
         })
       } catch (_) { /* no bloquear si falla */ }
 
@@ -395,21 +399,26 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
     <div style={overlay} onClick={onClose}>
       <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Asignar: {item.titulo}</h3>
-        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Selecciona empleados y modalidad</p>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Selecciona empleados y la fecha de la sesión por Zoom</p>
 
-        {/* Modalidad */}
-        <label style={lbl}>Modalidad</label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          {[['autogestivo', '📱 Autogestivo', 'Lo toman cuando quieran'], ['zoom', '🎥 Por Zoom', 'En fecha programada']].map(([v, l, d]) => (
-            <button key={v} onClick={() => setModalidad(v)}
-              style={{ flex: 1, padding: '10px', border: `2px solid ${modalidad === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: modalidad === v ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: modalidad === v ? '#8B1A1A' : '#475569' }}>{l}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>{d}</div>
-            </button>
-          ))}
+        {/* Solo Zoom: fecha y hora */}
+        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+          <span style={{ color: '#1e40af', fontSize: 13, fontWeight: 600 }}>🎥 Sesión por Zoom</span>
+          <span style={{ color: '#64748b', fontSize: 12 }}> — se impartirá en la fecha y hora que programes</span>
         </div>
 
-        {modalidad === 'zoom' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div>
+            <label style={lbl}>Fecha</label>
+            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
+          </div>
+          <div>
+            <label style={lbl}>Hora</label>
+            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
+          </div>
+        </div>
+
+        {false && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={lbl}>Fecha</label>
@@ -444,7 +453,7 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
-          <button onClick={asignar} disabled={saving || seleccionados.length === 0 || (modalidad === 'zoom' && !fecha)} style={btnPrimary}>
+          <button onClick={asignar} disabled={saving || seleccionados.length === 0 || !fecha} style={btnPrimary}>
             {saving ? 'Asignando...' : `Asignar a ${seleccionados.length}`}
           </button>
         </div>

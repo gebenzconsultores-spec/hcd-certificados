@@ -68,6 +68,12 @@ export default function AdminMicrocursos() {
     await cargar()
   }
 
+  async function eliminarSolicitud(id) {
+    if (!window.confirm('¿Eliminar esta solicitud?')) return
+    await supabase.from('solicitudes_microcursos').delete().eq('id', id)
+    await cargar()
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -130,20 +136,34 @@ export default function AdminMicrocursos() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8f9fb' }}>
-                {['Empresa', 'Microcurso', 'Empleados', 'Estado', 'Fecha', 'Acción'].map(h => (
+                {['Empresa', 'Microcurso', 'Empleados asignados', 'Sesión Zoom', 'Estado', 'Fecha', 'Acción'].map(h => (
                   <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {solicitudes.length === 0 && (
-                <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin solicitudes</td></tr>
+                <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin solicitudes</td></tr>
               )}
               {solicitudes.map(s => (
                 <tr key={s.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{s.empresa_nombre}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{s.microcurso_titulo}</td>
-                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{s.num_empleados}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 12, maxWidth: 240 }}>
+                    {s.empleados_nombres ? (
+                      <div>
+                        <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{s.num_empleados}</span>
+                        <div style={{ marginTop: 4, color: '#475569', fontSize: 12, lineHeight: 1.4 }}>{s.empleados_nombres}</div>
+                      </div>
+                    ) : (
+                      <span style={{ color: '#94a3b8' }}>{s.num_empleados} empleado{s.num_empleados !== 1 ? 's' : ''}</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 12 }}>
+                    {s.fecha_sesion ? (
+                      <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 {new Date(s.fecha_sesion).toLocaleDateString('es-MX')}{s.hora_sesion ? ` · ${s.hora_sesion}` : ''}</span>
+                    ) : '—'}
+                  </td>
                   <td style={{ padding: '11px 16px' }}>
                     <span style={{ background: s.estado === 'aprobada' ? '#f0fdf4' : s.estado === 'rechazada' ? '#fef2f2' : '#fef9c3', color: s.estado === 'aprobada' ? '#059669' : s.estado === 'rechazada' ? '#dc2626' : '#92400e', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                       {s.estado}
@@ -151,12 +171,15 @@ export default function AdminMicrocursos() {
                   </td>
                   <td style={{ padding: '11px 16px', color: '#94a3b8', fontSize: 11 }}>{new Date(s.created_at).toLocaleDateString('es-MX')}</td>
                   <td style={{ padding: '11px 16px' }}>
-                    {s.estado === 'pendiente' && (
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => cambiarEstadoSolicitud(s.id, 'aprobada')} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Aprobar</button>
-                        <button onClick={() => cambiarEstadoSolicitud(s.id, 'rechazada')} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Rechazar</button>
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {s.estado === 'pendiente' && (
+                        <>
+                          <button onClick={() => cambiarEstadoSolicitud(s.id, 'aprobada')} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Aprobar</button>
+                          <button onClick={() => cambiarEstadoSolicitud(s.id, 'rechazada')} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Rechazar</button>
+                        </>
+                      )}
+                      <button onClick={() => eliminarSolicitud(s.id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
                   </td>
                 </tr>
               ))}
