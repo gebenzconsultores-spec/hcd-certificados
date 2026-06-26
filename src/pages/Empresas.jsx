@@ -28,9 +28,21 @@ export default function Empresas() {
     setSaving(true)
     setErrorGuardar('')
     try {
-      // Generar ID y contraseña automática para empresa creada por admin
-      const { count } = await supabase.from('empresas').select('id', { count: 'exact', head: true })
-      const id_empresa = `EMP-${String((count || 0) + 1).padStart(4, '0')}`
+      // Generar ID único con la función de la BD (sin duplicados)
+      let id_empresa
+      const { data: idData, error: idErr } = await supabase.rpc('siguiente_id', { p_prefijo: 'EMP', p_tabla: 'empresas', p_columna: 'id_empresa' })
+      if (idErr || !idData) {
+        // Fallback: calcular por el máximo existente
+        const { data: existentes } = await supabase.from('empresas').select('id_empresa').not('id_empresa', 'is', null)
+        let maxNum = 0
+        ;(existentes || []).forEach(e => {
+          const m = (e.id_empresa || '').match(/EMP-(\d+)/)
+          if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+        })
+        id_empresa = `EMP-${String(maxNum + 1).padStart(4, '0')}`
+      } else {
+        id_empresa = idData
+      }
       const passwordAuto = `hcd${Math.random().toString(36).substring(2, 8)}`
       await crearEmpresa({ ...form, id_empresa, portal_password: passwordAuto, tipo_acceso: 'cliente', tipo_cliente: 'nuevo', activo: true })
       await cargar()
