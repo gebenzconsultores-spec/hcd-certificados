@@ -371,6 +371,20 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
         }
       })
       await supabase.from('asignaciones').insert(rows)
+
+      // Crear solicitud para que el admin la vea conectada
+      try {
+        await supabase.from('solicitudes_microcursos').insert({
+          empresa_id: empresa.id,
+          empresa_nombre: empresa.nombre,
+          microcurso_id: item.id,
+          microcurso_titulo: item.titulo,
+          num_empleados: seleccionados.length,
+          estado: 'aprobada',
+          notas: `Asignación ${modalidad}${fecha ? ' para ' + fecha : ''}`
+        })
+      } catch (_) { /* no bloquear si falla */ }
+
       onDone()
     } catch (e) {
       alert('Error al asignar: ' + (e.message || ''))

@@ -1,25 +1,54 @@
 import { useEffect, useState } from 'react'
-import { getParticipantes, crearParticipante, getEmpresas } from '../lib/supabase'
+import { supabase, crearParticipante, getEmpresas } from '../lib/supabase'
 
 export default function Participantes() {
   const [participantes, setParticipantes] = useState([])
   const [empresas, setEmpresas] = useState([])
+  const [cursosPorParticipante, setCursosPorParticipante] = useState({})
   const [modal, setModal] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [filtro, setFiltro] = useState('todos')
   const [form, setForm] = useState({
-    nombre: '', correo: '', whatsapp: '', empresa_id: '',
+    nombre: '', correo: '', whatsapp: '', puesto: '', empresa_id: '',
     empresa_manual: '', tipo: 'empresa', es_universitario: false, universidad: '', carrera: ''
   })
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     cargar()
     getEmpresas().then(setEmpresas)
   }, [])
 
-  async function cargar(b = '') {
-    const data = await getParticipantes({ busqueda: b })
-    setParticipantes(data)
+  async function cargar() {
+    setLoading(true)
+    // Traer TODOS los participantes con su empresa
+    const { data: parts } = await supabase
+      .from('participantes')
+      .select('*, empresa:empresas(nombre)')
+      .order('created_at', { ascending: false })
+
+    setParticipantes(parts || [])
+
+    // Traer certificados y asignaciones para contar cursos por participante
+    const [{ data: certs }, { data: asigs }] = await Promise.all([
+      supabase.from('certificados').select('participante_id, nombre_curso'),
+      supabase.from('asignaciones').select('empleado_id, curso_nombre, microcurso_titulo')
+    ])
+
+    const mapa = {}
+    ;(certs || []).forEach(c => {
+      if (!c.participante_id) return
+      if (!mapa[c.participante_id]) mapa[c.participante_id] = { tomados: [], asignados: [] }
+      mapa[c.participante_id].tomados.push(c.nombre_curso)
+    })
+    ;(asigs || []).forEach(a => {
+      if (!a.empleado_id) return
+      if (!mapa[a.empleado_id]) mapa[a.empleado_id] = { tomados: [], asignados: [] }
+      mapa[a.empleado_id].asignados.push(a.curso_nombre || a.microcurso_titulo)
+    })
+    setCursosPorParticipante(mapa)
+    setLoading(false)
   }
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
@@ -28,11 +57,17 @@ export default function Participantes() {
     if (!form.nombre || !form.correo) return
     setSaving(true)
     try {
+      // Generar ID de empleado
+      const { count } = await supabase.from('participantes').select('id', { count: 'exact', head: true })
+      const id_empleado = `ALU-${String((count || 0) + 1).padStart(4, '0')}`
       await crearParticipante({
         nombre: form.nombre,
         correo: form.correo,
         whatsapp: form.whatsapp,
+        puesto: form.puesto,
+        id_empleado,
         empresa_id: form.tipo === 'empresa' ? form.empresa_id || null : null,
+        registrado_por_empresa: form.tipo === 'empresa' ? form.empresa_id || null : null,
         empresa_manual: form.tipo === 'individual' ? form.empresa_manual : null,
         tipo: form.tipo,
         es_universitario: form.es_universitario,
@@ -41,55 +76,104 @@ export default function Participantes() {
       })
       await cargar()
       setModal(false)
-      setForm({ nombre: '', correo: '', whatsapp: '', empresa_id: '', empresa_manual: '', tipo: 'empresa', es_universitario: false, universidad: '', carrera: '' })
+      setForm({ nombre: '', correo: '', whatsapp: '', puesto: '', empresa_id: '', empresa_manual: '', tipo: 'empresa', es_universitario: false, universidad: '', carrera: '' })
+    } catch (e) {
+      alert('No se pudo registrar: ' + (e.message || 'error'))
     } finally { setSaving(false) }
   }
+
+  async function eliminar(p) {
+    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE a "${p.nombre}"?\n\nEsta acción no se puede deshacer.`)) return
+    try {
+      await supabase.from('participantes').delete().eq('id', p.id)
+      await cargar()
+    } catch (e) {
+      alert('No se pudo eliminar: ' + (e.message || 'tiene registros vinculados'))
+    }
+  }
+
+  const filtrados = participantes
+    .filter(p => {
+      if (filtro === 'empresa') return p.tipo === 'empresa' || p.registrado_por_empresa
+      if (filtro === 'individual') return p.tipo === 'individual' || p.tipo === 'individual'
+      return true
+    })
+    .filter(p => `${p.nombre} ${p.correo} ${p.id_empleado || ''} ${p.empresa?.nombre || ''}`.toLowerCase().includes(busqueda.toLowerCase()))
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Participantes</h1>
-          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Personas registradas en el sistema</p>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Personas registradas, incluidos empleados dados de alta por empresas</p>
         </div>
         <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo participante</button>
       </div>
 
-      <input value={busqueda} onChange={e => { setBusqueda(e.target.value); cargar(e.target.value) }}
-        placeholder="Buscar por nombre..." style={{ ...inputStyle, marginBottom: 16, maxWidth: 400 }} />
+      {/* Filtros y búsqueda */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[['todos', 'Todos'], ['empresa', 'De empresa'], ['individual', 'Individuales']].map(([v, l]) => (
+          <button key={v} onClick={() => setFiltro(v)}
+            style={{ padding: '6px 16px', borderRadius: 20, border: `2px solid ${filtro === v ? '#8B1A1A' : '#e2e8f0'}`, background: filtro === v ? '#f9f0f0' : '#fff', color: filtro === v ? '#8B1A1A' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {l}
+          </button>
+        ))}
+        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar nombre, correo, ID, empresa..."
+          style={{ marginLeft: 'auto', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', fontSize: 13, outline: 'none', minWidth: 280 }} />
+      </div>
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Nombre', 'Correo', 'WhatsApp', 'Empresa / Institución', 'Tipo'].map(h => (
-                <th key={h} style={{ padding: '11px 18px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5, fontWeight: 600 }}>{h}</th>
+              {['ID', 'Nombre', 'Empresa', 'Cursos', 'Tipo', ''].map(h => (
+                <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5, fontWeight: 600 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {participantes.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay participantes registrados</td></tr>
+            {loading && <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Cargando...</td></tr>}
+            {!loading && filtrados.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay participantes</td></tr>
             )}
-            {participantes.map(p => (
-              <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '11px 18px', color: '#1e293b', fontWeight: 600 }}>{p.nombre}</td>
-                <td style={{ padding: '11px 18px', color: '#475569', fontSize: 13 }}>{p.correo}</td>
-                <td style={{ padding: '11px 18px', color: '#475569', fontSize: 13 }}>{p.whatsapp || '—'}</td>
-                <td style={{ padding: '11px 18px', color: '#475569', fontSize: 13 }}>
-                  {p.empresa?.nombre || p.empresa_manual || (p.es_universitario ? p.universidad : '—')}
-                </td>
-                <td style={{ padding: '11px 18px' }}>
-                  <span style={{
-                    background: p.tipo === 'empresa' ? '#eff6ff' : p.es_universitario ? '#f5f3ff' : '#f0fdf4',
-                    color: p.tipo === 'empresa' ? '#1d4ed8' : p.es_universitario ? '#7c3aed' : '#059669',
-                    padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600
-                  }}>
-                    {p.tipo === 'empresa' ? 'Empresa' : p.es_universitario ? 'Universitario' : 'Individual'}
-                  </span>
-                </td>
-              </tr>
-            ))}
+            {filtrados.map(p => {
+              const cursos = cursosPorParticipante[p.id] || { tomados: [], asignados: [] }
+              const totalCursos = cursos.tomados.length + cursos.asignados.length
+              return (
+                <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '11px 16px' }}>
+                    {p.id_empleado ? <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{p.id_empleado}</code> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>}
+                  </td>
+                  <td style={{ padding: '11px 16px' }}>
+                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{p.nombre}</div>
+                    <div style={{ color: '#94a3b8', fontSize: 11 }}>{p.correo}{p.puesto ? ` · ${p.puesto}` : ''}</div>
+                  </td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>
+                    {p.empresa?.nombre || p.empresa_manual || (p.es_universitario ? p.universidad : '—')}
+                  </td>
+                  <td style={{ padding: '11px 16px' }}>
+                    {totalCursos === 0 ? <span style={{ color: '#cbd5e1', fontSize: 12 }}>—</span> : (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {cursos.tomados.length > 0 && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>✓ {cursos.tomados.length} tomado{cursos.tomados.length > 1 ? 's' : ''}</span>}
+                        {cursos.asignados.length > 0 && <span style={{ background: '#fef9c3', color: '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{cursos.asignados.length} asignado{cursos.asignados.length > 1 ? 's' : ''}</span>}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '11px 16px' }}>
+                    <span style={{
+                      background: (p.tipo === 'empresa' || p.registrado_por_empresa) ? '#eff6ff' : p.es_universitario ? '#f5f3ff' : '#f0fdf4',
+                      color: (p.tipo === 'empresa' || p.registrado_por_empresa) ? '#1d4ed8' : p.es_universitario ? '#7c3aed' : '#059669',
+                      padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600
+                    }}>
+                      {(p.tipo === 'empresa' || p.registrado_por_empresa) ? 'Empresa' : p.es_universitario ? 'Universitario' : 'Individual'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '11px 16px' }}>
+                    <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -98,8 +182,6 @@ export default function Participantes() {
         <div style={overlayStyle} onClick={() => setModal(false)}>
           <div style={{ ...modalStyle, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Nuevo participante</h3>
-
-            {/* Tipo */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {[['empresa', 'De empresa'], ['individual', 'Individual']].map(([v, l]) => (
                 <button key={v} onClick={() => f('tipo')(v)}
@@ -112,6 +194,7 @@ export default function Participantes() {
             <Field label="Nombre completo *" value={form.nombre} onChange={f('nombre')} placeholder="Nombre completo" />
             <Field label="Correo electrónico *" type="email" value={form.correo} onChange={f('correo')} placeholder="correo@ejemplo.com" />
             <Field label="WhatsApp" value={form.whatsapp} onChange={f('whatsapp')} placeholder="222 123 4567" />
+            <Field label="Puesto" value={form.puesto} onChange={f('puesto')} placeholder="ej. Supervisor de Calidad" />
 
             {form.tipo === 'empresa' ? (
               <div style={{ marginBottom: 14 }}>
@@ -130,8 +213,8 @@ export default function Participantes() {
                 </label>
                 {form.es_universitario && (
                   <>
-                    <Field label="Universidad" value={form.universidad} onChange={f('universidad')} placeholder="ej. BUAP, UDLAP" />
-                    <Field label="Carrera" value={form.carrera} onChange={f('carrera')} placeholder="ej. Ingeniería Industrial" />
+                    <Field label="Universidad" value={form.universidad} onChange={f('universidad')} placeholder="ej. BUAP" />
+                    <Field label="Carrera" value={form.carrera} onChange={f('carrera')} placeholder="ej. Ing. Industrial" />
                   </>
                 )}
               </>
@@ -139,9 +222,7 @@ export default function Participantes() {
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={() => setModal(false)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardar} disabled={saving || !form.nombre || !form.correo} style={btnPrimary}>
-                {saving ? 'Guardando...' : 'Registrar participante'}
-              </button>
+              <button onClick={guardar} disabled={saving || !form.nombre || !form.correo} style={btnPrimary}>{saving ? 'Guardando...' : 'Registrar'}</button>
             </div>
           </div>
         </div>

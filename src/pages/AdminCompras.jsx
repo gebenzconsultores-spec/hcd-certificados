@@ -9,6 +9,7 @@ export default function AdminCompras() {
   const [cursos, setCursos] = useState([])
   const [modal, setModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [form, setForm] = useState({ empresa_id: '', empresa_nombre: '', curso_id: '', curso_nombre: '', monto: '', num_personas: 1, notas: '' })
   const [saving, setSaving] = useState(false)
   const [nuevoID, setNuevoID] = useState(null)
@@ -17,17 +18,27 @@ export default function AdminCompras() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: c }, { data: p }, { data: emps }, { data: curs }] = await Promise.all([
-      supabase.from('compras').select('*').order('created_at', { ascending: false }),
-      supabase.from('programaciones').select('*').order('created_at', { ascending: false }),
-      supabase.from('empresas').select('id, nombre').order('nombre'),
-      supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true)
-    ])
-    setCompras(c || [])
-    setProgramaciones(p || [])
-    setEmpresas(emps || [])
-    setCursos(curs || [])
-    setLoading(false)
+    setError('')
+    try {
+      // Cargar cada tabla por separado para que una falla no rompa todo
+      const compRes = await supabase.from('compras').select('*').order('created_at', { ascending: false })
+      const progRes = await supabase.from('programaciones').select('*').order('created_at', { ascending: false })
+      const empRes = await supabase.from('empresas').select('id, nombre').order('nombre')
+      const curRes = await supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true)
+
+      if (compRes.error || progRes.error) {
+        setError('Faltan tablas en la base de datos. Ejecuta el SQL de la Tanda B en Supabase.')
+      }
+
+      setCompras(compRes.data || [])
+      setProgramaciones(progRes.data || [])
+      setEmpresas(empRes.data || [])
+      setCursos(curRes.data || [])
+    } catch (e) {
+      setError('Error al cargar: ' + (e.message || 'verifica el SQL en Supabase'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
@@ -66,6 +77,10 @@ export default function AdminCompras() {
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Compras y programaciones</h1>
         <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Genera IDs de compra y gestiona solicitudes de cursos</p>
       </div>
+
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '12px 18px', marginBottom: 20, color: '#991b1b', fontSize: 13 }}>⚠️ {error}</div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 24 }}>

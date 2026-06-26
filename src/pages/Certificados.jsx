@@ -29,6 +29,16 @@ export default function Certificados() {
     setCertificados(data)
   }
 
+  async function eliminar(cert) {
+    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE el certificado ${cert.id_unico}?\n\nEsta acción no se puede deshacer.`)) return
+    try {
+      await supabase.from('certificados').delete().eq('id', cert.id)
+      await cargar()
+    } catch (e) {
+      alert('No se pudo eliminar: ' + (e.message || 'error'))
+    }
+  }
+
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
   // Al seleccionar modalidad, pre-llenar lugar
@@ -125,9 +135,10 @@ export default function Certificados() {
                   {new Date(c.fecha_emision).toLocaleDateString('es-MX')}
                 </td>
                 <td style={{ padding: '11px 18px' }}>
-                  <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>
-                    🖨️ PDF
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>🖨️ PDF</button>
+                    <button onClick={() => eliminar(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
+                  </div>
                 </td>
               </tr>
             ))}
