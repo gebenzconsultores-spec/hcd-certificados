@@ -22,11 +22,28 @@ export default function Participantes() {
 
   async function cargar() {
     setLoading(true)
-    // Traer TODOS los participantes con su empresa
-    const { data: parts } = await supabase
+    // Traer TODOS los participantes (sin depender del join, que puede fallar)
+    let parts = []
+    const conJoin = await supabase
       .from('participantes')
       .select('*, empresa:empresas(nombre)')
       .order('created_at', { ascending: false })
+
+    if (conJoin.error || !conJoin.data) {
+      // Si el join falla, cargar sin join
+      const sinJoin = await supabase
+        .from('participantes')
+        .select('*')
+        .order('created_at', { ascending: false })
+      parts = sinJoin.data || []
+      // Traer nombres de empresas por separado
+      const { data: emps } = await supabase.from('empresas').select('id, nombre')
+      const mapaEmp = {}
+      ;(emps || []).forEach(e => { mapaEmp[e.id] = e.nombre })
+      parts = parts.map(p => ({ ...p, empresa: p.empresa_id ? { nombre: mapaEmp[p.empresa_id] } : (p.registrado_por_empresa ? { nombre: mapaEmp[p.registrado_por_empresa] } : null) }))
+    } else {
+      parts = conJoin.data
+    }
 
     setParticipantes(parts || [])
 

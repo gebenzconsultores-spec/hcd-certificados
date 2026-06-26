@@ -210,6 +210,13 @@ function TabEmpleados({ empresa, empleados, recargar }) {
         nombre: form.nombre, correo: form.correo, whatsapp: form.whatsapp, puesto: form.puesto,
         id_empleado, empresa_id: empresa.id, registrado_por_empresa: empresa.id, tipo: 'empresa'
       })
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'empleado', titulo: 'Nuevo empleado registrado',
+          mensaje: `${empresa.nombre} registró a ${form.nombre}`,
+          link: '/admin/participantes'
+        })
+      } catch (_) {}
       await recargar()
       setModal(false)
       setForm({ nombre: '', correo: '', whatsapp: '', puesto: '' })

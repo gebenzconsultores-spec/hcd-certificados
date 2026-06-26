@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import Notificaciones from './Notificaciones.jsx'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { logout } from '../lib/supabase'
 import { useEffect } from 'react'
@@ -88,8 +89,13 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main style={{ flex: 1, marginLeft: 240, padding: '28px 32px', minHeight: '100vh' }}>
-        <Outlet />
+      <main style={{ flex: 1, marginLeft: 240, minHeight: '100vh' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '16px 32px 0' }}>
+          <Notificaciones />
+        </div>
+        <div style={{ padding: '12px 32px 28px' }}>
+          <Outlet />
+        </div>
       </main>
     </div>
   )

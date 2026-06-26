@@ -214,6 +214,16 @@ export default function CotizadorPublico() {
       const { data: cotCreada } = await supabase.from('cotizaciones').insert(payload).select('id').single()
       if (cotCreada) setCotizacionId(cotCreada.id)
 
+      // Notificación para el admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'cotizacion',
+          titulo: 'Nueva cotización generada',
+          mensaje: `${contacto.empresa_nombre} cotizó ${cursoSel.nombre} por $${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+          link: '/admin/cotizaciones'
+        })
+      } catch (_) {}
+
       // Incrementar uso de cupón
       if (config.cupon_validado) {
         await supabase.from('cupones').update({ usos_actuales: (config.cupon_validado.usos_actuales || 0) + 1 }).eq('id', config.cupon_validado.id)
