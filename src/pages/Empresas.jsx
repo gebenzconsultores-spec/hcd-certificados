@@ -8,6 +8,7 @@ export default function Empresas() {
   const [credencialesNuevas, setCredencialesNuevas] = useState(null)
   const [empleadosEmpresa, setEmpleadosEmpresa] = useState([])
   const [cargandoEmpleados, setCargandoEmpleados] = useState(false)
+  const [errorGuardar, setErrorGuardar] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todas')
   const [form, setForm] = useState({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '' })
@@ -25,17 +26,21 @@ export default function Empresas() {
   async function guardar() {
     if (!form.nombre) return
     setSaving(true)
+    setErrorGuardar('')
     try {
       // Generar ID y contraseña automática para empresa creada por admin
       const { count } = await supabase.from('empresas').select('id', { count: 'exact', head: true })
       const id_empresa = `EMP-${String((count || 0) + 1).padStart(4, '0')}`
       const passwordAuto = `hcd${Math.random().toString(36).substring(2, 8)}`
-      const nueva = await crearEmpresa({ ...form, id_empresa, portal_password: passwordAuto, tipo_acceso: 'cliente', tipo_cliente: 'nuevo', activo: true })
+      await crearEmpresa({ ...form, id_empresa, portal_password: passwordAuto, tipo_acceso: 'cliente', tipo_cliente: 'nuevo', activo: true })
       await cargar()
       setModal(false)
       setForm({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '' })
       // Mostrar credenciales generadas
       setCredencialesNuevas({ id_empresa, password: passwordAuto, nombre: form.nombre })
+    } catch (e) {
+      console.error('Error al crear empresa:', e)
+      setErrorGuardar('No se pudo crear: ' + (e.message || 'error desconocido'))
     } finally { setSaving(false) }
   }
 
@@ -327,6 +332,9 @@ export default function Empresas() {
         <div style={overlayStyle} onClick={() => setModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Nueva empresa (cliente directo)</h3>
+            {errorGuardar && (
+              <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', color: '#991b1b', fontSize: 13, marginBottom: 16 }}>⚠️ {errorGuardar}</div>
+            )}
             <Field label="Nombre de la empresa *" value={form.nombre} onChange={f('nombre')} placeholder="ej. Volkswagen de México" />
             <Field label="Ciudad" value={form.ciudad} onChange={f('ciudad')} placeholder="ej. Puebla" />
             <Field label="Nombre del contacto" value={form.contacto_nombre} onChange={f('contacto_nombre')} placeholder="ej. Juan Pérez" />
