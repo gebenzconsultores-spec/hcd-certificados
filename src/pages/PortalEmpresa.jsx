@@ -280,7 +280,6 @@ function TabEmpleados({ empresa, empleados, recargar }) {
 // ─── TAB CURSOS Y MICROCREDENCIALES ───────────────────────────
 function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
   const [modalAsignar, setModalAsignar] = useState(null) // {item, tipo}
-  const [modalProgramar, setModalProgramar] = useState(null)
   const [modalCompra, setModalCompra] = useState(null)
 
   return (
@@ -321,11 +320,13 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
               </details>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <button onClick={() => setModalProgramar(c)} style={{ ...btnPrimary, width: '100%', padding: '8px' }}>📅 Programar curso</button>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => setModalCompra(c)} style={{ ...btnSecondary, flex: 1, padding: '7px', fontSize: 12 }}>Asignar (con ID compra)</button>
-                <a href="/cotizar" target="_blank" style={{ ...btnSecondary, flex: 1, padding: '7px', fontSize: 12, textAlign: 'center', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>Cotizar</a>
-              </div>
+              <a href={`/cotizar?curso=${c.id}`} target="_blank"
+                style={{ ...btnPrimary, width: '100%', padding: '9px', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+                💰 Cotizar este curso
+              </a>
+              <button onClick={() => setModalCompra(c)} style={{ ...btnSecondary, width: '100%', padding: '8px', fontSize: 12 }}>
+                Ya pagué — Asignar con ID de compra
+              </button>
             </div>
           </div>
         ))}
@@ -333,7 +334,6 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
 
       {/* Modales */}
       {modalAsignar && <ModalAsignar empresa={empresa} item={modalAsignar.item} tipo={modalAsignar.tipo} empleados={empleados} onClose={() => setModalAsignar(null)} onDone={() => { setModalAsignar(null); recargar() }} />}
-      {modalProgramar && <ModalProgramar empresa={empresa} curso={modalProgramar} onClose={() => setModalProgramar(null)} />}
       {modalCompra && <ModalCompra empresa={empresa} curso={modalCompra} empleados={empleados} onClose={() => setModalCompra(null)} onDone={() => { setModalCompra(null); recargar() }} />}
     </div>
   )

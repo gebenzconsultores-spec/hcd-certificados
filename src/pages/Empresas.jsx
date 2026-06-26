@@ -5,6 +5,9 @@ export default function Empresas() {
   const [empresas, setEmpresas] = useState([])
   const [modal, setModal] = useState(false)
   const [detalle, setDetalle] = useState(null)
+  const [credencialesNuevas, setCredencialesNuevas] = useState(null)
+  const [empleadosEmpresa, setEmpleadosEmpresa] = useState([])
+  const [cargandoEmpleados, setCargandoEmpleados] = useState(false)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todas')
   const [form, setForm] = useState({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '' })
@@ -23,13 +26,16 @@ export default function Empresas() {
     if (!form.nombre) return
     setSaving(true)
     try {
-      // Generar ID para empresa creada por admin (cliente directo)
+      // Generar ID y contraseña automática para empresa creada por admin
       const { count } = await supabase.from('empresas').select('id', { count: 'exact', head: true })
       const id_empresa = `EMP-${String((count || 0) + 1).padStart(4, '0')}`
-      await crearEmpresa({ ...form, id_empresa, tipo_acceso: 'cliente', tipo_cliente: 'nuevo', activo: true })
+      const passwordAuto = `hcd${Math.random().toString(36).substring(2, 8)}`
+      const nueva = await crearEmpresa({ ...form, id_empresa, portal_password: passwordAuto, tipo_acceso: 'cliente', tipo_cliente: 'nuevo', activo: true })
       await cargar()
       setModal(false)
       setForm({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '' })
+      // Mostrar credenciales generadas
+      setCredencialesNuevas({ id_empresa, password: passwordAuto, nombre: form.nombre })
     } finally { setSaving(false) }
   }
 
@@ -56,6 +62,44 @@ export default function Empresas() {
     await supabase.from('empresas').update(update).eq('id', emp.id)
     await cargar()
     if (detalle?.id === emp.id) setDetalle({ ...detalle, ...update })
+  }
+
+  async function abrirDetalle(emp) {
+    setDetalle(emp)
+    setCargandoEmpleados(true)
+    try {
+      const { data: emps } = await supabase
+        .from('participantes')
+        .select('*')
+        .or(`empresa_id.eq.${emp.id},registrado_por_empresa.eq.${emp.id}`)
+        .order('created_at', { ascending: false })
+
+      // Traer asignaciones de estos empleados
+      const { data: asigs } = await supabase
+        .from('asignaciones')
+        .select('*')
+        .eq('empresa_id', emp.id)
+
+      // Mapear cursos por empleado
+      const empleadosConCursos = (emps || []).map(e => {
+        const cursos = (asigs || []).filter(a => a.empleado_id === e.id)
+          .map(a => ({ nombre: a.curso_nombre || a.microcurso_titulo, tipo: a.tipo, estado: a.estado }))
+        return { ...e, cursos }
+      })
+      setEmpleadosEmpresa(empleadosConCursos)
+    } catch (e) {
+      setEmpleadosEmpresa([])
+    } finally { setCargandoEmpleados(false) }
+  }
+
+  async function eliminarEmpleado(empId) {
+    if (!window.confirm('¿Eliminar este empleado permanentemente?')) return
+    try {
+      await supabase.from('participantes').delete().eq('id', empId)
+      setEmpleadosEmpresa(prev => prev.filter(e => e.id !== empId))
+    } catch (e) {
+      alert('No se pudo eliminar: ' + (e.message || 'tiene registros vinculados'))
+    }
   }
 
   function diasRestantes(emp) {
@@ -133,7 +177,7 @@ export default function Empresas() {
                     </span>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    <button onClick={() => setDetalle(e)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer', color: '#475569' }}>Ver</button>
+                    <button onClick={() => abrirDetalle(e)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer', color: '#475569' }}>Ver</button>
                   </td>
                 </tr>
               )
@@ -184,6 +228,44 @@ export default function Empresas() {
               </div>
             ))}
 
+            {/* Empleados de la empresa */}
+            <div style={{ marginTop: 20 }}>
+              <div style={{ color: '#64748b', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>👥 EMPLEADOS REGISTRADOS ({empleadosEmpresa.length})</div>
+              {cargandoEmpleados ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, padding: 12 }}>Cargando empleados...</div>
+              ) : empleadosEmpresa.length === 0 ? (
+                <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '14px 16px', color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
+                  Esta empresa aún no ha registrado empleados
+                </div>
+              ) : (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
+                  {empleadosEmpresa.map(emp => (
+                    <div key={emp.id} style={{ padding: '12px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{emp.nombre}</span>
+                          {emp.id_empleado && <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '1px 6px', borderRadius: 4, fontSize: 10 }}>{emp.id_empleado}</code>}
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>{emp.puesto || 'Sin puesto'} · {emp.correo}</div>
+                        {emp.cursos && emp.cursos.length > 0 ? (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                            {emp.cursos.map((cur, i) => (
+                              <span key={i} style={{ background: cur.tipo === 'microcurso' ? '#eff6ff' : '#f9f0f0', color: cur.tipo === 'microcurso' ? '#1d4ed8' : '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
+                                {cur.nombre} {cur.estado === 'completado' ? '✓' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ color: '#cbd5e1', fontSize: 11, marginTop: 4 }}>Sin cursos asignados</div>
+                        )}
+                      </div>
+                      <button onClick={() => eliminarEmpleado(emp.id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>🗑</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Controles admin */}
             <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
@@ -207,6 +289,34 @@ export default function Empresas() {
                 style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 🗑 Eliminar permanentemente
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal credenciales generadas */}
+      {credencialesNuevas && (
+        <div style={overlayStyle} onClick={() => setCredencialesNuevas(null)}>
+          <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>✅</div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Empresa creada</h3>
+              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>{credencialesNuevas.nombre}</p>
+              <div style={{ background: '#f9f0f0', border: '2px solid #8B1A1A', borderRadius: 12, padding: '20px', marginBottom: 16 }}>
+                <div style={{ color: '#8B1A1A', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>Credenciales de acceso al portal</div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ color: '#64748b', fontSize: 11 }}>ID de empresa</div>
+                  <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{credencialesNuevas.id_empresa}</div>
+                </div>
+                <div>
+                  <div style={{ color: '#64748b', fontSize: 11 }}>Contraseña (generada automáticamente)</div>
+                  <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700 }}>{credencialesNuevas.password}</div>
+                </div>
+              </div>
+              <p style={{ color: '#64748b', fontSize: 12, marginBottom: 20 }}>
+                Comparte estos datos con la empresa. Podrá cambiar su contraseña después desde su portal.
+              </p>
+              <button onClick={() => setCredencialesNuevas(null)} style={btnPrimary}>Entendido</button>
             </div>
           </div>
         </div>

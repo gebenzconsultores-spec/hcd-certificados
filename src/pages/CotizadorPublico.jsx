@@ -37,17 +37,47 @@ export default function CotizadorPublico() {
     requiere_viaticos: false, zona_viaticos_id: '', monto_viaticos: 0,
     aplica_iva: true, es_cliente_nuevo: true,
     incluye_consultoria: false, servicio_id: '', horas_consultoria: 1, precio_consultoria: 0, descripcion_consultoria: '',
-    notas: ''
+    fecha_deseada: '', notas: ''
   })
   const [contacto, setContacto] = useState({ empresa_nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '' })
   const [saving, setSaving] = useState(false)
   const [folioCot, setFolioCot] = useState(null)
+  const [cotizacionId, setCotizacionId] = useState(null)
+  const [ocSubida, setOcSubida] = useState(null)
+  const [subiendoOC, setSubiendoOC] = useState(false)
+  const [empresaPortal, setEmpresaPortal] = useState(null)
 
   useEffect(() => {
     supabase.from('familias').select('*').order('orden').then(({ data }) => setFamilias(data || []))
-    supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).then(({ data }) => setCursos(data || []))
     supabase.from('servicios').select('*').eq('activo', true).order('orden').then(({ data }) => setServicios(data || []))
     supabase.from('viaticos_zonas').select('*').eq('activo', true).order('monto').then(({ data }) => setViaticosZonas(data || []))
+
+    // Cargar cursos y, si viene ?curso=ID en la URL, preseleccionarlo
+    supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).then(({ data }) => {
+      setCursos(data || [])
+      const params = new URLSearchParams(window.location.search)
+      const cursoId = params.get('curso')
+      if (cursoId && data) {
+        const curso = data.find(co => co.id === cursoId)
+        if (curso) { setCursoSel(curso); setPaso(2) }
+      }
+    })
+
+    // Si la empresa está logueada, prellenar sus datos
+    const empData = sessionStorage.getItem('empresa_portal')
+    if (empData) {
+      try {
+        const emp = JSON.parse(empData)
+        setEmpresaPortal(emp)
+        setContacto({
+          empresa_nombre: emp.nombre || '',
+          contacto_nombre: emp.contacto_nombre || '',
+          contacto_email: emp.contacto_email || '',
+          contacto_whatsapp: emp.contacto_whatsapp || ''
+        })
+        setConfig(p => ({ ...p, es_cliente_nuevo: emp.tipo_acceso !== 'cliente' }))
+      } catch (_) {}
+    }
   }, [])
 
   const c = k => v => setConfig(p => ({ ...p, [k]: v }))
@@ -177,9 +207,12 @@ export default function CotizadorPublico() {
         precio_consultoria: nums.cons,
         cupon_codigo: config.cupon_validado?.codigo || null,
         notas: config.notas || null,
+        fecha_deseada: config.fecha_deseada || null,
+        empresa_id: empresaPortal?.id || null,
         estado: 'enviada'
       }
-      await supabase.from('cotizaciones').insert(payload)
+      const { data: cotCreada } = await supabase.from('cotizaciones').insert(payload).select('id').single()
+      if (cotCreada) setCotizacionId(cotCreada.id)
 
       // Incrementar uso de cupón
       if (config.cupon_validado) {
@@ -208,6 +241,27 @@ export default function CotizadorPublico() {
   function enviarWhatsApp() {
     const msg = `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Generé una cotización en la plataforma HCD con folio *${folioCot}* por un total de *$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*. ¿Podemos continuar?`
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  async function subirOrdenCompra(file) {
+    if (!file) return
+    if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
+    if (!cotizacionId) { alert('Espera a que se genere la cotización'); return }
+    setSubiendoOC(true)
+    try {
+      const nombreArchivo = `${folioCot}_${Date.now()}.pdf`
+      const { error: upErr } = await supabase.storage.from('ordenes-compra').upload(nombreArchivo, file, { upsert: true })
+      if (upErr) throw upErr
+      const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
+      await supabase.from('cotizaciones').update({
+        orden_compra_url: urlData.publicUrl,
+        orden_compra_nombre: file.name,
+        estado: 'aceptada'
+      }).eq('id', cotizacionId)
+      setOcSubida(file.name)
+    } catch (e) {
+      alert('Error al subir: ' + (e.message || 'verifica el bucket en Supabase'))
+    } finally { setSubiendoOC(false) }
   }
 
   const cursosFamilia = familiaActiva ? cursos.filter(co => co.familia_id === familiaActiva) : cursos
@@ -424,8 +478,12 @@ export default function CotizadorPublico() {
                   </>
                 )}
                 <div style={{ marginTop: 12 }}>
+                  <label style={lbl}>📅 Fecha deseada del curso</label>
+                  <input type="date" value={config.fecha_deseada} onChange={e => c('fecha_deseada')(e.target.value)} style={inp} />
+                  <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Propón una fecha; HCD confirmará disponibilidad.</p>
+
                   <label style={lbl}>Notas adicionales</label>
-                  <textarea value={config.notas} onChange={e => c('notas')(e.target.value)} placeholder="Fechas tentativas, requerimientos..." rows={2} style={{ ...inp, resize: 'none' }} />
+                  <textarea value={config.notas} onChange={e => c('notas')(e.target.value)} placeholder="Requerimientos especiales..." rows={2} style={{ ...inp, resize: 'none' }} />
                 </div>
               </div>
             </div>
@@ -519,6 +577,24 @@ export default function CotizadorPublico() {
               <button onClick={imprimirCotizacion} style={btnPrimary}>📄 Descargar cotización PDF</button>
               <button onClick={enviarWhatsApp} style={{ ...btnPrimary, background: '#25d366' }}>💬 Enviar por WhatsApp</button>
             </div>
+
+            {/* Adjuntar orden de compra */}
+            <div style={{ background: '#f8f9fb', borderRadius: 12, padding: '20px 24px', marginTop: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>¿Ya tienes tu orden de compra?</h3>
+              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 14 }}>Adjúntala aquí (PDF) y agilizaremos la confirmación de tu curso.</p>
+              {ocSubida ? (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px', color: '#15803d', fontSize: 13, fontWeight: 600 }}>
+                  ✅ Orden de compra adjuntada: {ocSubida}
+                </div>
+              ) : (
+                <label style={{ display: 'inline-block', background: '#1e293b', color: '#fff', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: subiendoOC ? 'wait' : 'pointer' }}>
+                  {subiendoOC ? 'Subiendo...' : '⬆️ Adjuntar orden de compra (PDF)'}
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendoOC}
+                    onChange={e => subirOrdenCompra(e.target.files[0])} />
+                </label>
+              )}
+            </div>
+
             <p style={{ color: '#64748b', fontSize: 13, marginTop: 20 }}>Un ejecutivo de Hablando con Datos te contactará para confirmar disponibilidad y fechas.</p>
           </div>
         )}
