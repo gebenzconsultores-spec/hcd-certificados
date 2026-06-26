@@ -30,6 +30,8 @@ import AdminVentas from './pages/AdminVentas.jsx'
 import AdminMicrocursos from './pages/AdminMicrocursos.jsx'
 import AdminEquipo from './pages/AdminEquipo.jsx'
 import AdminPrecios from './pages/AdminPrecios.jsx'
+import AdminCompras from './pages/AdminCompras.jsx'
+import AdminCotizadorConfig from './pages/AdminCotizadorConfig.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -62,8 +64,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="microcursos" element={<AdminMicrocursos />} />
             <Route path="empresas" element={<Empresas />} />
             <Route path="cotizaciones" element={<AdminCotizaciones />} />
+            <Route path="cotizador-config" element={<AdminCotizadorConfig />} />
             <Route path="ventas" element={<AdminVentas />} />
             <Route path="renta" element={<RentaPlataforma />} />
+            <Route path="compras" element={<AdminCompras />} />
             <Route path="equipo" element={<AdminEquipo />} />
           </Route>
 

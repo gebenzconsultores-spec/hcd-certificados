@@ -2,78 +2,115 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const WA_NUMBER = '522223549353'
+const EMAIL_CONTACTO = 'luisgomez@hablandocondatos.com.mx'
 const IVA = 0.16
-
-const FAMILIAS_COLOR = {
-  'Sistemas de Gestión': '#1d4ed8',
-  'Herramientas Automotrices': '#8B1A1A',
-  'Lean Six Sigma': '#059669',
-  'Estadística y Software': '#7c3aed',
-}
+const MIN_GRUPO = 10
+const DESC_GRUPO = 0.20
 
 export default function CotizadorPublico() {
   const [familias, setFamilias] = useState([])
   const [cursos, setCursos] = useState([])
+  const [servicios, setServicios] = useState([])
+  const [viaticosZonas, setViaticosZonas] = useState([])
   const [familiaActiva, setFamiliaActiva] = useState(null)
-  const [paso, setPaso] = useState(1) // 1=seleccionar curso, 2=configurar, 3=datos, 4=resumen
+  const [paso, setPaso] = useState(1)
   const [cursoSel, setCursoSel] = useState(null)
   const [config, setConfig] = useState({
     tipo: 'persona', num_personas: 1, dias: 1,
-    descuento_tipo: '', descuento_valor: 0,
-    requiere_viaticos: false, zona_viaticos: 'zona1', monto_viaticos: 0,
+    cupon_codigo: '', cupon_validado: null, cupon_error: '',
+    requiere_viaticos: false, zona_viaticos_id: '', monto_viaticos: 0,
     aplica_iva: true, es_cliente_nuevo: true,
-    incluye_consultoria: false, descripcion_consultoria: '', precio_consultoria: 0,
+    incluye_consultoria: false, servicio_id: '', horas_consultoria: 1, precio_consultoria: 0, descripcion_consultoria: '',
     notas: ''
   })
-  const [contacto, setContacto] = useState({
-    empresa_nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: ''
-  })
+  const [contacto, setContacto] = useState({ empresa_nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '' })
   const [saving, setSaving] = useState(false)
   const [folioCot, setFolioCot] = useState(null)
-  const [cotGuardada, setCotGuardada] = useState(null)
 
   useEffect(() => {
     supabase.from('familias').select('*').order('orden').then(({ data }) => setFamilias(data || []))
-    supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).order('orden').then(({ data }) => setCursos(data || []))
+    supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).then(({ data }) => setCursos(data || []))
+    supabase.from('servicios').select('*').eq('activo', true).order('orden').then(({ data }) => setServicios(data || []))
+    supabase.from('viaticos_zonas').select('*').eq('activo', true).order('monto').then(({ data }) => setViaticosZonas(data || []))
   }, [])
 
   const c = k => v => setConfig(p => ({ ...p, [k]: v }))
   const ct = k => v => setContacto(p => ({ ...p, [k]: v }))
 
-  // ── CÁLCULOS ──────────────────────────────────────────────────
+  // ── VALIDAR CUPÓN contra BD ──
+  async function validarCupon() {
+    if (!config.cupon_codigo) return
+    setConfig(p => ({ ...p, cupon_error: '', cupon_validado: null }))
+    try {
+      const { data: cup } = await supabase.from('cupones').select('*')
+        .eq('codigo', config.cupon_codigo.toUpperCase().trim())
+        .eq('activo', true).single()
+      if (!cup) throw new Error('no existe')
+      // Verificar vigencia
+      if (cup.vigencia_hasta && new Date(cup.vigencia_hasta) < new Date()) throw new Error('vencido')
+      // Verificar usos
+      if (cup.usos_maximos > 0 && cup.usos_actuales >= cup.usos_maximos) throw new Error('agotado')
+      setConfig(p => ({ ...p, cupon_validado: cup, cupon_error: '' }))
+    } catch (e) {
+      const msg = e.message === 'vencido' ? 'Este cupón ya venció' : e.message === 'agotado' ? 'Este cupón ya alcanzó su límite de usos' : 'Cupón no válido'
+      setConfig(p => ({ ...p, cupon_validado: null, cupon_error: msg }))
+    }
+  }
+
+  // ── CÁLCULOS ──
   function calcular() {
-    if (!cursoSel) return { subtotal: 0, iva: 0, total: 0, comision: 0, precio_base: 0 }
+    if (!cursoSel) return { subtotal: 0, iva_monto: 0, total: 0, comision: 0, precio_base: 0, desc: 0 }
     let precio_base = 0
+    let desc_grupo = 0
+
     if (config.tipo === 'persona') {
       const p = config.dias === 1 ? (cursoSel.precio_persona_1dia || 2830)
         : config.dias === 2 ? (cursoSel.precio_persona_2dias || 5660)
         : (cursoSel.precio_persona_3dias || 8090)
       precio_base = p * config.num_personas
     } else {
-      precio_base = cursoSel.precio_grupo || 0
+      // Grupo cerrado: precio por persona × personas, con 20% desc si >= 10
+      const precioPersona = cursoSel.precio_persona_1dia || 2830
+      const totalDias = config.dias
+      const precioUnit = totalDias === 1 ? precioPersona : totalDias === 2 ? (cursoSel.precio_persona_2dias || 5660) : (cursoSel.precio_persona_3dias || 8090)
+      precio_base = precioUnit * config.num_personas
+      if (config.num_personas >= MIN_GRUPO) {
+        desc_grupo = precio_base * DESC_GRUPO
+      }
     }
 
-    // Descuento
-    let desc = 0
-    if (config.descuento_tipo === 'porcentaje') {
-      desc = precio_base * (config.descuento_valor / 100)
-    } else if (config.descuento_tipo === '2x1') {
-      desc = precio_base * 0.5
+    // Descuento de cupón
+    let desc_cupon = 0
+    if (config.cupon_validado) {
+      if (config.cupon_validado.tipo === '2x1') desc_cupon = precio_base * 0.5
+      else desc_cupon = precio_base * (config.cupon_validado.valor / 100)
     }
+
+    const desc = desc_grupo + desc_cupon
     const precio_con_desc = precio_base - desc
 
     // Consultoría
-    const cons = config.incluye_consultoria ? Number(config.precio_consultoria) : 0
+    let cons = 0
+    if (config.incluye_consultoria && config.servicio_id) {
+      const serv = servicios.find(s => s.id === config.servicio_id)
+      if (serv) {
+        cons = serv.tipo_cobro === 'hora' ? serv.precio_hora * config.horas_consultoria : (serv.precio_proyecto || 0)
+      }
+    }
 
-    // Viáticos
-    const viat = config.requiere_viaticos ? Number(config.monto_viaticos) : 0
+    // Viáticos desde BD
+    let viat = 0
+    if (config.requiere_viaticos && config.zona_viaticos_id) {
+      const zona = viaticosZonas.find(z => z.id === config.zona_viaticos_id)
+      viat = zona ? Number(zona.monto) : 0
+    }
 
     const subtotal = precio_con_desc + cons + viat
     const iva_monto = config.aplica_iva ? subtotal * IVA : 0
     const total = subtotal + iva_monto
     const comision = total * (config.es_cliente_nuevo ? 0.15 : 0.10)
 
-    return { precio_base, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision }
+    return { precio_base, desc_grupo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision }
   }
 
   const nums = calcular()
@@ -81,8 +118,11 @@ export default function CotizadorPublico() {
   async function guardarCotizacion() {
     setSaving(true)
     try {
-      const { data: seq } = await supabase.rpc('nextval', { seq_name: 'cotizacion_folio_seq' }).single()
-      const folio = `HCD-COT-${new Date().getFullYear()}-${String(seq?.nextval || Date.now()).slice(-4).padStart(4, '0')}`
+      const { count } = await supabase.from('cotizaciones').select('id', { count: 'exact', head: true })
+      const folio = `HCD-COT-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
+      const serv = servicios.find(s => s.id === config.servicio_id)
+      const zona = viaticosZonas.find(z => z.id === config.zona_viaticos_id)
+
       const payload = {
         folio,
         empresa_nombre: contacto.empresa_nombre,
@@ -95,10 +135,10 @@ export default function CotizadorPublico() {
         num_personas: config.num_personas,
         dias: config.dias,
         precio_base: nums.precio_base,
-        descuento_tipo: config.descuento_tipo || null,
-        descuento_valor: config.descuento_valor,
+        descuento_tipo: config.cupon_validado ? config.cupon_validado.tipo : (nums.desc_grupo > 0 ? 'grupo' : null),
+        descuento_valor: nums.desc,
         requiere_viaticos: config.requiere_viaticos,
-        zona_viaticos: config.requiere_viaticos ? config.zona_viaticos : null,
+        zona_viaticos: zona?.estado || null,
         monto_viaticos: nums.viat,
         aplica_iva: config.aplica_iva,
         subtotal: nums.subtotal,
@@ -108,18 +148,23 @@ export default function CotizadorPublico() {
         comision_porcentaje: config.es_cliente_nuevo ? 15 : 10,
         comision_monto: nums.comision,
         incluye_consultoria: config.incluye_consultoria,
-        descripcion_consultoria: config.descripcion_consultoria || null,
+        descripcion_consultoria: serv?.nombre || config.descripcion_consultoria || null,
         precio_consultoria: nums.cons,
+        cupon_codigo: config.cupon_validado?.codigo || null,
         notas: config.notas || null,
         estado: 'enviada'
       }
-      const { data } = await supabase.from('cotizaciones').insert(payload).select().single()
+      await supabase.from('cotizaciones').insert(payload)
+
+      // Incrementar uso de cupón
+      if (config.cupon_validado) {
+        await supabase.from('cupones').update({ usos_actuales: (config.cupon_validado.usos_actuales || 0) + 1 }).eq('id', config.cupon_validado.id)
+      }
+
       setFolioCot(folio)
-      setCotGuardada(data)
       setPaso(5)
     } catch (e) {
       console.error(e)
-      // Fallback folio local
       const folio = `HCD-COT-${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`
       setFolioCot(folio)
       setPaso(5)
@@ -128,36 +173,31 @@ export default function CotizadorPublico() {
 
   function imprimirCotizacion() {
     const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+    const serv = servicios.find(s => s.id === config.servicio_id)
+    const zona = viaticosZonas.find(z => z.id === config.zona_viaticos_id)
     const ventana = window.open('', '_blank', 'width=900,height=700')
-    ventana.document.write(htmlCotizacion({ contacto, cursoSel, config, nums, folio: folioCot, fecha }))
+    ventana.document.write(htmlCotizacion({ contacto, cursoSel, config, nums, folio: folioCot, fecha, serv, zona }))
     ventana.document.close()
   }
 
   function enviarWhatsApp() {
-    const msg = `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Acabo de generar una cotización en la plataforma HCD con folio *${folioCot}* por un total de *$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*. ¿Podemos continuar con el proceso?`
+    const msg = `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Generé una cotización en la plataforma HCD con folio *${folioCot}* por un total de *$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*. ¿Podemos continuar?`
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
-  const cursosFamilia = familiaActiva ? cursos.filter(c => c.familia_id === familiaActiva) : cursos
+  const cursosFamilia = familiaActiva ? cursos.filter(co => co.familia_id === familiaActiva) : cursos
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f9fb' }}>
-      {/* Header */}
       <div style={{ background: '#8B1A1A', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 8, height: 8, background: '#fff', borderRadius: '50%' }} />
         <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>Hablando con Datos</span>
         <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 13 }}>— Cotizador en línea</span>
       </div>
 
-      {/* Pasos */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '12px 24px' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {[
-            [1, 'Seleccionar curso'],
-            [2, 'Configurar'],
-            [3, 'Tus datos'],
-            [4, 'Resumen'],
-          ].map(([n, label], i) => (
+          {[[1, 'Seleccionar curso'], [2, 'Configurar'], [3, 'Tus datos'], [4, 'Resumen']].map(([n, label], i) => (
             <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: paso >= n ? '#8B1A1A' : '#e2e8f0', color: paso >= n ? '#fff' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>{n}</div>
               <span style={{ fontSize: 12, color: paso >= n ? '#8B1A1A' : '#94a3b8', fontWeight: paso === n ? 700 : 400 }}>{label}</span>
@@ -169,64 +209,60 @@ export default function CotizadorPublico() {
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
 
-        {/* PASO 1: SELECCIONAR CURSO */}
+        {/* PASO 1 */}
         {paso === 1 && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>¿Qué curso te interesa?</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Selecciona una familia para filtrar o navega por todos los cursos disponibles</p>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Filtra por familia o navega por todos los cursos</p>
 
-            {/* Filtro familias */}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
               <button onClick={() => setFamiliaActiva(null)}
                 style={{ padding: '7px 16px', borderRadius: 20, border: `2px solid ${!familiaActiva ? '#8B1A1A' : '#e2e8f0'}`, background: !familiaActiva ? '#f9f0f0' : '#fff', color: !familiaActiva ? '#8B1A1A' : '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 Todos
               </button>
-              {familias.map(f => (
-                <button key={f.id} onClick={() => setFamiliaActiva(f.id)}
-                  style={{ padding: '7px 16px', borderRadius: 20, border: `2px solid ${familiaActiva === f.id ? f.color : '#e2e8f0'}`, background: familiaActiva === f.id ? `${f.color}15` : '#fff', color: familiaActiva === f.id ? f.color : '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  {f.icono} {f.nombre}
+              {familias.map(fa => (
+                <button key={fa.id} onClick={() => setFamiliaActiva(fa.id)}
+                  style={{ padding: '7px 16px', borderRadius: 20, border: `2px solid ${familiaActiva === fa.id ? fa.color : '#e2e8f0'}`, background: familiaActiva === fa.id ? `${fa.color}15` : '#fff', color: familiaActiva === fa.id ? fa.color : '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  {fa.icono} {fa.nombre}
                 </button>
               ))}
             </div>
 
-            {/* Lista cursos */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
               {cursosFamilia.length === 0 && (
-                <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-                  No hay cursos disponibles en esta categoría por el momento
-                </div>
+                <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta categoría</div>
               )}
-              {cursosFamilia.map(c => (
-                <div key={c.id} onClick={() => { setCursoSel(c); setConfig(p => ({ ...p, dias: c.dias || 1 })); setPaso(2) }}
-                  style={{ background: '#fff', border: `2px solid ${cursoSel?.id === c.id ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px', cursor: 'pointer', transition: 'border-color .15s' }}>
+              {cursosFamilia.map(co => (
+                <div key={co.id} onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
+                  style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ background: `${c.familia?.color || '#8B1A1A'}15`, color: c.familia?.color || '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
-                      {c.familia?.icono} {c.familia?.nombre}
+                    <span style={{ background: `${co.familia?.color || '#8B1A1A'}15`, color: co.familia?.color || '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
+                      {co.familia?.icono} {co.familia?.nombre}
                     </span>
-                    <span style={{ color: '#64748b', fontSize: 11 }}>{c.duracion} hrs</span>
+                    <span style={{ color: '#64748b', fontSize: 11 }}>{co.duracion} hrs</span>
                   </div>
-                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h3>
-                  {c.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{c.descripcion}</p>}
-                  <div style={{ color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>
-                    Desde ${(c.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona
-                  </div>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
+                  {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
+                  <div style={{ color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>Desde ${(co.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</div>
                 </div>
               ))}
             </div>
 
-            {/* También consultoría */}
-            <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 14, padding: '20px 24px', marginTop: 24 }}>
-              <h3 style={{ color: '#8B1A1A', fontWeight: 800, fontSize: 15, marginBottom: 6 }}>¿Necesitas consultoría?</h3>
-              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>Implementación de Sistemas de Gestión, Solución de Problemas, Auditorías Internas</p>
-              <button onClick={() => { setCursoSel({ id: null, nombre: 'Consultoría', precio_persona_1dia: 0 }); setConfig(p => ({ ...p, incluye_consultoria: true, tipo: 'grupo' })); setPaso(2) }}
-                style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Cotizar consultoría →
-              </button>
-            </div>
+            {/* Consultoría */}
+            {servicios.length > 0 && (
+              <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 14, padding: '20px 24px', marginTop: 24 }}>
+                <h3 style={{ color: '#8B1A1A', fontWeight: 800, fontSize: 15, marginBottom: 6 }}>¿Necesitas consultoría?</h3>
+                <p style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>{servicios.map(s => s.nombre).join(' · ')}</p>
+                <button onClick={() => { setCursoSel({ id: null, nombre: 'Servicio de Consultoría', precio_persona_1dia: 0 }); setConfig(p => ({ ...p, incluye_consultoria: true, tipo: 'grupo', servicio_id: servicios[0]?.id || '' })); setPaso(2) }}
+                  style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  Cotizar consultoría →
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* PASO 2: CONFIGURAR */}
+        {/* PASO 2 */}
         {paso === 2 && cursoSel && (
           <div>
             <button onClick={() => setPaso(1)} style={btnBack}>← Cambiar curso</button>
@@ -234,70 +270,108 @@ export default function CotizadorPublico() {
             <p style={{ color: '#8B1A1A', fontWeight: 600, marginBottom: 24 }}>{cursoSel.nombre}</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-              <div style={card}>
-                <h3 style={cardTitle}>Tipo de cotización</h3>
-                <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                  {[['persona', 'Por persona'], ['grupo', 'Grupo cerrado']].map(([v, l]) => (
-                    <button key={v} onClick={() => c('tipo')(v)}
-                      style={{ flex: 1, padding: '10px', border: `2px solid ${config.tipo === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: config.tipo === v ? '#f9f0f0' : '#fff', color: config.tipo === v ? '#8B1A1A' : '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-
-                {config.tipo === 'persona' && (
-                  <>
-                    <label style={lbl}>Número de personas</label>
-                    <input type="number" min={1} max={cursoSel.personas_max || 15} value={config.num_personas}
-                      onChange={e => c('num_personas')(Number(e.target.value))} style={inp} />
-                    <label style={lbl}>Duración del curso</label>
-                    <select value={config.dias} onChange={e => c('dias')(Number(e.target.value))} style={inp}>
-                      <option value={1}>1 día — ${(cursoSel.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</option>
-                      <option value={2}>2 días — ${(cursoSel.precio_persona_2dias || 5660).toLocaleString('es-MX')} p/persona</option>
-                      <option value={3}>3 días — ${(cursoSel.precio_persona_3dias || 8090).toLocaleString('es-MX')} p/persona</option>
-                    </select>
-                  </>
-                )}
-
-                {config.tipo === 'grupo' && cursoSel.precio_grupo && (
-                  <div style={{ background: '#f9f0f0', borderRadius: 8, padding: '12px 16px' }}>
-                    <div style={{ color: '#8B1A1A', fontWeight: 700 }}>Precio grupo cerrado</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: '#8B1A1A' }}>${cursoSel.precio_grupo?.toLocaleString('es-MX')}</div>
-                    <div style={{ color: '#64748b', fontSize: 12 }}>Hasta {cursoSel.personas_max || 15} personas</div>
+              {/* Tipo */}
+              {cursoSel.id && (
+                <div style={card}>
+                  <h3 style={cardTitle}>Tipo de cotización</h3>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                    {[['persona', 'Por persona'], ['grupo', 'Grupo cerrado']].map(([v, l]) => (
+                      <button key={v} onClick={() => c('tipo')(v)}
+                        style={{ flex: 1, padding: '10px', border: `2px solid ${config.tipo === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: config.tipo === v ? '#f9f0f0' : '#fff', color: config.tipo === v ? '#8B1A1A' : '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                        {l}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
 
-              <div style={card}>
-                <h3 style={cardTitle}>Descuentos</h3>
-                <label style={lbl}>Tipo de descuento</label>
-                <select value={config.descuento_tipo} onChange={e => c('descuento_tipo')(e.target.value)} style={inp}>
-                  <option value="">Sin descuento</option>
-                  <option value="porcentaje">Porcentaje</option>
-                  <option value="2x1">Cupón 2x1 (50%)</option>
-                </select>
-                {config.descuento_tipo === 'porcentaje' && (
-                  <>
-                    <label style={lbl}>Porcentaje de descuento</label>
-                    <input type="number" min={0} max={25} value={config.descuento_valor}
-                      onChange={e => c('descuento_valor')(Number(e.target.value))} style={inp} placeholder="ej. 20" />
-                  </>
-                )}
+                  <label style={lbl}>Número de personas</label>
+                  <input type="number" min={1} value={config.num_personas} onChange={e => c('num_personas')(Number(e.target.value))} style={inp} />
 
-                <div style={{ marginTop: 16 }}>
-                  <h3 style={cardTitle}>IVA y facturación</h3>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 8 }}>
-                    <input type="checkbox" checked={config.aplica_iva} onChange={e => c('aplica_iva')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
-                    <span style={{ fontSize: 13, color: '#374151' }}>Precio con IVA (16%)</span>
-                  </label>
-                  {!config.aplica_iva && (
-                    <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#713f12' }}>
-                      Sin IVA — aplica descuento hasta 20-25% adicional
+                  <label style={lbl}>Duración del curso</label>
+                  <select value={config.dias} onChange={e => c('dias')(Number(e.target.value))} style={inp}>
+                    <option value={1}>1 día — ${(cursoSel.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</option>
+                    <option value={2}>2 días — ${(cursoSel.precio_persona_2dias || 5660).toLocaleString('es-MX')} p/persona</option>
+                    <option value={3}>3 días — ${(cursoSel.precio_persona_3dias || 8090).toLocaleString('es-MX')} p/persona</option>
+                  </select>
+
+                  {/* Aviso de grupo cerrado */}
+                  {config.tipo === 'grupo' && (
+                    <div style={{ marginTop: 12, background: config.num_personas >= MIN_GRUPO ? '#f0fdf4' : '#fef9c3', border: `1px solid ${config.num_personas >= MIN_GRUPO ? '#bbf7d0' : '#fde047'}`, borderRadius: 8, padding: '12px 14px' }}>
+                      {config.num_personas >= MIN_GRUPO ? (
+                        <div>
+                          <div style={{ color: '#15803d', fontWeight: 700, fontSize: 13 }}>✓ ¡Precio especial activado!</div>
+                          <div style={{ color: '#15803d', fontSize: 12, marginTop: 2 }}>Grupo de {config.num_personas} personas: 20% de descuento aplicado</div>
+                        </div>
+                      ) : (
+                        <div style={{ color: '#92400e', fontSize: 12 }}>
+                          💡 Con <strong>{MIN_GRUPO} o más participantes</strong> obtienes <strong>20% de descuento</strong> (precio especial de grupo cerrado). Te faltan {MIN_GRUPO - config.num_personas}.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Consultoría */}
+              <div style={card}>
+                <h3 style={cardTitle}>Consultoría</h3>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
+                  <input type="checkbox" checked={config.incluye_consultoria} onChange={e => c('incluye_consultoria')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                  <span style={{ fontSize: 13, color: '#374151' }}>{cursoSel.id ? 'Agregar servicio de consultoría' : 'Servicio de consultoría'}</span>
+                </label>
+                {config.incluye_consultoria && (
+                  <>
+                    <label style={lbl}>Servicio</label>
+                    <select value={config.servicio_id} onChange={e => c('servicio_id')(e.target.value)} style={inp}>
+                      <option value="">Selecciona un servicio</option>
+                      {servicios.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.nombre} — ${Number(s.tipo_cobro === 'hora' ? s.precio_hora : s.precio_proyecto).toLocaleString('es-MX')}/{s.tipo_cobro === 'hora' ? 'hr' : 'proyecto'}
+                        </option>
+                      ))}
+                    </select>
+                    {(() => {
+                      const serv = servicios.find(s => s.id === config.servicio_id)
+                      if (serv?.tipo_cobro === 'hora') {
+                        return (
+                          <>
+                            <label style={lbl}>Número de horas</label>
+                            <input type="number" min={1} value={config.horas_consultoria} onChange={e => c('horas_consultoria')(Number(e.target.value))} style={inp} />
+                          </>
+                        )
+                      }
+                      return null
+                    })()}
+                    {config.servicio_id && (
+                      <div style={{ marginTop: 8, color: '#64748b', fontSize: 12 }}>{servicios.find(s => s.id === config.servicio_id)?.descripcion}</div>
+                    )}
+                  </>
+                )}
               </div>
 
+              {/* Cupón */}
+              <div style={card}>
+                <h3 style={cardTitle}>¿Tienes un cupón?</h3>
+                <label style={lbl}>Código de cupón</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input value={config.cupon_codigo} onChange={e => c('cupon_codigo')(e.target.value.toUpperCase())} placeholder="HCD-XXXXX" style={{ ...inp, flex: 1 }} />
+                  <button onClick={validarCupon} style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 8, padding: '0 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Aplicar</button>
+                </div>
+                {config.cupon_error && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 8 }}>✗ {config.cupon_error}</div>}
+                {config.cupon_validado && (
+                  <div style={{ marginTop: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px' }}>
+                    <div style={{ color: '#15803d', fontWeight: 700, fontSize: 13 }}>✓ Cupón aplicado</div>
+                    <div style={{ color: '#15803d', fontSize: 12 }}>{config.cupon_validado.tipo === '2x1' ? '2x1 — 50% de descuento' : `${config.cupon_validado.valor}% de descuento`}</div>
+                  </div>
+                )}
+                <div style={{ marginTop: 16 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={config.aplica_iva} onChange={e => c('aplica_iva')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                    <span style={{ fontSize: 13, color: '#374151' }}>Precio con IVA (16%)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Viáticos */}
               <div style={card}>
                 <h3 style={cardTitle}>Viáticos y traslado</h3>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
@@ -306,46 +380,23 @@ export default function CotizadorPublico() {
                 </label>
                 {config.requiere_viaticos && (
                   <>
-                    <label style={lbl}>Zona de traslado</label>
-                    <select value={config.zona_viaticos} onChange={e => c('zona_viaticos')(e.target.value)} style={inp}>
-                      <option value="zona1">Zona 1 — Puebla ciudad, Tlaxcala, Huejotzingo, Atlixco (incluido)</option>
-                      <option value="otra">Otra ciudad / estado (especificar monto)</option>
+                    <label style={lbl}>Estado / Zona</label>
+                    <select value={config.zona_viaticos_id} onChange={e => c('zona_viaticos_id')(e.target.value)} style={inp}>
+                      <option value="">Selecciona tu estado</option>
+                      {viaticosZonas.map(z => (
+                        <option key={z.id} value={z.id}>{z.estado} {z.monto === 0 ? '(incluido)' : `— $${Number(z.monto).toLocaleString('es-MX')}`}</option>
+                      ))}
                     </select>
-                    {config.zona_viaticos === 'otra' && (
-                      <>
-                        <label style={lbl}>Monto de viáticos estimado ($)</label>
-                        <input type="number" min={0} value={config.monto_viaticos}
-                          onChange={e => c('monto_viaticos')(Number(e.target.value))} style={inp}
-                          placeholder="ej. 3500 para San Luis Potosí (gasolina+hospedaje)" />
-                        <p style={{ color: '#64748b', fontSize: 11, marginTop: 4 }}>Incluye: gasolina, hospedaje, avión según destino. HCD confirma el monto final.</p>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div style={card}>
-                <h3 style={cardTitle}>Consultoría adicional</h3>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
-                  <input type="checkbox" checked={config.incluye_consultoria} onChange={e => c('incluye_consultoria')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
-                  <span style={{ fontSize: 13, color: '#374151' }}>¿Incluir servicio de consultoría?</span>
-                </label>
-                {config.incluye_consultoria && (
-                  <>
-                    <label style={lbl}>Descripción del servicio</label>
-                    <textarea value={config.descripcion_consultoria} onChange={e => c('descripcion_consultoria')(e.target.value)}
-                      placeholder="ej. Implementación ISO 9001, acompañamiento 3 meses" rows={2}
-                      style={{ ...inp, resize: 'none' }} />
-                    <label style={lbl}>Precio de consultoría ($)</label>
-                    <input type="number" min={0} value={config.precio_consultoria}
-                      onChange={e => c('precio_consultoria')(Number(e.target.value))} style={inp} />
+                    {config.zona_viaticos_id && (() => {
+                      const zona = viaticosZonas.find(z => z.id === config.zona_viaticos_id)
+                      return zona?.notas ? <p style={{ color: '#64748b', fontSize: 11, marginTop: 6 }}>Incluye: {zona.notas}</p> : null
+                    })()}
+                    <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>HCD confirma el monto final de viáticos.</p>
                   </>
                 )}
                 <div style={{ marginTop: 12 }}>
                   <label style={lbl}>Notas adicionales</label>
-                  <textarea value={config.notas} onChange={e => c('notas')(e.target.value)}
-                    placeholder="Requerimientos especiales, fechas tentativas, etc." rows={2}
-                    style={{ ...inp, resize: 'none' }} />
+                  <textarea value={config.notas} onChange={e => c('notas')(e.target.value)} placeholder="Fechas tentativas, requerimientos..." rows={2} style={{ ...inp, resize: 'none' }} />
                 </div>
               </div>
             </div>
@@ -356,23 +407,21 @@ export default function CotizadorPublico() {
                 <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 4 }}>TOTAL ESTIMADO</div>
                 <div style={{ color: '#fff', fontSize: 28, fontWeight: 800 }}>
                   ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  <span style={{ color: '#64748b', fontSize: 13, fontWeight: 400 }}> {config.aplica_iva ? '(IVA incluido)' : '(sin IVA)'}</span>
+                  <span style={{ color: '#64748b', fontSize: 13, fontWeight: 400 }}> {config.aplica_iva ? '(IVA incl.)' : '(sin IVA)'}</span>
                 </div>
                 {nums.desc > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>Ahorro: ${nums.desc.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
               </div>
-              <button onClick={() => setPaso(3)} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
-                Continuar →
-              </button>
+              <button onClick={() => setPaso(3)} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Continuar →</button>
             </div>
           </div>
         )}
 
-        {/* PASO 3: DATOS DE CONTACTO */}
+        {/* PASO 3 */}
         {paso === 3 && (
           <div>
             <button onClick={() => setPaso(2)} style={btnBack}>← Volver</button>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>Tus datos de contacto</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Para enviarte la cotización formal y dar seguimiento</p>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Para enviarte la cotización formal</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 600 }}>
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={lbl}>Empresa *</label>
@@ -398,15 +447,11 @@ export default function CotizadorPublico() {
                 </select>
               </div>
             </div>
-            <button onClick={() => setPaso(4)}
-              disabled={!contacto.empresa_nombre || !contacto.contacto_nombre || !contacto.contacto_email}
-              style={{ ...btnPrimary, marginTop: 24 }}>
-              Ver resumen →
-            </button>
+            <button onClick={() => setPaso(4)} disabled={!contacto.empresa_nombre || !contacto.contacto_nombre || !contacto.contacto_email} style={{ ...btnPrimary, marginTop: 24 }}>Ver resumen →</button>
           </div>
         )}
 
-        {/* PASO 4: RESUMEN */}
+        {/* PASO 4 */}
         {paso === 4 && (
           <div>
             <button onClick={() => setPaso(3)} style={btnBack}>← Volver</button>
@@ -415,9 +460,9 @@ export default function CotizadorPublico() {
               <Row label="Empresa" value={contacto.empresa_nombre} />
               <Row label="Contacto" value={contacto.contacto_nombre} />
               <Row label="Curso" value={cursoSel?.nombre} bold />
-              <Row label="Tipo" value={config.tipo === 'persona' ? `Por persona (${config.num_personas} personas, ${config.dias} día${config.dias > 1 ? 's' : ''})` : 'Grupo cerrado'} />
-              {config.requiere_viaticos && <Row label="Viáticos" value={config.zona_viaticos === 'zona1' ? 'Zona 1 (incluido)' : `$${Number(config.monto_viaticos).toLocaleString('es-MX')}`} />}
-              {config.incluye_consultoria && <Row label="Consultoría" value={config.descripcion_consultoria} />}
+              <Row label="Tipo" value={config.tipo === 'persona' ? `Por persona (${config.num_personas} pers., ${config.dias} día${config.dias > 1 ? 's' : ''})` : `Grupo cerrado (${config.num_personas} pers.)`} />
+              {config.requiere_viaticos && <Row label="Viáticos" value={viaticosZonas.find(z => z.id === config.zona_viaticos_id)?.estado || '—'} />}
+              {config.incluye_consultoria && <Row label="Consultoría" value={servicios.find(s => s.id === config.servicio_id)?.nombre} />}
               <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 16, paddingTop: 16 }}>
                 <Row label="Subtotal" value={`$${nums.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} />
                 {nums.desc > 0 && <Row label="Descuento" value={`-$${nums.desc.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} color="#059669" />}
@@ -425,13 +470,11 @@ export default function CotizadorPublico() {
                 <Row label="TOTAL" value={`$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} bold big />
               </div>
             </div>
-            <button onClick={guardarCotizacion} disabled={saving} style={{ ...btnPrimary, marginTop: 20 }}>
-              {saving ? 'Generando cotización...' : '✅ Generar cotización oficial'}
-            </button>
+            <button onClick={guardarCotizacion} disabled={saving} style={{ ...btnPrimary, marginTop: 20 }}>{saving ? 'Generando...' : '✅ Generar cotización oficial'}</button>
           </div>
         )}
 
-        {/* PASO 5: ÉXITO */}
+        {/* PASO 5 */}
         {paso === 5 && (
           <div style={{ textAlign: 'center', maxWidth: 560, margin: '0 auto' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
@@ -439,17 +482,13 @@ export default function CotizadorPublico() {
             <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 12, padding: '16px 24px', marginBottom: 24 }}>
               <div style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>Folio de cotización</div>
               <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{folioCot}</div>
-              <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700, marginTop: 8 }}>
-                Total: ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-              </div>
+              <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700, marginTop: 8 }}>Total: ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={imprimirCotizacion} style={btnPrimary}>📄 Descargar cotización PDF</button>
               <button onClick={enviarWhatsApp} style={{ ...btnPrimary, background: '#25d366' }}>💬 Enviar por WhatsApp</button>
             </div>
-            <p style={{ color: '#64748b', fontSize: 13, marginTop: 20 }}>
-              Un ejecutivo de Hablando con Datos te contactará a la brevedad para confirmar disponibilidad y fechas.
-            </p>
+            <p style={{ color: '#64748b', fontSize: 13, marginTop: 20 }}>Un ejecutivo de Hablando con Datos te contactará para confirmar disponibilidad y fechas.</p>
           </div>
         )}
       </div>
@@ -466,7 +505,7 @@ function Row({ label, value, bold, big, color }) {
   )
 }
 
-function htmlCotizacion({ contacto, cursoSel, config, nums, folio, fecha }) {
+function htmlCotizacion({ contacto, cursoSel, config, nums, folio, fecha, serv, zona }) {
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
 <title>Cotización ${folio}</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -475,8 +514,8 @@ function htmlCotizacion({ contacto, cursoSel, config, nums, folio, fecha }) {
 body{font-family:'Inter',sans-serif;color:#1e293b;background:#fff;}
 .page{max-width:800px;margin:0 auto;padding:40px;}
 .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #8B1A1A;}
-.logo-area .company{font-size:22px;font-weight:800;color:#8B1A1A;}
-.logo-area .sub{font-size:11px;color:#64748b;margin-top:2px;}
+.company{font-size:22px;font-weight:800;color:#8B1A1A;}
+.sub{font-size:11px;color:#64748b;margin-top:2px;}
 .folio-area{text-align:right;}
 .folio-label{font-size:11px;color:#64748b;letter-spacing:1px;text-transform:uppercase;}
 .folio-val{font-size:18px;font-weight:800;color:#8B1A1A;}
@@ -494,11 +533,11 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
 @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head><body><div class="page">
 <div class="header">
-  <div class="logo-area">
+  <div>
     <div class="company">● Hablando con Datos</div>
     <div class="sub">Consultoría y Capacitación en Sistemas de Gestión</div>
-    <div class="sub" style="margin-top:4px">www.hablandocondatos.com.mx · ness@hablandocondatos.com.mx</div>
-    <div class="sub">Tel: 222 354 9353</div>
+    <div class="sub" style="margin-top:4px">Gerencia de Ventas</div>
+    <div class="sub">WhatsApp: 222 354 9353 · ${EMAIL_CONTACTO}</div>
   </div>
   <div class="folio-area">
     <div class="folio-label">Cotización</div>
@@ -521,13 +560,14 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
   <table>
     <thead><tr><th>Concepto</th><th>Detalle</th><th style="text-align:right">Importe</th></tr></thead>
     <tbody>
-      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.tipo === 'persona' ? `${config.num_personas} persona(s) · ${config.dias} día(s)` : 'Grupo cerrado'}</td><td style="text-align:right">$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
-      ${nums.desc > 0 ? `<tr><td>Descuento ${config.descuento_tipo === '2x1' ? '2x1' : config.descuento_valor + '%'}</td><td></td><td style="text-align:right;color:#059669">-$${nums.desc.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
-      ${config.incluye_consultoria && nums.cons > 0 ? `<tr><td>Consultoría</td><td>${config.descripcion_consultoria}</td><td style="text-align:right">$${nums.cons.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
-      ${config.requiere_viaticos && nums.viat > 0 ? `<tr><td>Viáticos / Traslado</td><td>${config.zona_viaticos === 'zona1' ? 'Zona 1' : 'Foráneo'}</td><td style="text-align:right">$${nums.viat.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.tipo === 'persona' ? `${config.num_personas} persona(s) · ${config.dias} día(s)` : `Grupo cerrado (${config.num_personas} pers.)`}</td><td style="text-align:right">$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      ${nums.desc_grupo > 0 ? `<tr><td>Descuento grupo cerrado (20%)</td><td>Mínimo ${MIN_GRUPO} participantes</td><td style="text-align:right;color:#059669">-$${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      ${nums.desc_cupon > 0 ? `<tr><td>Cupón ${config.cupon_validado?.codigo}</td><td>${config.cupon_validado?.tipo === '2x1' ? '2x1' : config.cupon_validado?.valor + '%'}</td><td style="text-align:right;color:#059669">-$${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      ${config.incluye_consultoria && nums.cons > 0 ? `<tr><td>Consultoría</td><td>${serv?.nombre || ''}</td><td style="text-align:right">$${nums.cons.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      ${config.requiere_viaticos && nums.viat > 0 ? `<tr><td>Viáticos / Traslado</td><td>${zona?.estado || ''}</td><td style="text-align:right">$${nums.viat.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       <tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">Subtotal</td><td style="text-align:right">$${nums.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
       ${config.aplica_iva ? `<tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">IVA (16%)</td><td style="text-align:right">$${nums.iva_monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
-      <tr class="total-row"><td colspan="2" style="text-align:right">TOTAL</td><td style="text-align:right">$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${config.aplica_iva ? 'MXN (IVA incluido)' : 'MXN (sin IVA)'}</td></tr>
+      <tr class="total-row"><td colspan="2" style="text-align:right">TOTAL</td><td style="text-align:right">$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${config.aplica_iva ? 'MXN (IVA incl.)' : 'MXN (sin IVA)'}</td></tr>
     </tbody>
   </table>
 </div>
@@ -535,17 +575,17 @@ ${config.notas ? `<div class="seccion"><h3>Notas</h3><p style="font-size:13px;co
 <div class="seccion" style="background:#f8f9fb;border-radius:8px;padding:16px;">
   <h3 style="margin-bottom:8px">Condiciones</h3>
   <p style="font-size:12px;color:#475569;line-height:1.8">
-    • Cotización válida por 30 días naturales a partir de la fecha de emisión.<br/>
+    • Cotización válida por 30 días naturales.<br/>
     • Precios en pesos mexicanos (MXN). ${config.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.'}<br/>
-    • La capacitación se confirma contra anticipo del 50% del total.<br/>
-    • Incluye: material didáctico, constancias/certificados con folio único verificable.<br/>
-    ${config.requiere_viaticos && config.zona_viaticos === 'otra' ? '• Los viáticos indicados son estimados y quedan sujetos a confirmación por HCD.<br/>' : ''}
-    • Para más información: ness@hablandocondatos.com.mx · 222 354 9353
+    • La capacitación se confirma contra anticipo del 50%.<br/>
+    • Incluye material didáctico y constancias con folio único verificable.<br/>
+    ${config.requiere_viaticos ? '• Los viáticos son estimados y quedan sujetos a confirmación por HCD.<br/>' : ''}
+    • Contacto: WhatsApp 222 354 9353 · ${EMAIL_CONTACTO}
   </p>
 </div>
 <div class="footer">
-  <p>Hablando con Datos — Consultoría y Capacitación en Sistemas de Gestión · Puebla, México · @Hablandocondatos</p>
-  <p style="margin-top:4px">Folio: ${folio}</p>
+  <p>Hablando con Datos — Consultoría y Capacitación en Sistemas de Gestión · Puebla, México</p>
+  <p style="margin-top:4px">Folio: ${folio} · Gerencia de Ventas: 222 354 9353 · ${EMAIL_CONTACTO}</p>
 </div>
 </div><script>window.onload=()=>{window.print();}</script></body></html>`
 }
