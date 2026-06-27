@@ -209,6 +209,7 @@ export default function CotizadorPublico() {
         notas: config.notas || null,
         fecha_deseada: config.fecha_deseada || null,
         empresa_id: empresaPortal?.id || null,
+        empresa_registrada: !!empresaPortal,
         estado: 'enviada'
       }
       const { data: cotCreada } = await supabase.from('cotizaciones').insert(payload).select('id').single()
@@ -535,8 +536,9 @@ export default function CotizadorPublico() {
                 <input type="email" value={contacto.contacto_email} onChange={e => ct('contacto_email')(e.target.value)} placeholder="correo@empresa.com" style={inp} />
               </div>
               <div>
-                <label style={lbl}>WhatsApp</label>
+                <label style={lbl}>WhatsApp {!empresaPortal && <span style={{ color: '#dc2626' }}>*</span>}</label>
                 <input value={contacto.contacto_whatsapp} onChange={e => ct('contacto_whatsapp')(e.target.value)} placeholder="222 123 4567" style={inp} />
+                {!empresaPortal && <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Obligatorio para darte seguimiento por WhatsApp</p>}
               </div>
               <div>
                 <label style={lbl}>¿Eres cliente de HCD?</label>
@@ -546,7 +548,7 @@ export default function CotizadorPublico() {
                 </select>
               </div>
             </div>
-            <button onClick={() => setPaso(4)} disabled={!contacto.empresa_nombre || !contacto.contacto_nombre || !contacto.contacto_email} style={{ ...btnPrimary, marginTop: 24 }}>Ver resumen →</button>
+            <button onClick={() => setPaso(4)} disabled={!contacto.empresa_nombre || !contacto.contacto_nombre || !contacto.contacto_email || (!empresaPortal && !contacto.contacto_whatsapp)} style={{ ...btnPrimary, marginTop: 24 }}>Ver resumen →</button>
           </div>
         )}
 

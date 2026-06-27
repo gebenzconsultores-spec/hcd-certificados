@@ -19,7 +19,7 @@ const NAV = [
   { to: '/admin/cotizaciones', label: 'Cotizaciones', icon: '💼' },
   { to: '/admin/cotizador-config', label: 'Config. cotizador', icon: '⚙️' },
   { to: '/admin/compras', label: 'Compras y solicitudes', icon: '🎫' },
-  { to: '/admin/ventas', label: 'Ventas y comisiones', icon: '💰' },
+  { to: '/admin/ventas', label: 'Ventas y cobranza', icon: '💰' },
   { to: '/admin/renta', label: 'Renta plataforma', icon: '💳' },
   { sep: 'Configuración' },
   { to: '/admin/equipo', label: 'Equipo y permisos', icon: '🔐' },

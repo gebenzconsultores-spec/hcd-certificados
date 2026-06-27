@@ -894,22 +894,89 @@ function TabCotizaciones({ empresa }) {
     return dias
   }
 
+  async function generarIdCompra() {
+    try {
+      const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'COMPRA', p_tabla: 'compras', p_columna: 'id_compra' })
+      if (idData) return idData
+    } catch (_) {}
+    const { data: existentes } = await supabase.from('compras').select('id_compra').not('id_compra', 'is', null)
+    let maxNum = 0
+    ;(existentes || []).forEach(e => {
+      const m = (e.id_compra || '').match(/COMPRA-(\d+)/)
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `COMPRA-${String(maxNum + 1).padStart(4, '0')}`
+  }
+
   async function subirOC(cot, file) {
     if (!file) return
     if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
     setSubiendo(cot.id)
     try {
+      // 1. Subir el PDF
       const nombreArchivo = `${cot.folio}_${Date.now()}.pdf`
       const { error: upErr } = await supabase.storage.from('ordenes-compra').upload(nombreArchivo, file, { upsert: true })
       if (upErr) throw upErr
       const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
+
+      // 2. Generar ID de compra automático (con el # de empleados cotizados)
+      const idCompra = await generarIdCompra()
+      const numPersonas = cot.num_personas || 1
+
+      await supabase.from('compras').insert({
+        id_compra: idCompra,
+        empresa_id: empresa.id,
+        empresa_nombre: empresa.nombre,
+        curso_id: cot.curso_id,
+        curso_nombre: cot.curso_nombre,
+        monto: cot.total,
+        num_personas: numPersonas,
+        estado: 'activo',
+        cotizacion_id: cot.id,
+        fecha_curso: cot.fecha_deseada || null,
+        tipo_comprador: 'empresa'
+      })
+
+      // 3. Actualizar la cotización: aceptada + ID generado
       await supabase.from('cotizaciones').update({
-        orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name, estado: 'aceptada'
+        orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name,
+        estado: 'aceptada', id_compra_generado: idCompra
       }).eq('id', cot.id)
+
+      // 4. Registrar como VENTA (estatus de cobro: enviar factura)
+      await supabase.from('ventas').insert({
+        empresa_id: empresa.id,
+        empresa_nombre: empresa.nombre,
+        curso_nombre: cot.curso_nombre,
+        monto: cot.total,
+        cotizacion_id: cot.id,
+        id_compra: idCompra,
+        orden_compra_url: urlData.publicUrl,
+        empresa_registrada: true,
+        num_personas: numPersonas,
+        fecha_curso: cot.fecha_deseada || null,
+        estatus_cobro: 'enviar_factura'
+      })
+
+      // 5. Notificar al admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'orden_compra', titulo: 'Orden de compra recibida',
+          mensaje: `${empresa.nombre} subió OC para ${cot.curso_nombre}. Venta registrada (${idCompra})`,
+          link: '/admin/ventas'
+        })
+      } catch (_) {}
+
       await cargar()
     } catch (e) {
       alert('Error al subir: ' + (e.message || 'verifica el bucket en Supabase'))
     } finally { setSubiendo(null) }
+  }
+
+  async function cancelar(cot) {
+    if (!window.confirm('¿Cancelar esta cotización?')) return
+    await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
+    await cargar()
   }
 
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando cotizaciones...</div>
@@ -922,21 +989,24 @@ function TabCotizaciones({ empresa }) {
         <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>💼</div>
           <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Aún no tienes cotizaciones. Cotiza un curso desde la pestaña "Cursos".</p>
-          <a href="/cotizar" target="_blank" style={{ display: 'inline-block', background: '#8B1A1A', color: '#fff', padding: '10px 20px', borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>Ir al cotizador</a>
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 12 }}>
           {cotizaciones.map(cot => {
             const vencida = estaVencida(cot)
             const dias = diasRestantes(cot)
+            const aceptada = cot.estado === 'aceptada'
+            const cancelada = cot.estado === 'cancelada'
             return (
-              <div key={cot.id} style={{ background: '#fff', border: `1px solid ${vencida ? '#fecaca' : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px' }}>
+              <div key={cot.id} style={{ background: '#fff', border: `1px solid ${aceptada ? '#bbf7d0' : cancelada ? '#e2e8f0' : vencida ? '#fecaca' : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px', opacity: cancelada ? 0.6 : 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                       <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{cot.folio}</code>
-                      {cot.estado === 'aceptada' ? (
+                      {aceptada ? (
                         <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>✓ Aceptada</span>
+                      ) : cancelada ? (
+                        <span style={{ background: '#f1f5f9', color: '#64748b', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>Cancelada</span>
                       ) : vencida ? (
                         <span style={{ background: '#fef2f2', color: '#dc2626', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>⏳ Vencida</span>
                       ) : (
@@ -945,28 +1015,59 @@ function TabCotizaciones({ empresa }) {
                     </div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b' }}>{cot.curso_nombre}</h3>
                     <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>
-                      {cot.num_personas} persona(s) · Total: <strong style={{ color: '#8B1A1A' }}>${cot.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
+                      {cot.num_personas} empleado(s) solicitado(s) · Total: <strong style={{ color: '#8B1A1A' }}>${cot.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
                     </p>
                     {cot.fecha_deseada && <p style={{ color: '#1d4ed8', fontSize: 12, marginTop: 4 }}>📅 Fecha deseada: {new Date(cot.fecha_deseada).toLocaleDateString('es-MX')}</p>}
+                    <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    {cot.orden_compra_url ? (
-                      <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
-                        📎 Orden de compra adjunta
-                      </a>
-                    ) : vencida ? (
+                    {!aceptada && !cancelada && !vencida && (
+                      <>
+                        <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                          {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
+                          <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
+                            onChange={e => subirOC(cot, e.target.files[0])} />
+                        </label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <a href={`/cotizar?curso=${cot.curso_id}`} target="_blank" onClick={() => cancelar(cot)}
+                            style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
+                            Generar nueva
+                          </a>
+                          <button onClick={() => cancelar(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {vencida && !aceptada && !cancelada && (
                       <a href={`/cotizar?curso=${cot.curso_id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
                         Volver a cotizar
                       </a>
-                    ) : (
-                      <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer' }}>
-                        {subiendo === cot.id ? 'Subiendo...' : '⬆️ Adjuntar orden de compra'}
-                        <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
-                          onChange={e => subirOC(cot, e.target.files[0])} />
-                      </label>
+                    )}
+                    {cot.orden_compra_url && (
+                      <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
+                        📎 Ver OC
+                      </a>
                     )}
                   </div>
                 </div>
+
+                {/* ID de compra generado (instrucciones) */}
+                {aceptada && cot.id_compra_generado && (
+                  <div style={{ marginTop: 16, background: '#f9f0f0', border: '2px dashed #8B1A1A', borderRadius: 10, padding: '16px 18px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>TU ID DE COMPRA (uso único)</div>
+                        <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{cot.id_compra_generado}</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <p style={{ color: '#7c2d2d', fontSize: 12, lineHeight: 1.5 }}>
+                          📋 <strong>Siguiente paso:</strong> ve a la pestaña <strong>"Cursos"</strong>, busca <strong>{cot.curso_nombre}</strong>, haz clic en "Ya pagué — Asignar con ID de compra", ingresa este ID y selecciona los <strong>{cot.num_personas} empleado(s)</strong> que asistirán.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}

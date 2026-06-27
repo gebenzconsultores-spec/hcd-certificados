@@ -81,6 +81,7 @@ export default function AdminCotizaciones() {
     aceptada: { label: 'Aceptada', color: '#059669', bg: '#f0fdf4' },
     rechazada: { label: 'Rechazada', color: '#dc2626', bg: '#fef2f2' },
     borrador: { label: 'Borrador', color: '#64748b', bg: '#f1f5f9' },
+    cancelada: { label: 'Cancelada', color: '#64748b', bg: '#f1f5f9' },
   }
 
   return (
@@ -105,7 +106,7 @@ export default function AdminCotizaciones() {
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        {['todas', 'enviada', 'aceptada', 'rechazada'].map(fil => (
+        {['todas', 'enviada', 'aceptada', 'cancelada'].map(fil => (
           <button key={fil} onClick={() => setFiltro(fil)}
             style={{ padding: '6px 16px', borderRadius: 20, border: `2px solid ${filtro === fil ? '#8B1A1A' : '#e2e8f0'}`, background: filtro === fil ? '#f9f0f0' : '#fff', color: filtro === fil ? '#8B1A1A' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             {fil === 'todas' ? 'Todas' : ESTADOS[fil]?.label}
@@ -119,14 +120,14 @@ export default function AdminCotizaciones() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Folio', 'Fecha', 'Empresa', 'Curso', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
+              {['Folio', 'Fecha', 'Empresa', 'Registro', 'Curso', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtradas.length === 0 && (
-              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
             )}
             {filtradas.map(c => {
               const est = ESTADOS[c.estado] || ESTADOS.enviada
@@ -135,6 +136,11 @@ export default function AdminCotizaciones() {
                   <td style={{ padding: '11px 14px' }}><code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 7px', borderRadius: 4, fontSize: 11 }}>{c.folio}</code></td>
                   <td style={{ padding: '11px 14px', color: '#64748b', fontSize: 12 }}>{c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{c.empresa_nombre}</td>
+                  <td style={{ padding: '11px 14px' }}>
+                    <span style={{ background: c.empresa_id ? '#f0fdf4' : '#fef9c3', color: c.empresa_id ? '#059669' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
+                      {c.empresa_id ? '✓ Con registro' : 'Sin registro'}
+                    </span>
+                  </td>
                   <td style={{ padding: '11px 14px', color: '#475569', fontSize: 12 }}>{c.curso_nombre}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 700, fontSize: 13 }}>${c.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
                   <td style={{ padding: '11px 14px', color: '#059669', fontWeight: 700, fontSize: 13 }}>${c.comision_monto?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
