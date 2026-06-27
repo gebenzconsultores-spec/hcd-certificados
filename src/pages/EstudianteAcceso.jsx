@@ -24,14 +24,25 @@ export default function EstudianteAcceso() {
     try {
       const { data: part } = await supabase
         .from('participantes')
-        .select('*, empresa:empresas(nombre)')
+        .select('*')
         .eq('id_empleado', idEmpleado.toUpperCase().trim())
-        .single()
-      if (!part) throw new Error('no encontrado')
+        .maybeSingle()
+
+      if (!part) {
+        setError('ID de empleado no encontrado. Verifica con tu empresa o regístrate como individual.')
+        setLoading(false)
+        return
+      }
+      // Verificar acceso al examen (control por selección de la empresa)
+      if (part.acceso_examen === false) {
+        setError('Tu empresa aún no te ha habilitado el acceso. Pídele que te active para el curso.')
+        setLoading(false)
+        return
+      }
       sessionStorage.setItem('estudiante_portal', JSON.stringify(part))
       navigate('/estudiante/dashboard')
     } catch (e) {
-      setError('ID de empleado no encontrado. Verifica con tu empresa o regístrate como individual.')
+      setError('Error al entrar: ' + (e.message || 'intenta de nuevo'))
     } finally { setLoading(false) }
   }
 
@@ -40,7 +51,7 @@ export default function EstudianteAcceso() {
     setLoading(true); setError('')
     try {
       // Verificar si ya existe
-      const { data: existe } = await supabase.from('participantes').select('*, empresa:empresas(nombre)').eq('correo', reg.correo).maybeSingle()
+      const { data: existe } = await supabase.from('participantes').select('*').eq('correo', reg.correo).maybeSingle()
       if (existe) {
         sessionStorage.setItem('estudiante_portal', JSON.stringify(existe))
         navigate('/estudiante/dashboard')
@@ -70,17 +81,18 @@ export default function EstudianteAcceso() {
         empresa_manual: reg.empresa,
         id_empleado,
         tipo: 'individual',
+        acceso_examen: true,
         es_universitario: reg.es_universitario,
         universidad: reg.es_universitario ? reg.universidad : null,
         carrera: reg.es_universitario ? reg.carrera : null,
-      }).select('*, empresa:empresas(nombre)').single()
+      }).select('*').single()
 
       if (errIns) throw errIns
 
       sessionStorage.setItem('estudiante_portal', JSON.stringify(part))
       navigate('/estudiante/dashboard')
     } catch (e) {
-      setError('No se pudo completar el registro. Intenta de nuevo.')
+      setError('No se pudo completar el registro: ' + (e.message || 'error desconocido'))
     } finally { setLoading(false) }
   }
 

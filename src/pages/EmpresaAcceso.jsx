@@ -30,18 +30,33 @@ export default function EmpresaAcceso() {
     if (!idEmpresa || !password) return
     setLoading(true); setError('')
     try {
+      // Buscar por ID de empresa primero
       const { data: emp } = await supabase
         .from('empresas')
         .select('*')
         .eq('id_empresa', idEmpresa.toUpperCase().trim())
-        .eq('portal_password', password)
-        .single()
-      if (!emp) throw new Error('no encontrado')
-      if (!emp.activo) throw new Error('inactivo')
+        .maybeSingle()
+
+      if (!emp) {
+        setError('No existe una empresa con ese ID. Verifica que sea correcto (ej. EMP-0001).')
+        setLoading(false)
+        return
+      }
+      // Verificar contraseña
+      if ((emp.portal_password || '').trim() !== password.trim()) {
+        setError('La contraseña es incorrecta. Verifica tus datos o contacta a soporte.')
+        setLoading(false)
+        return
+      }
+      if (emp.activo === false) {
+        setError('Esta cuenta está inactiva. Contacta a Hablando con Datos.')
+        setLoading(false)
+        return
+      }
       sessionStorage.setItem('empresa_portal', JSON.stringify(emp))
       navigate('/empresa/dashboard')
     } catch (e) {
-      setError('ID o contraseña incorrectos. Verifica tus datos o contacta a soporte.')
+      setError('Error al entrar: ' + (e.message || 'intenta de nuevo'))
     } finally { setLoading(false) }
   }
 
@@ -57,10 +72,21 @@ export default function EmpresaAcceso() {
         return
       }
 
-      // Generar ID de empresa automático basado en conteo + aleatorio
-      const { count } = await supabase.from('empresas').select('id', { count: 'exact', head: true })
-      const num = (count || 0) + 1
-      const id_empresa = `EMP-${String(num).padStart(4, '0')}`
+      // Generar ID de empresa único (sin duplicados)
+      let id_empresa
+      try {
+        const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'EMP', p_tabla: 'empresas', p_columna: 'id_empresa' })
+        id_empresa = idData
+      } catch (_) {}
+      if (!id_empresa) {
+        const { data: existentes } = await supabase.from('empresas').select('id_empresa').not('id_empresa', 'is', null)
+        let maxNum = 0
+        ;(existentes || []).forEach(e => {
+          const m = (e.id_empresa || '').match(/EMP-(\d+)/)
+          if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+        })
+        id_empresa = `EMP-${String(maxNum + 1).padStart(4, '0')}`
+      }
 
       const fechaFin = new Date()
       fechaFin.setDate(fechaFin.getDate() + 30) // 30 días de prueba
