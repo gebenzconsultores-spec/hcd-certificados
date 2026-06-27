@@ -115,7 +115,8 @@ export default function EstudianteDashboard() {
             { id: 'asignados', label: '⚡ Mis microcursos' },
             { id: 'certificados', label: '📜 Mis certificados' },
             { id: 'examenes', label: '📊 Mis exámenes' },
-            { id: 'cursos', label: '🎓 Cursos disponibles' },
+            { id: 'cursos', label: '🎓 Mis cursos' },
+            ...(!esDeEmpresa ? [{ id: 'desbloquear', label: '🔑 Activar curso pagado' }] : []),
             ...(!esDeEmpresa ? [{ id: 'proximos', label: '📆 Próximos cursos' }] : []),
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -269,35 +270,175 @@ export default function EstudianteDashboard() {
         {/* TAB CURSOS DISPONIBLES */}
         {tab === 'cursos' && (
           <div>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Cursos en línea que puedes tomar</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
-              {cursosDisponibles.map(c => {
-                const yaHecho = certificados.some(cert => cert.nombre_curso === c.nombre)
-                return (
-                  <div key={c.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                      <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>#{c.numero_curso}</span>
-                      {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
-                    </div>
-                    <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{c.nombre}</h3>
-                    <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>⏱ {c.duracion} hrs · {c.modalidad === 'presencial' ? 'Presencial' : 'Online'}</p>
-                    {!yaHecho && (
-                      <a href={`/examen/${c.id}`} target="_blank"
-                        style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700 }}>
-                        Presentar examen →
-                      </a>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            {esDeEmpresa ? (
+              <>
+                <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Cursos que tu empresa te asignó</p>
+                <CursosAsignados estudiante={estudiante} certificados={certificados} />
+              </>
+            ) : (
+              <>
+                {/* Individual: solo cursos que ha desbloqueado/pagado */}
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+                  <p style={{ color: '#1e40af', fontSize: 13 }}>
+                    ℹ️ Para presentar un examen, primero debes adquirir el curso. Cotiza en "Próximos cursos" o activa tu curso pagado con tu ID de compra.
+                  </p>
+                </div>
+                <MisCursosIndividual estudiante={estudiante} certificados={certificados} />
+              </>
+            )}
           </div>
+        )}
+
+        {/* TAB DESBLOQUEAR CON ID DE COMPRA (solo individual) */}
+        {tab === 'desbloquear' && !esDeEmpresa && (
+          <DesbloquearCurso estudiante={estudiante} cursosDisponibles={cursosDisponibles} onDone={() => cargar(estudiante)} />
         )}
 
         {/* TAB PRÓXIMOS CURSOS (solo individual) */}
         {tab === 'proximos' && !esDeEmpresa && (
           <ProximosEstudiante estudiante={estudiante} />
         )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Cursos asignados (empleado de empresa) ───────────────────
+function CursosAsignados({ estudiante, certificados }) {
+  const [asignaciones, setAsignaciones] = useState([])
+  useEffect(() => {
+    supabase.from('asignaciones').select('*').eq('empleado_id', estudiante.id).then(({ data }) => setAsignaciones(data || []))
+  }, [])
+
+  if (asignaciones.length === 0) {
+    return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Tu empresa aún no te ha asignado cursos.</div>
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
+      {asignaciones.map(a => {
+        const yaHecho = certificados.some(cert => cert.nombre_curso === (a.curso_nombre || a.microcurso_titulo)) || a.estado === 'completado'
+        return (
+          <div key={a.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
+            {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{a.curso_nombre || a.microcurso_titulo}</h3>
+            {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(a.fecha_programada).toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
+            {!yaHecho && a.curso_id && (
+              <a href={`/examen/${a.curso_id}`} target="_blank"
+                style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                Presentar examen →
+              </a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Mis cursos (individual: solo los desbloqueados) ──────────
+function MisCursosIndividual({ estudiante, certificados }) {
+  const [compras, setCompras] = useState([])
+  useEffect(() => {
+    supabase.from('compras').select('*').eq('participante_id', estudiante.id).eq('estado', 'usado').then(({ data }) => setCompras(data || []))
+  }, [])
+
+  if (compras.length === 0) {
+    return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no tienes cursos activos. Activa uno con tu ID de compra en la pestaña "Activar curso pagado".</div>
+  }
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
+      {compras.map(c => {
+        const yaHecho = certificados.some(cert => cert.nombre_curso === c.curso_nombre)
+        return (
+          <div key={c.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
+            {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{c.curso_nombre}</h3>
+            {c.fecha_curso && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(c.fecha_curso).toLocaleDateString('es-MX')}</p>}
+            {!yaHecho && c.curso_id && (
+              <a href={`/examen/${c.curso_id}`} target="_blank"
+                style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
+                Presentar examen →
+              </a>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Desbloquear curso con ID de compra (individual) ──────────
+function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
+  const [idCompra, setIdCompra] = useState('')
+  const [fecha, setFecha] = useState('')
+  const [error, setError] = useState('')
+  const [exito, setExito] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function activar() {
+    if (!idCompra) return
+    setSaving(true); setError('')
+    try {
+      const { data: compra } = await supabase.from('compras').select('*')
+        .eq('id_compra', idCompra.toUpperCase().trim())
+        .eq('estado', 'activo').maybeSingle()
+      if (!compra) { setError('ID de compra no válido o ya usado. Verifica con Hablando con Datos.'); setSaving(false); return }
+
+      // Vincular la compra al participante y marcar usada
+      await supabase.from('compras').update({
+        estado: 'usado',
+        participante_id: estudiante.id,
+        participante_nombre: estudiante.nombre,
+        tipo_comprador: 'individual',
+        fecha_curso: fecha || null
+      }).eq('id', compra.id)
+
+      // Dar acceso al examen
+      await supabase.from('participantes').update({ acceso_examen: true }).eq('id', estudiante.id)
+
+      setExito(true)
+      setTimeout(() => onDone(), 1500)
+    } catch (e) {
+      setError('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  if (exito) {
+    return (
+      <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 14, padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 44, marginBottom: 12 }}>✅</div>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#15803d', marginBottom: 8 }}>¡Curso activado!</h3>
+        <p style={{ color: '#15803d', fontSize: 14 }}>Ya puedes presentar tu examen desde "Mis cursos".</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: 480 }}>
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '28px 32px' }}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>Activar curso pagado</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Ingresa el ID de compra que te dio Hablando con Datos al confirmar tu pago.</p>
+
+        {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', color: '#991b1b', fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>ID de compra</label>
+        <input value={idCompra} onChange={e => setIdCompra(e.target.value.toUpperCase())} placeholder="COMPRA-0001"
+          style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', marginBottom: 14 }} />
+
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>Fecha del curso (opcional)</label>
+        <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+          style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', marginBottom: 20 }} />
+
+        <button onClick={activar} disabled={saving || !idCompra}
+          style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          {saving ? 'Activando...' : 'Activar y habilitar examen'}
+        </button>
+
+        <div style={{ background: '#eff6ff', borderRadius: 8, padding: '12px 14px', marginTop: 16, fontSize: 12, color: '#1e40af' }}>
+          ¿No tienes ID de compra? Cotiza tu curso en la pestaña "Próximos cursos" y al confirmar tu pago te lo proporcionaremos.
+        </div>
       </div>
     </div>
   )

@@ -119,20 +119,21 @@ export default function AdminCotizaciones() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Folio', 'Empresa', 'Curso', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
+              {['Folio', 'Fecha', 'Empresa', 'Curso', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtradas.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
+              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
             )}
             {filtradas.map(c => {
               const est = ESTADOS[c.estado] || ESTADOS.enviada
               return (
                 <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '11px 14px' }}><code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 7px', borderRadius: 4, fontSize: 11 }}>{c.folio}</code></td>
+                  <td style={{ padding: '11px 14px', color: '#64748b', fontSize: 12 }}>{c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{c.empresa_nombre}</td>
                   <td style={{ padding: '11px 14px', color: '#475569', fontSize: 12 }}>{c.curso_nombre}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 700, fontSize: 13 }}>${c.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>

@@ -62,13 +62,20 @@ export default function Empresas() {
   }
 
   async function eliminarPermanente(emp) {
-    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE a "${emp.nombre}"?\n\nEsta acción NO se puede deshacer. Se borrará la empresa y sus datos asociados.`)) return
+    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE a "${emp.nombre}"?\n\nEsta acción NO se puede deshacer. Se borrará la empresa, TODOS sus empleados y sus registros (asignaciones, cotizaciones).`)) return
     try {
+      // Borrar empleados de la empresa (por empresa_id o registrado_por_empresa)
+      await supabase.from('participantes').delete().or(`empresa_id.eq.${emp.id},registrado_por_empresa.eq.${emp.id}`)
+      // Borrar asignaciones de la empresa
+      await supabase.from('asignaciones').delete().eq('empresa_id', emp.id)
+      // Borrar cotizaciones de la empresa
+      await supabase.from('cotizaciones').delete().eq('empresa_id', emp.id)
+      // Finalmente borrar la empresa
       await supabase.from('empresas').delete().eq('id', emp.id)
       setDetalle(null)
       await cargar()
     } catch (e) {
-      alert('No se pudo eliminar: ' + (e.message || 'error') + '. Es posible que tenga registros vinculados.')
+      alert('No se pudo eliminar: ' + (e.message || 'error'))
     }
   }
 

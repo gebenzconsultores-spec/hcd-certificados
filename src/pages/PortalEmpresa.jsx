@@ -153,7 +153,7 @@ export function EmpresaDashboard() {
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
-            {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} />}
+            {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} />}
             {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} />}
           </>
@@ -225,6 +225,25 @@ function TabEmpleados({ empresa, empleados, recargar }) {
     } catch (e) {
       alert('No se pudo registrar: ' + (e.message || 'error'))
     } finally { setSaving(false) }
+  }
+
+  async function toggleAcceso(emp) {
+    try {
+      await supabase.from('participantes').update({ acceso_examen: !emp.acceso_examen }).eq('id', emp.id)
+      await recargar()
+    } catch (e) {
+      alert('No se pudo cambiar el acceso: ' + (e.message || 'error'))
+    }
+  }
+
+  async function eliminarEmpleado(emp) {
+    if (!window.confirm(`¿Eliminar a "${emp.nombre}"? Perderá su acceso y registros.`)) return
+    try {
+      await supabase.from('participantes').delete().eq('id', emp.id)
+      await recargar()
+    } catch (e) {
+      alert('No se pudo eliminar: ' + (e.message || 'error'))
+    }
   }
 
   // Genera ID de empleado sin duplicados (busca el máximo)
@@ -319,14 +338,14 @@ function TabEmpleados({ empresa, empleados, recargar }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['ID Empleado', 'Nombre', 'Puesto', 'Correo', 'WhatsApp'].map(h => (
+              {['ID Empleado', 'Nombre', 'Puesto', 'Correo', 'Acceso al examen', ''].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {empleados.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no has registrado empleados</td></tr>
+              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no has registrado empleados</td></tr>
             )}
             {empleados.map(e => (
               <tr key={e.id} style={{ borderTop: '1px solid #f1f5f9' }}>
@@ -334,7 +353,17 @@ function TabEmpleados({ empresa, empleados, recargar }) {
                 <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{e.nombre}</td>
                 <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.puesto || '—'}</td>
                 <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.correo}</td>
-                <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.whatsapp || '—'}</td>
+                <td style={{ padding: '11px 16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={e.acceso_examen || false} onChange={() => toggleAcceso(e)} style={{ accentColor: '#059669', width: 16, height: 16 }} />
+                    <span style={{ fontSize: 12, color: e.acceso_examen ? '#059669' : '#94a3b8', fontWeight: 600 }}>
+                      {e.acceso_examen ? '✓ Habilitado' : 'Sin acceso'}
+                    </span>
+                  </label>
+                </td>
+                <td style={{ padding: '11px 16px' }}>
+                  <button onClick={() => eliminarEmpleado(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -674,10 +703,13 @@ function ModalProgramar({ empresa, curso, onClose }) {
 function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
   const [idCompra, setIdCompra] = useState('')
   const [validado, setValidado] = useState(false)
+  const [compraData, setCompraData] = useState(null)
   const [error, setError] = useState('')
   const [seleccionados, setSeleccionados] = useState([])
   const [fecha, setFecha] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const limite = compraData?.num_personas || 1
 
   async function validar() {
     if (!idCompra) return
@@ -685,8 +717,9 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
     try {
       const { data: compra } = await supabase.from('compras').select('*')
         .eq('id_compra', idCompra.toUpperCase().trim())
-        .eq('estado', 'activo').single()
+        .eq('estado', 'activo').maybeSingle()
       if (!compra) throw new Error('no')
+      setCompraData(compra)
       setValidado(true)
     } catch {
       setError('ID de compra no válido o ya usado. Verifica con Hablando con Datos.')
@@ -694,11 +727,23 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
   }
 
   function toggle(id) {
-    setSeleccionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
+    setSeleccionados(s => {
+      if (s.includes(id)) return s.filter(x => x !== id)
+      // Respetar el límite de personas de la compra
+      if (s.length >= limite) {
+        alert(`Tu ID de compra es para ${limite} persona(s). No puedes seleccionar más.`)
+        return s
+      }
+      return [...s, id]
+    })
   }
 
   async function asignar() {
     if (seleccionados.length === 0) return
+    if (seleccionados.length > limite) {
+      alert(`Solo puedes asignar ${limite} persona(s) con este ID de compra.`)
+      return
+    }
     setSaving(true)
     try {
       const rows = seleccionados.map(empId => {
@@ -711,6 +756,10 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
         }
       })
       await supabase.from('asignaciones').insert(rows)
+      // Dar acceso al examen a los empleados asignados
+      for (const empId of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+      }
       // Marcar compra como usada
       await supabase.from('compras').update({ estado: 'usado' }).eq('id_compra', idCompra.toUpperCase().trim())
       onDone()
@@ -742,7 +791,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
         ) : (
           <>
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#15803d', fontSize: 13 }}>
-              ✅ ID válido. Selecciona los empleados a inscribir.
+              ✅ ID válido para <strong>{limite} persona(s)</strong>. Selecciona a quién inscribir ({seleccionados.length}/{limite}).
             </div>
             <label style={lbl}>Fecha programada (opcional)</label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
@@ -767,7 +816,10 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
 }
 
 // ─── TAB ASIGNACIONES ─────────────────────────────────────────
-function TabAsignaciones({ asignaciones }) {
+function TabAsignaciones({ asignaciones, empleados }) {
+  // Mapa de empleado_id -> id_empleado (clave)
+  const claveEmpleado = {}
+  ;(empleados || []).forEach(e => { claveEmpleado[e.id] = e.id_empleado })
   return (
     <div>
       <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>{asignaciones.length} asignaciones registradas</p>
@@ -775,17 +827,20 @@ function TabAsignaciones({ asignaciones }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Empleado', 'Curso / Microcurso', 'Tipo', 'Modalidad', 'Fecha', 'Estado'].map(h => (
+              {['Clave', 'Empleado', 'Curso / Microcurso', 'Tipo', 'Modalidad', 'Fecha', 'Estado'].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {asignaciones.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin asignaciones. Asigna cursos desde la pestaña anterior.</td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin asignaciones. Asigna cursos desde la pestaña anterior.</td></tr>
             )}
             {asignaciones.map(a => (
               <tr key={a.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                <td style={{ padding: '11px 16px' }}>
+                  {claveEmpleado[a.empleado_id] ? <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{claveEmpleado[a.empleado_id]}</code> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>}
+                </td>
                 <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{a.empleado_nombre}</td>
                 <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{a.curso_nombre || a.microcurso_titulo}</td>
                 <td style={{ padding: '11px 16px' }}>
