@@ -71,6 +71,7 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '🎓 Cursos y microcredenciales' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
+    { id: 'proximos', label: '📆 Próximos cursos' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
   ]
 
@@ -153,6 +154,7 @@ export function EmpresaDashboard() {
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} />}
+            {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} />}
           </>
         )}
@@ -915,6 +917,230 @@ function TabCotizaciones({ empresa }) {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── TAB PRÓXIMOS CURSOS (empresa) ────────────────────────────
+function TabProximos({ empresa, empleados, recargar }) {
+  const [proximos, setProximos] = useState([])
+  const [inscripciones, setInscripciones] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalInscribir, setModalInscribir] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    const [{ data: prox }, { data: insc }] = await Promise.all([
+      supabase.from('proximos_cursos').select('*').eq('estado', 'abierto').order('fecha', { ascending: true }),
+      supabase.from('inscripciones').select('*')
+    ])
+    setProximos(prox || [])
+    setInscripciones(insc || [])
+    setLoading(false)
+  }
+
+  function fmtFecha(f) {
+    return new Date(f + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+  }
+
+  function cuposDisponibles(p) {
+    const ocupados = inscripciones.filter(i => i.proximo_curso_id === p.id).length
+    return p.cupo_maximo - ocupados
+  }
+
+  if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando próximos cursos...</div>
+
+  return (
+    <div>
+      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Cursos programados por Hablando con Datos. Inscribe a tus empleados.</p>
+
+      {proximos.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          No hay próximos cursos programados por ahora. ¡Vuelve pronto!
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(340px,1fr))', gap: 16 }}>
+          {proximos.map(p => {
+            const disp = cuposDisponibles(p)
+            const lleno = disp <= 0
+            return (
+              <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px', borderTop: `4px solid ${p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A'}` }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                  <span style={{ background: p.tipo_costo === 'sin_costo' ? '#f0fdf4' : '#f9f0f0', color: p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
+                    {p.tipo_costo === 'sin_costo' ? '🎁 Gratis' : `$${Number(p.precio).toLocaleString('es-MX')} p/persona`}
+                  </span>
+                </div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{p.curso_nombre}</h3>
+                <div style={{ color: '#475569', fontSize: 13, marginBottom: 4 }}>📅 {fmtFecha(p.fecha)}</div>
+                <div style={{ color: '#475569', fontSize: 13, marginBottom: 12 }}>🕐 {p.hora} · 🎥 Por Zoom</div>
+                {p.temario && (
+                  <details style={{ marginBottom: 12 }}>
+                    <summary style={{ color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Ver temario</summary>
+                    <p style={{ color: '#64748b', fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>{p.temario}</p>
+                  </details>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <span style={{ color: lleno ? '#dc2626' : '#059669', fontSize: 12, fontWeight: 700 }}>
+                    {lleno ? '🔴 Cupo lleno' : `${disp} lugar${disp !== 1 ? 'es' : ''} disponible${disp !== 1 ? 's' : ''}`}
+                  </span>
+                </div>
+                {lleno ? (
+                  <button disabled style={{ width: '100%', background: '#f1f5f9', color: '#94a3b8', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}>
+                    Cupo lleno
+                  </button>
+                ) : (
+                  <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    {p.tipo_costo === 'sin_costo' ? 'Inscribir empleados (gratis)' : 'Inscribir (con orden de compra)'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {modalInscribir && (
+        <ModalInscribirProximo
+          empresa={empresa} empleados={empleados} proximo={modalInscribir}
+          cuposDisponibles={cuposDisponibles(modalInscribir)}
+          onClose={() => setModalInscribir(null)}
+          onDone={() => { setModalInscribir(null); cargar(); recargar() }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, onClose, onDone }) {
+  const [seleccionados, setSeleccionados] = useState([])
+  const [idCompra, setIdCompra] = useState('')
+  const [compraValidada, setCompraValidada] = useState(false)
+  const [errorCompra, setErrorCompra] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const esConCosto = proximo.tipo_costo === 'con_costo'
+
+  function toggle(id) {
+    setSeleccionados(s => {
+      if (s.includes(id)) return s.filter(x => x !== id)
+      if (s.length >= cuposDisponibles) { alert(`Solo quedan ${cuposDisponibles} lugares`); return s }
+      return [...s, id]
+    })
+  }
+
+  async function validarCompra() {
+    if (!idCompra) return
+    setErrorCompra('')
+    try {
+      const { data: compra } = await supabase.from('compras').select('*').eq('id_compra', idCompra.toUpperCase().trim()).eq('estado', 'activo').single()
+      if (!compra) throw new Error('no')
+      setCompraValidada(true)
+    } catch {
+      setErrorCompra('ID de compra no válido o ya usado.')
+    }
+  }
+
+  async function inscribir() {
+    if (seleccionados.length === 0) return
+    if (esConCosto && !compraValidada) { setErrorCompra('Valida tu ID de compra primero'); return }
+    setSaving(true)
+    try {
+      const rows = seleccionados.map(empId => {
+        const emp = empleados.find(e => e.id === empId)
+        return {
+          proximo_curso_id: proximo.id,
+          curso_nombre: proximo.curso_nombre,
+          fecha: proximo.fecha,
+          participante_id: empId,
+          participante_nombre: emp?.nombre,
+          participante_correo: emp?.correo,
+          empresa_id: empresa.id,
+          empresa_nombre: empresa.nombre,
+          origen: 'empresa',
+          id_compra: esConCosto ? idCompra.toUpperCase().trim() : null,
+          estado: 'inscrito'
+        }
+      })
+      await supabase.from('inscripciones').insert(rows)
+      // Actualizar cupo ocupado
+      await supabase.from('proximos_cursos').update({ cupo_ocupado: (proximo.cupo_ocupado || 0) + seleccionados.length }).eq('id', proximo.id)
+      // Si con costo, marcar compra usada
+      if (esConCosto) await supabase.from('compras').update({ estado: 'usado' }).eq('id_compra', idCompra.toUpperCase().trim())
+      // Notificar admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'programacion', titulo: 'Inscripción a próximo curso',
+          mensaje: `${empresa.nombre} inscribió ${seleccionados.length} empleado(s) a ${proximo.curso_nombre}`,
+          link: '/admin/proximos'
+        })
+      } catch (_) {}
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir a: {proximo.curso_nombre}</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+          {new Date(proximo.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })} · {proximo.hora} · {cuposDisponibles} lugares disponibles
+        </p>
+
+        {esConCosto && !compraValidada && (
+          <div style={{ background: '#fef9e7', borderRadius: 10, padding: '16px', marginBottom: 16 }}>
+            <p style={{ color: '#92400e', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Este curso tiene costo (${Number(proximo.precio).toLocaleString('es-MX')} p/persona)</p>
+            {errorCompra && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>✗ {errorCompra}</div>}
+            <label style={lbl}>ID de compra</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={idCompra} onChange={e => setIdCompra(e.target.value)} placeholder="COMPRA-0001" style={{ ...inp, flex: 1 }} />
+              <button onClick={validarCompra} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Validar</button>
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>¿No tienes ID? Cotiza este curso o contacta a HCD para tu orden de compra.</p>
+          </div>
+        )}
+
+        {esConCosto && compraValidada && (
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#15803d', fontSize: 13 }}>
+            ✅ ID de compra válido. Selecciona los empleados.
+          </div>
+        )}
+
+        {(!esConCosto || compraValidada) && (
+          <>
+            <label style={lbl}>Empleados ({seleccionados.length} de {cuposDisponibles})</label>
+            {empleados.length === 0 ? (
+              <div style={{ background: '#fef9c3', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#713f12' }}>
+                Primero registra empleados en la pestaña "Empleados"
+              </div>
+            ) : (
+              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                {empleados.map(e => (
+                  <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={seleccionados.includes(e.id)} onChange={() => toggle(e.id)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                    <div>
+                      <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 600 }}>{e.nombre}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.puesto || 'Sin puesto'} · {e.id_empleado}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          {(!esConCosto || compraValidada) && (
+            <button onClick={inscribir} disabled={saving || seleccionados.length === 0} style={btnPrimary}>
+              {saving ? 'Inscribiendo...' : `Inscribir a ${seleccionados.length}`}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

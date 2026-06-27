@@ -116,6 +116,7 @@ export default function EstudianteDashboard() {
             { id: 'certificados', label: '📜 Mis certificados' },
             { id: 'examenes', label: '📊 Mis exámenes' },
             { id: 'cursos', label: '🎓 Cursos disponibles' },
+            ...(!esDeEmpresa ? [{ id: 'proximos', label: '📆 Próximos cursos' }] : []),
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#1d4ed8' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#1d4ed8' : '#64748b', cursor: 'pointer' }}>
@@ -292,7 +293,102 @@ export default function EstudianteDashboard() {
             </div>
           </div>
         )}
+
+        {/* TAB PRÓXIMOS CURSOS (solo individual) */}
+        {tab === 'proximos' && !esDeEmpresa && (
+          <ProximosEstudiante estudiante={estudiante} />
+        )}
       </div>
+    </div>
+  )
+}
+
+// ─── Próximos cursos para estudiante individual ───────────────
+function ProximosEstudiante({ estudiante }) {
+  const [proximos, setProximos] = useState([])
+  const [inscripciones, setInscripciones] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [inscribiendo, setInscribiendo] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    const [{ data: prox }, { data: insc }] = await Promise.all([
+      supabase.from('proximos_cursos').select('*').eq('estado', 'abierto').order('fecha', { ascending: true }),
+      supabase.from('inscripciones').select('*')
+    ])
+    setProximos(prox || [])
+    setInscripciones(insc || [])
+    setLoading(false)
+  }
+
+  function fmtFecha(f) {
+    return new Date(f + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+  }
+  function cuposDisp(p) {
+    return p.cupo_maximo - inscripciones.filter(i => i.proximo_curso_id === p.id).length
+  }
+  function yaInscrito(p) {
+    return inscripciones.some(i => i.proximo_curso_id === p.id && i.participante_id === estudiante.id)
+  }
+
+  async function inscribirme(p) {
+    if (p.tipo_costo === 'con_costo') {
+      alert('Este curso tiene costo. Por favor cotízalo o contacta a HCD para tu inscripción.')
+      return
+    }
+    setInscribiendo(p.id)
+    try {
+      await supabase.from('inscripciones').insert({
+        proximo_curso_id: p.id, curso_nombre: p.curso_nombre, fecha: p.fecha,
+        participante_id: estudiante.id, participante_nombre: estudiante.nombre, participante_correo: estudiante.correo,
+        origen: 'individual', estado: 'inscrito'
+      })
+      await supabase.from('proximos_cursos').update({ cupo_ocupado: (p.cupo_ocupado || 0) + 1 }).eq('id', p.id)
+      await cargar()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setInscribiendo(null) }
+  }
+
+  if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando...</div>
+
+  return (
+    <div>
+      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Cursos programados por Zoom. Inscríbete a los que te interesen.</p>
+      {proximos.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          No hay próximos cursos por ahora.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 14 }}>
+          {proximos.map(p => {
+            const disp = cuposDisp(p)
+            const inscrito = yaInscrito(p)
+            return (
+              <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', borderTop: `4px solid ${p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A'}` }}>
+                <span style={{ background: p.tipo_costo === 'sin_costo' ? '#f0fdf4' : '#f9f0f0', color: p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
+                  {p.tipo_costo === 'sin_costo' ? '🎁 Gratis' : `$${Number(p.precio).toLocaleString('es-MX')}`}
+                </span>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', margin: '8px 0' }}>{p.curso_nombre}</h3>
+                <div style={{ color: '#475569', fontSize: 13 }}>📅 {fmtFecha(p.fecha)}</div>
+                <div style={{ color: '#475569', fontSize: 13, marginBottom: 12 }}>🕐 {p.hora} · 🎥 Zoom</div>
+                {inscrito ? (
+                  <div style={{ background: '#f0fdf4', color: '#059669', borderRadius: 8, padding: '10px', textAlign: 'center', fontSize: 13, fontWeight: 700 }}>✓ Ya estás inscrito</div>
+                ) : disp <= 0 ? (
+                  <button disabled style={{ width: '100%', background: '#f1f5f9', color: '#94a3b8', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, cursor: 'not-allowed' }}>Cupo lleno</button>
+                ) : (
+                  <button onClick={() => inscribirme(p)} disabled={inscribiendo === p.id}
+                    style={{ width: '100%', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    {inscribiendo === p.id ? 'Inscribiendo...' : p.tipo_costo === 'sin_costo' ? `Inscribirme (${disp} lugares)` : 'Ver detalles'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
