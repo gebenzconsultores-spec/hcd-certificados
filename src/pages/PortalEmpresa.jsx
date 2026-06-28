@@ -129,7 +129,7 @@ export function EmpresaDashboard() {
               Sigues teniendo acceso al cotizador. Para volver a gestionar empleados, asignar cursos y descargar certificados, contrata la plataforma.
             </p>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-              <a href="/cotizar" target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '12px 24px', borderRadius: 10, textDecoration: 'none', fontWeight: 700, fontSize: 14 }}>
+              <a href={`/cotizar?empresa=${empresa.id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '12px 24px', borderRadius: 10, textDecoration: 'none', fontWeight: 700, fontSize: 14 }}>
                 Ir al cotizador
               </a>
               <a href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent('Hola, quiero contratar la plataforma. Mi empresa es ' + empresa.nombre + ' (' + empresa.id_empresa + ')')}`}
@@ -488,7 +488,7 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
               </details>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <a href={`/cotizar?curso=${c.id}`} target="_blank"
+              <a href={`/cotizar?curso=${c.id}&empresa=${empresa.id}`} target="_blank"
                 style={{ ...btnPrimary, width: '100%', padding: '9px', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
                 💰 Cotizar este curso
               </a>
@@ -784,7 +784,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={onClose} style={btnGhost}>Cancelar</button>
-              <a href="/cotizar" target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Cotizar</a>
+              <a href={`/cotizar?empresa=${empresa.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Cotizar</a>
               <button onClick={validar} disabled={!idCompra} style={btnPrimary}>Validar ID</button>
             </div>
           </>
@@ -874,12 +874,20 @@ function TabCotizaciones({ empresa }) {
 
   async function cargar() {
     setLoading(true)
-    // Cotizaciones de esta empresa (por empresa_id o por nombre)
-    const { data } = await supabase.from('cotizaciones')
-      .select('*')
-      .or(`empresa_id.eq.${empresa.id},empresa_nombre.eq.${empresa.nombre}`)
-      .order('created_at', { ascending: false })
-    setCotizaciones(data || [])
+    // Cotizaciones de esta empresa: por empresa_id primero (más confiable)
+    let resultado = []
+    const porId = await supabase.from('cotizaciones').select('*').eq('empresa_id', empresa.id).order('created_at', { ascending: false })
+    resultado = porId.data || []
+
+    // También por nombre (para cotizaciones viejas sin empresa_id)
+    const porNombre = await supabase.from('cotizaciones').select('*').eq('empresa_nombre', empresa.nombre).order('created_at', { ascending: false })
+    ;(porNombre.data || []).forEach(cot => {
+      if (!resultado.find(r => r.id === cot.id)) resultado.push(cot)
+    })
+
+    // Ordenar por fecha
+    resultado.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    setCotizaciones(resultado)
     setLoading(false)
   }
 
@@ -1029,7 +1037,7 @@ function TabCotizaciones({ empresa }) {
                             onChange={e => subirOC(cot, e.target.files[0])} />
                         </label>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <a href={`/cotizar?curso=${cot.curso_id}`} target="_blank" onClick={() => cancelar(cot)}
+                          <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" onClick={() => cancelar(cot)}
                             style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
                             Generar nueva
                           </a>
@@ -1040,7 +1048,7 @@ function TabCotizaciones({ empresa }) {
                       </>
                     )}
                     {vencida && !aceptada && !cancelada && (
-                      <a href={`/cotizar?curso=${cot.curso_id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
+                      <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
                         Volver a cotizar
                       </a>
                     )}

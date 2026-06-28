@@ -52,22 +52,31 @@ export default function CotizadorPublico() {
     supabase.from('servicios').select('*').eq('activo', true).order('orden').then(({ data }) => setServicios(data || []))
     supabase.from('viaticos_zonas').select('*').eq('activo', true).order('monto').then(({ data }) => setViaticosZonas(data || []))
 
-    // Cargar cursos y, si viene ?curso=ID en la URL, preseleccionarlo
+    const params = new URLSearchParams(window.location.search)
+    const cursoId = params.get('curso')
+    const empresaId = params.get('empresa')
+
+    // Cargar cursos y, si viene ?curso=ID, preseleccionarlo
     supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).then(({ data }) => {
       setCursos(data || [])
-      const params = new URLSearchParams(window.location.search)
-      const cursoId = params.get('curso')
       if (cursoId && data) {
         const curso = data.find(co => co.id === cursoId)
         if (curso) { setCursoSel(curso); setPaso(2) }
       }
     })
 
-    // Si la empresa está logueada, prellenar sus datos
-    const empData = sessionStorage.getItem('empresa_portal')
-    if (empData) {
-      try {
-        const emp = JSON.parse(empData)
+    // Cargar datos de la empresa: primero por URL (funciona entre pestañas), luego sessionStorage
+    async function cargarEmpresa() {
+      let emp = null
+      if (empresaId) {
+        const { data } = await supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle()
+        emp = data
+      }
+      if (!emp) {
+        const empData = sessionStorage.getItem('empresa_portal')
+        if (empData) { try { emp = JSON.parse(empData) } catch (_) {} }
+      }
+      if (emp) {
         setEmpresaPortal(emp)
         setContacto({
           empresa_nombre: emp.nombre || '',
@@ -76,8 +85,9 @@ export default function CotizadorPublico() {
           contacto_whatsapp: emp.contacto_whatsapp || ''
         })
         setConfig(p => ({ ...p, es_cliente_nuevo: emp.tipo_acceso !== 'cliente' }))
-      } catch (_) {}
+      }
     }
+    cargarEmpresa()
   }, [])
 
   const c = k => v => setConfig(p => ({ ...p, [k]: v }))
