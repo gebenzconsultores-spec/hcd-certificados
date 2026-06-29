@@ -71,7 +71,7 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '🎓 Cursos y microcredenciales' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
-    { id: 'proximos', label: '📆 Próximos cursos' },
+    { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
   ]
 
@@ -150,6 +150,8 @@ export function EmpresaDashboard() {
               ))}
             </div>
 
+            <BannerConvocatoria onIr={() => setTab('proximos')} />
+
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
@@ -164,6 +166,41 @@ export function EmpresaDashboard() {
 }
 
 // ─── TAB RESUMEN ──────────────────────────────────────────────
+function BannerConvocatoria({ onIr }) {
+  const [convocatoria, setConvocatoria] = useState(null)
+
+  useEffect(() => {
+    // Traer la próxima convocatoria abierta (la más cercana)
+    supabase.from('proximos_cursos').select('*').eq('estado', 'abierto')
+      .gte('fecha', new Date().toISOString().split('T')[0])
+      .order('fecha', { ascending: true }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setConvocatoria(data[0]) })
+  }, [])
+
+  if (!convocatoria) return null
+
+  return (
+    <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '20px 26px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>📣 Convocatoria HCD</div>
+        <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 4 }}>
+          Hablando con Datos te invita a su siguiente curso
+        </h3>
+        <p style={{ color: 'rgba(255,255,255,.92)', fontSize: 14 }}>
+          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
+        </p>
+        <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
+          {convocatoria.tipo_costo === 'sin_costo' ? '🎁 Sin costo — inscribe a tus empleados' : '💰 Inscribe a tus empleados'}
+        </p>
+        {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
+      </div>
+      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        Inscribir empleados →
+      </button>
+    </div>
+  )
+}
+
 function TabResumen({ empresa, empleados, asignaciones, certificados, cursos }) {
   const completados = asignaciones.filter(a => a.estado === 'completado').length
   return (
@@ -848,6 +885,8 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
 
   async function asignar() {
     if (fechaPasada) { alert('La fecha del curso ya pasó.'); return }
+    if (!fecha) { alert('Debes programar la fecha de inicio del curso.'); return }
+    if (seleccionados.length === 0) { alert('Selecciona al menos un empleado.'); return }
     setSaving(true)
     try {
       const idC = idCompra.toUpperCase().trim()
@@ -863,26 +902,59 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
       }
 
       // 3. Insertar la selección actual
-      if (seleccionados.length > 0) {
-        const rows = seleccionados.map(empId => {
-          const emp = empleados.find(e => e.id === empId)
-          return {
-            empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
-            curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
-            modalidad_asignacion: 'zoom', fecha_programada: fecha || null,
-            id_compra: idC, estado: 'asignado'
-          }
-        })
-        await supabase.from('asignaciones').insert(rows)
-        // Dar acceso a los seleccionados
-        for (const empId of seleccionados) {
-          await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+      const rows = seleccionados.map(empId => {
+        const emp = empleados.find(e => e.id === empId)
+        return {
+          empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
+          curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
+          modalidad_asignacion: 'zoom', fecha_programada: fecha,
+          id_compra: idC, estado: 'asignado'
         }
+      })
+      await supabase.from('asignaciones').insert(rows)
+      // Dar acceso a los seleccionados
+      for (const empId of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
       }
 
       // 4. Marcar la compra: 'usado' si se llenó, 'activo' si aún hay cupo
       const nuevoEstado = seleccionados.length >= limite ? 'usado' : 'activo'
-      await supabase.from('compras').update({ estado: nuevoEstado }).eq('id_compra', idC)
+      await supabase.from('compras').update({ estado: nuevoEstado, fecha_curso: fecha }).eq('id_compra', idC)
+
+      // 5. Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
+      let errorConfirmado = null
+      try {
+        const { data: existente } = await supabase.from('cursos_confirmados')
+          .select('id').eq('id_compra', idC).maybeSingle()
+        const payload = {
+          curso_id: curso.id, curso_nombre: curso.nombre,
+          empresa_id: empresa.id, empresa_nombre: empresa.nombre,
+          fecha_inicio: fecha, num_participantes: seleccionados.length,
+          id_compra: idC, origen: 'orden_compra', estado: 'confirmado'
+        }
+        if (existente) {
+          const { error } = await supabase.from('cursos_confirmados').update(payload).eq('id', existente.id)
+          if (error) errorConfirmado = error
+        } else {
+          const { error } = await supabase.from('cursos_confirmados').insert(payload)
+          if (error) errorConfirmado = error
+        }
+      } catch (e) { errorConfirmado = e }
+
+      if (errorConfirmado) {
+        // No bloquea la asignación, pero avisa
+        console.error('Error al guardar en calendario:', errorConfirmado)
+        alert('Los empleados se asignaron correctamente, pero hubo un problema al guardar en el calendario del admin. Verifica que ejecutaste el SQL de cursos_confirmados. Detalle: ' + (errorConfirmado.message || ''))
+      }
+
+      // 6. Notificar al admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'programacion', titulo: 'Curso programado',
+          mensaje: `${empresa.nombre} programó ${curso.nombre} para ${new Date(fecha).toLocaleDateString('es-MX')} (${seleccionados.length} asistentes)`,
+          link: '/admin/confirmados'
+        })
+      } catch (_) {}
 
       onDone()
     } catch (e) {
@@ -921,8 +993,13 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
                 📅 Fecha del curso: {new Date(compraData.fecha_curso).toLocaleDateString('es-MX')}. Puedes ajustar tu selección hasta esta fecha.
               </div>
             )}
-            <label style={lbl}>Fecha programada (opcional)</label>
+            <label style={lbl}>Fecha de inicio del curso <span style={{ color: '#dc2626' }}>*</span></label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
+            <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '10px 12px', marginTop: 8, marginBottom: 8 }}>
+              <p style={{ color: '#92400e', fontSize: 12, lineHeight: 1.5 }}>
+                📅 Programa la fecha de inicio del curso. Si deseas <strong>fechas discontinuas</strong> o un <strong>cambio de fecha</strong>, contacta con Hablando con Datos.
+              </p>
+            </div>
             <label style={lbl}>Empleados ({seleccionados.length})</label>
             <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
               {empleados.map(e => (
@@ -934,7 +1011,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={onClose} style={btnGhost}>Cancelar</button>
-              <button onClick={asignar} disabled={saving || fechaPasada} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar selección'}</button>
+              <button onClick={asignar} disabled={saving || fechaPasada || !fecha || seleccionados.length === 0} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar selección'}</button>
             </div>
           </>
         )}
@@ -1049,22 +1126,17 @@ function TabCotizaciones({ empresa }) {
     if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
     setSubiendo(cot.id)
     try {
-      // 1. Subir el PDF a Storage
+      // 1. Subir el PDF
       const nombreArchivo = `${cot.folio}_${Date.now()}.pdf`
       const { error: upErr } = await supabase.storage.from('ordenes-compra').upload(nombreArchivo, file, { upsert: true })
-      if (upErr) {
-        alert('No se pudo subir el PDF. Falta crear el bucket "ordenes-compra" en Supabase Storage.\n\nDetalle: ' + (upErr.message || ''))
-        setSubiendo(null)
-        return
-      }
+      if (upErr) throw upErr
       const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
 
-      // 2. Generar ID de compra automático
+      // 2. Generar ID de compra automático (con el # de empleados cotizados)
       const idCompra = await generarIdCompra()
       const numPersonas = cot.num_personas || 1
 
-      // 3. Insertar la compra
-      const { error: errCompra } = await supabase.from('compras').insert({
+      await supabase.from('compras').insert({
         id_compra: idCompra,
         empresa_id: empresa.id,
         empresa_nombre: empresa.nombre,
@@ -1077,25 +1149,15 @@ function TabCotizaciones({ empresa }) {
         fecha_curso: cot.fecha_deseada || null,
         tipo_comprador: 'empresa'
       })
-      if (errCompra) {
-        alert('El PDF se subió, pero falló al registrar la compra: ' + (errCompra.message || '') + '\n\nVerifica que ejecutaste el SQL del flujo comercial.')
-        setSubiendo(null)
-        return
-      }
 
-      // 4. Actualizar la cotización: ACEPTADA POR EL CLIENTE + ID generado
-      const { error: errCot } = await supabase.from('cotizaciones').update({
+      // 3. Actualizar la cotización: ACEPTADA POR EL CLIENTE + ID generado
+      await supabase.from('cotizaciones').update({
         orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name,
         estado: 'aceptada_cliente', id_compra_generado: idCompra
       }).eq('id', cot.id)
-      if (errCot) {
-        alert('Hubo un problema al actualizar la cotización: ' + (errCot.message || ''))
-        setSubiendo(null)
-        return
-      }
 
-      // 5. Registrar como VENTA (no bloquea si falla, pero avisa)
-      const { error: errVenta } = await supabase.from('ventas').insert({
+      // 4. Registrar como VENTA (estatus de cobro: enviar factura)
+      await supabase.from('ventas').insert({
         empresa_id: empresa.id,
         empresa_nombre: empresa.nombre,
         curso_nombre: cot.curso_nombre,
@@ -1108,12 +1170,8 @@ function TabCotizaciones({ empresa }) {
         fecha_curso: cot.fecha_deseada || null,
         estatus_cobro: 'enviar_factura'
       })
-      if (errVenta) {
-        console.error('Error al registrar venta:', errVenta)
-        // No bloqueamos: la OC ya quedó y la cotización aceptada
-      }
 
-      // 6. Notificar al admin
+      // 5. Notificar al admin
       try {
         await supabase.from('notificaciones').insert({
           tipo: 'orden_compra', titulo: 'Orden de compra recibida',
@@ -1122,33 +1180,16 @@ function TabCotizaciones({ empresa }) {
         })
       } catch (_) {}
 
-      alert('✅ Orden de compra recibida. Tu ID de compra es: ' + idCompra)
       await cargar()
     } catch (e) {
-      alert('Error inesperado: ' + (e.message || 'intenta de nuevo'))
+      alert('Error al subir: ' + (e.message || 'verifica el bucket en Supabase'))
     } finally { setSubiendo(null) }
   }
 
   async function cancelar(cot) {
     if (!window.confirm('¿Cancelar esta cotización?')) return
-    try {
-      const { error } = await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
-      if (error) { alert('No se pudo cancelar: ' + error.message); return }
-      await cargar()
-    } catch (e) {
-      alert('Error al cancelar: ' + (e.message || ''))
-    }
-  }
-
-  async function eliminarCotizacion(cot) {
-    if (!window.confirm('¿Eliminar esta cotización permanentemente? No se puede deshacer.')) return
-    try {
-      const { error } = await supabase.from('cotizaciones').delete().eq('id', cot.id)
-      if (error) { alert('No se pudo eliminar: ' + error.message); return }
-      await cargar()
-    } catch (e) {
-      alert('Error al eliminar: ' + (e.message || ''))
-    }
+    await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
+    await cargar()
   }
 
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando cotizaciones...</div>
@@ -1193,34 +1234,34 @@ function TabCotizaciones({ empresa }) {
                     <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    {!aceptada && !cancelada && (
-                      <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
-                        {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
-                        <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
-                          onChange={e => subirOC(cot, e.target.files[0])} />
-                      </label>
+                    {!aceptada && !cancelada && !vencida && (
+                      <>
+                        <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                          {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
+                          <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
+                            onChange={e => subirOC(cot, e.target.files[0])} />
+                        </label>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" onClick={() => cancelar(cot)}
+                            style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
+                            Generar nueva
+                          </a>
+                          <button onClick={() => cancelar(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                    {vencida && !aceptada && !cancelada && (
+                      <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
+                        Volver a cotizar
+                      </a>
                     )}
                     {cot.orden_compra_url && (
                       <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
                         📎 Ver OC
                       </a>
                     )}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {!aceptada && (
-                        <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank"
-                          style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
-                          Generar nueva
-                        </a>
-                      )}
-                      {!aceptada && !cancelada && (
-                        <button onClick={() => cancelar(cot)} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
-                          Cancelar
-                        </button>
-                      )}
-                      <button onClick={() => eliminarCotizacion(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
-                        🗑 Eliminar
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -1396,6 +1437,28 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
       await supabase.from('proximos_cursos').update({ cupo_ocupado: (proximo.cupo_ocupado || 0) + seleccionados.length }).eq('id', proximo.id)
       // Si con costo, marcar compra usada
       if (esConCosto) await supabase.from('compras').update({ estado: 'usado' }).eq('id_compra', idCompra.toUpperCase().trim())
+
+      // Dar acceso al examen a los inscritos
+      for (const empId of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+      }
+
+      // Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
+      try {
+        const { data: existe } = await supabase.from('cursos_confirmados')
+          .select('id, num_participantes').eq('curso_nombre', proximo.curso_nombre).eq('fecha_inicio', proximo.fecha).maybeSingle()
+        if (existe) {
+          await supabase.from('cursos_confirmados').update({ num_participantes: (existe.num_participantes || 0) + seleccionados.length }).eq('id', existe.id)
+        } else {
+          await supabase.from('cursos_confirmados').insert({
+            curso_id: proximo.curso_id, curso_nombre: proximo.curso_nombre,
+            fecha_inicio: proximo.fecha, hora: proximo.hora,
+            num_participantes: seleccionados.length,
+            origen: 'proximo_curso', modalidad: 'zoom', estado: 'confirmado',
+            notas: 'Convocatoria HCD'
+          })
+        }
+      } catch (_) {}
       // Notificar admin
       try {
         await supabase.from('notificaciones').insert({

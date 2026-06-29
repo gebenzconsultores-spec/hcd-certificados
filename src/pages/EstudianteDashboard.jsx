@@ -519,6 +519,26 @@ function ProximosEstudiante({ estudiante }) {
         origen: 'individual', estado: 'inscrito'
       })
       await supabase.from('proximos_cursos').update({ cupo_ocupado: (p.cupo_ocupado || 0) + 1 }).eq('id', p.id)
+
+      // Dar acceso al examen
+      await supabase.from('participantes').update({ acceso_examen: true }).eq('id', estudiante.id)
+
+      // Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
+      try {
+        const { data: existe } = await supabase.from('cursos_confirmados')
+          .select('id, num_participantes').eq('curso_nombre', p.curso_nombre).eq('fecha_inicio', p.fecha).maybeSingle()
+        if (existe) {
+          await supabase.from('cursos_confirmados').update({ num_participantes: (existe.num_participantes || 0) + 1 }).eq('id', existe.id)
+        } else {
+          await supabase.from('cursos_confirmados').insert({
+            curso_id: p.curso_id, curso_nombre: p.curso_nombre,
+            fecha_inicio: p.fecha, hora: p.hora, num_participantes: 1,
+            origen: 'proximo_curso', modalidad: 'zoom', estado: 'confirmado',
+            notas: 'Convocatoria HCD'
+          })
+        }
+      } catch (_) {}
+
       await cargar()
     } catch (e) {
       alert('Error: ' + (e.message || ''))

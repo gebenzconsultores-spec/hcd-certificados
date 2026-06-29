@@ -10,9 +10,27 @@ export default function AdminCursosConfirmados() {
   const [vista, setVista] = useState('calendario')
   const [mesActual, setMesActual] = useState(new Date())
   const [detalle, setDetalle] = useState(null)
+  const [modalProgramar, setModalProgramar] = useState(false)
+  const [cursos, setCursos] = useState([])
+  const [empresas, setEmpresas] = useState([])
+  const [participantes, setParticipantes] = useState([])
   const [asistentes, setAsistentes] = useState([])
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => {
+    cargar()
+    cargarDatos()
+  }, [])
+
+  async function cargarDatos() {
+    const [{ data: cur }, { data: emp }, { data: part }] = await Promise.all([
+      supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true),
+      supabase.from('empresas').select('id, nombre'),
+      supabase.from('participantes').select('id, nombre, id_empleado, correo, empresa_id, registrado_por_empresa, tipo')
+    ])
+    setCursos(cur || [])
+    setEmpresas(emp || [])
+    setParticipantes(part || [])
+  }
 
   async function cargar() {
     setLoading(true)
@@ -73,6 +91,7 @@ export default function AdminCursosConfirmados() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setVista('calendario')} style={{ background: vista === 'calendario' ? '#8B1A1A' : '#f1f5f9', color: vista === 'calendario' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📅 Calendario</button>
           <button onClick={() => setVista('lista')} style={{ background: vista === 'lista' ? '#8B1A1A' : '#f1f5f9', color: vista === 'lista' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📋 Lista</button>
+          <button onClick={() => setModalProgramar(true)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ Programar curso</button>
         </div>
       </div>
 
@@ -219,8 +238,174 @@ export default function AdminCursosConfirmados() {
           </div>
         </div>
       )}
+
+      {modalProgramar && (
+        <ModalProgramarCurso
+          cursos={cursos} empresas={empresas} participantes={participantes}
+          onClose={() => setModalProgramar(false)}
+          onDone={() => { setModalProgramar(false); cargar() }}
+        />
+      )}
     </div>
   )
 }
+
+// ─── Modal: programar curso manualmente ───────────────────────
+function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone }) {
+  const [tipo, setTipo] = useState('empresa') // 'empresa' o 'abierto'
+  const [cursoId, setCursoId] = useState('')
+  const [empresaId, setEmpresaId] = useState('')
+  const [fecha, setFecha] = useState('')
+  const [hora, setHora] = useState('10:00')
+  const [seleccionados, setSeleccionados] = useState([])
+  const [busqueda, setBusqueda] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Lista de alumnos a mostrar según tipo
+  let alumnosDisponibles = participantes
+  if (tipo === 'empresa' && empresaId) {
+    alumnosDisponibles = participantes.filter(p => p.empresa_id === empresaId || p.registrado_por_empresa === empresaId)
+  }
+  alumnosDisponibles = alumnosDisponibles.filter(p =>
+    `${p.nombre} ${p.id_empleado || ''} ${p.correo || ''}`.toLowerCase().includes(busqueda.toLowerCase())
+  )
+
+  function toggle(id) {
+    setSeleccionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
+  }
+
+  async function guardar() {
+    const curso = cursos.find(c => c.id === cursoId)
+    if (!curso) { alert('Selecciona un curso'); return }
+    if (!fecha) { alert('Selecciona la fecha del curso'); return }
+    if (tipo === 'empresa' && !empresaId) { alert('Selecciona la empresa'); return }
+    if (seleccionados.length === 0) { alert('Selecciona al menos un alumno'); return }
+    setSaving(true)
+    try {
+      const empresa = empresas.find(e => e.id === empresaId)
+      // 1. Crear el curso confirmado
+      await supabase.from('cursos_confirmados').insert({
+        curso_id: curso.id, curso_nombre: curso.nombre,
+        empresa_id: tipo === 'empresa' ? empresaId : null,
+        empresa_nombre: tipo === 'empresa' ? empresa?.nombre : 'Curso abierto HCD',
+        fecha_inicio: fecha, hora,
+        num_participantes: seleccionados.length,
+        origen: tipo === 'empresa' ? 'programado_admin' : 'programado_admin',
+        modalidad: 'zoom', estado: 'confirmado',
+        notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
+      })
+
+      // 2. Crear asignaciones para cada alumno + dar acceso al examen
+      const rows = seleccionados.map(pid => {
+        const p = participantes.find(x => x.id === pid)
+        return {
+          empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
+          empleado_id: pid, empleado_nombre: p?.nombre,
+          curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
+          modalidad_asignacion: 'zoom', fecha_programada: fecha,
+          estado: 'asignado', notas: 'Inscrito manualmente por admin'
+        }
+      })
+      await supabase.from('asignaciones').insert(rows)
+      for (const pid of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', pid)
+      }
+
+      alert(`✅ Curso programado para ${new Date(fecha).toLocaleDateString('es-MX')} con ${seleccionados.length} alumno(s).`)
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 600, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>Programar curso</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Da de alta un curso y selecciona quiénes asistirán</p>
+
+        {/* Tipo de curso */}
+        <label style={lbl}>¿Qué tipo de curso es?</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          {[['empresa', '🏢 Para una empresa', 'Le impartes a una empresa específica'], ['abierto', '🌐 Curso abierto HCD', 'Inscribes a cualquier alumno']].map(([v, l, d]) => (
+            <button key={v} onClick={() => { setTipo(v); setSeleccionados([]); setEmpresaId('') }}
+              style={{ flex: 1, padding: '12px', border: `2px solid ${tipo === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 10, background: tipo === v ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: tipo === v ? '#8B1A1A' : '#475569' }}>{l}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{d}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Curso */}
+        <label style={lbl}>Curso</label>
+        <select value={cursoId} onChange={e => setCursoId(e.target.value)} style={inp}>
+          <option value="">— Selecciona un curso —</option>
+          {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+
+        {/* Empresa (solo si tipo empresa) */}
+        {tipo === 'empresa' && (
+          <>
+            <label style={lbl}>Empresa</label>
+            <select value={empresaId} onChange={e => { setEmpresaId(e.target.value); setSeleccionados([]) }} style={inp}>
+              <option value="">— Selecciona la empresa —</option>
+              {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+            </select>
+          </>
+        )}
+
+        {/* Fecha y hora */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Fecha del curso *</label>
+            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Hora</label>
+            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
+          </div>
+        </div>
+
+        {/* Selección de alumnos */}
+        <label style={lbl}>Inscribir alumnos ({seleccionados.length} seleccionados)</label>
+        {tipo === 'empresa' && !empresaId ? (
+          <p style={{ color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>Primero selecciona una empresa para ver sus empleados.</p>
+        ) : (
+          <>
+            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar alumno por nombre, ID o correo..."
+              style={{ ...inp, marginBottom: 8 }} />
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, maxHeight: 240, overflowY: 'auto' }}>
+              {alumnosDisponibles.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 13, padding: 16, textAlign: 'center' }}>No hay alumnos {tipo === 'empresa' ? 'en esta empresa' : 'registrados'}.</p>
+              ) : (
+                alumnosDisponibles.map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: seleccionados.includes(p.id) ? '#f9f0f0' : '#fff' }}>
+                    <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={() => toggle(p.id)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{p.nombre}</div>
+                      <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                        {p.id_empleado} · {p.correo} · {(p.empresa_id || p.registrado_por_empresa) ? 'Empresa' : 'Individual'}
+                      </div>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {saving ? 'Programando...' : 'Programar curso'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5, marginTop: 12 }
+const inp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 
 const navBtn = { background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }
