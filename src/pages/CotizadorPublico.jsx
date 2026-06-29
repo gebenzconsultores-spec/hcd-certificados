@@ -222,7 +222,13 @@ export default function CotizadorPublico() {
         empresa_registrada: !!empresaPortal,
         estado: 'enviada'
       }
-      const { data: cotCreada } = await supabase.from('cotizaciones').insert(payload).select('id').single()
+      const { data: cotCreada, error: errCot } = await supabase.from('cotizaciones').insert(payload).select('id').single()
+      if (errCot) {
+        console.error('Error al guardar cotización:', errCot)
+        alert('No se pudo guardar la cotización: ' + (errCot.message || 'error') + '\n\nVerifica que ejecutaste los SQL más recientes en Supabase.')
+        setSaving(false)
+        return
+      }
       if (cotCreada) setCotizacionId(cotCreada.id)
 
       // Notificación para el admin
