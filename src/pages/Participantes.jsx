@@ -84,10 +84,22 @@ export default function Participantes() {
     if (!form.nombre || !form.correo) return
     setSaving(true)
     try {
-      // Generar ID de empleado
-      const { count } = await supabase.from('participantes').select('id', { count: 'exact', head: true })
-      const id_empleado = `ALU-${String((count || 0) + 1).padStart(4, '0')}`
-      await crearParticipante({
+      // Generar ID de empleado sin duplicados (función de BD o máximo)
+      let id_empleado
+      try {
+        const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'ALU', p_tabla: 'participantes', p_columna: 'id_empleado' })
+        id_empleado = idData
+      } catch (_) {}
+      if (!id_empleado) {
+        const { data: existentes } = await supabase.from('participantes').select('id_empleado').not('id_empleado', 'is', null)
+        let maxNum = 0
+        ;(existentes || []).forEach(e => {
+          const m = (e.id_empleado || '').match(/ALU-(\d+)/)
+          if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+        })
+        id_empleado = `ALU-${String(maxNum + 1).padStart(4, '0')}`
+      }
+      const datosParticipante = {
         nombre: form.nombre,
         correo: form.correo,
         whatsapp: form.whatsapp,
@@ -100,7 +112,17 @@ export default function Participantes() {
         es_universitario: form.es_universitario,
         universidad: form.es_universitario ? form.universidad : null,
         carrera: form.es_universitario ? form.carrera : null,
-      })
+      }
+      let { error: errIns } = await supabase.from('participantes').insert(datosParticipante)
+      // Si el ID chocó, reintentar con el siguiente número
+      if (errIns && (errIns.message || '').includes('duplicate')) {
+        const m = id_empleado.match(/ALU-(\d+)/)
+        const siguiente = `ALU-${String((m ? parseInt(m[1], 10) : 0) + 1).padStart(4, '0')}`
+        datosParticipante.id_empleado = siguiente
+        const reintento = await supabase.from('participantes').insert(datosParticipante)
+        errIns = reintento.error
+      }
+      if (errIns) { alert('No se pudo registrar: ' + errIns.message); setSaving(false); return }
       await cargar()
       setModal(false)
       setForm({ nombre: '', correo: '', whatsapp: '', puesto: '', empresa_id: '', empresa_manual: '', tipo: 'empresa', es_universitario: false, universidad: '', carrera: '' })
