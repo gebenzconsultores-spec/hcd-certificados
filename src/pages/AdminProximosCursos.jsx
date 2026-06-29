@@ -7,6 +7,8 @@ export default function AdminProximosCursos() {
   const [inscripciones, setInscripciones] = useState([])
   const [modal, setModal] = useState(false)
   const [detalle, setDetalle] = useState(null)
+  const [modalInscribir, setModalInscribir] = useState(null)
+  const [participantes, setParticipantes] = useState([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00',
@@ -14,7 +16,10 @@ export default function AdminProximosCursos() {
   })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => { cargar() }, [])
+  useEffect(() => {
+    cargar()
+    supabase.from('participantes').select('id, nombre, id_empleado, correo, empresa_id, registrado_por_empresa, tipo').then(({ data }) => setParticipantes(data || []))
+  }, [])
 
   async function cargar() {
     setLoading(true)
@@ -145,7 +150,8 @@ export default function AdminProximosCursos() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => setModalInscribir(p)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', flex: 1 }}>➕ Inscribir participantes</button>
                   <button onClick={() => verInscritos(p)} style={{ ...btnSecondary, flex: 1 }}>Ver inscritos ({numInscritos})</button>
                   {p.estado === 'abierto' ? (
                     <button onClick={() => cambiarEstado(p.id, 'cerrado')} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>Cerrar</button>
@@ -265,6 +271,122 @@ export default function AdminProximosCursos() {
           </div>
         </div>
       )}
+
+      {modalInscribir && (
+        <ModalInscribirParticipantes
+          convocatoria={modalInscribir}
+          participantes={participantes}
+          onClose={() => setModalInscribir(null)}
+          onDone={() => { setModalInscribir(null); cargar() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Modal: inscribir participantes a una convocatoria ────────
+function ModalInscribirParticipantes({ convocatoria, participantes, onClose, onDone }) {
+  const [seleccionados, setSeleccionados] = useState([])
+  const [busqueda, setBusqueda] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const cupoDisponible = (convocatoria.cupo_maximo || 10) - (convocatoria.cupo_ocupado || 0)
+
+  const filtrados = participantes.filter(p =>
+    `${p.nombre} ${p.id_empleado || ''} ${p.correo || ''}`.toLowerCase().includes(busqueda.toLowerCase())
+  )
+
+  function toggle(id) {
+    setSeleccionados(s => {
+      if (s.includes(id)) return s.filter(x => x !== id)
+      if (s.length >= cupoDisponible) {
+        alert(`Solo quedan ${cupoDisponible} lugar(es) disponibles en esta convocatoria.`)
+        return s
+      }
+      return [...s, id]
+    })
+  }
+
+  async function inscribir() {
+    if (seleccionados.length === 0) { alert('Selecciona al menos un participante'); return }
+    setSaving(true)
+    try {
+      const rows = seleccionados.map(pid => {
+        const p = participantes.find(x => x.id === pid)
+        return {
+          proximo_curso_id: convocatoria.id,
+          curso_nombre: convocatoria.curso_nombre,
+          fecha: convocatoria.fecha,
+          participante_id: pid,
+          participante_nombre: p?.nombre,
+          participante_correo: p?.correo,
+          empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
+          origen: (p?.empresa_id || p?.registrado_por_empresa) ? 'empresa' : 'individual',
+          estado: 'inscrito'
+        }
+      })
+      await supabase.from('inscripciones').insert(rows)
+      // Actualizar cupo
+      await supabase.from('proximos_cursos').update({ cupo_ocupado: (convocatoria.cupo_ocupado || 0) + seleccionados.length }).eq('id', convocatoria.id)
+      // Dar acceso al examen
+      for (const pid of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', pid)
+      }
+      // Registrar/actualizar en calendario de confirmados
+      try {
+        const { data: existe } = await supabase.from('cursos_confirmados')
+          .select('id, num_participantes').eq('curso_nombre', convocatoria.curso_nombre).eq('fecha_inicio', convocatoria.fecha).maybeSingle()
+        if (existe) {
+          await supabase.from('cursos_confirmados').update({ num_participantes: (existe.num_participantes || 0) + seleccionados.length }).eq('id', existe.id)
+        } else {
+          await supabase.from('cursos_confirmados').insert({
+            curso_id: convocatoria.curso_id, curso_nombre: convocatoria.curso_nombre,
+            fecha_inicio: convocatoria.fecha, hora: convocatoria.hora, num_participantes: seleccionados.length,
+            origen: 'proximo_curso', modalidad: 'zoom', estado: 'confirmado', notas: 'Convocatoria HCD'
+          })
+        }
+      } catch (_) {}
+
+      alert(`✅ ${seleccionados.length} participante(s) inscrito(s) en la convocatoria.`)
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 560, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir participantes</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>{convocatoria.curso_nombre} · {new Date(convocatoria.fecha).toLocaleDateString('es-MX')}</p>
+        <p style={{ color: '#059669', fontSize: 12, fontWeight: 600, marginBottom: 16 }}>Lugares disponibles: {cupoDisponible} · Seleccionados: {seleccionados.length}</p>
+
+        <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre, ID o correo..."
+          style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, maxHeight: 320, overflowY: 'auto' }}>
+          {filtrados.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13, padding: 16, textAlign: 'center' }}>No hay participantes.</p>
+          ) : (
+            filtrados.map(p => (
+              <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', background: seleccionados.includes(p.id) ? '#f9f0f0' : '#fff' }}>
+                <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={() => toggle(p.id)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{p.nombre}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{p.id_empleado} · {p.correo} · {(p.empresa_id || p.registrado_por_empresa) ? 'Empresa' : 'Individual'}</div>
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={inscribir} disabled={saving} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {saving ? 'Inscribiendo...' : `Inscribir (${seleccionados.length})`}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

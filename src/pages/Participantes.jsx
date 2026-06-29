@@ -7,6 +7,8 @@ export default function Participantes() {
   const [cursosPorParticipante, setCursosPorParticipante] = useState({})
   const [modal, setModal] = useState(false)
   const [modalEstatus, setModalEstatus] = useState(null)
+  const [modalAsignar, setModalAsignar] = useState(null)
+  const [cursosDisponibles, setCursosDisponibles] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todos')
   const [form, setForm] = useState({
@@ -19,6 +21,7 @@ export default function Participantes() {
   useEffect(() => {
     cargar()
     getEmpresas().then(setEmpresas)
+    supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true).then(({ data }) => setCursosDisponibles(data || []))
   }, [])
 
   async function cargar() {
@@ -195,7 +198,10 @@ export default function Participantes() {
                     </span>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setModalAsignar(p)} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>➕ Asignar curso</button>
+                      <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -205,6 +211,15 @@ export default function Participantes() {
       </div>
 
       {/* Modal estatus de cursos */}
+      {modalAsignar && (
+        <ModalAsignarCurso
+          participante={modalAsignar}
+          cursos={cursosDisponibles}
+          onClose={() => setModalAsignar(null)}
+          onDone={() => { setModalAsignar(null); cargar() }}
+        />
+      )}
+
       {modalEstatus && (
         <div style={overlayStyle} onClick={() => setModalEstatus(null)}>
           <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
@@ -312,7 +327,84 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
   )
 }
 
-const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }
+// ─── Modal: asignar curso a un participante ───────────────────
+function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
+  const [cursoId, setCursoId] = useState('')
+  const [fecha, setFecha] = useState('')
+  const [hora, setHora] = useState('10:00')
+  const [saving, setSaving] = useState(false)
+
+  async function guardar() {
+    const curso = cursos.find(c => c.id === cursoId)
+    if (!curso) { alert('Selecciona un curso'); return }
+    if (!fecha) { alert('Selecciona la fecha del curso'); return }
+    setSaving(true)
+    try {
+      const empresaId = participante.empresa_id || participante.registrado_por_empresa || null
+      // 1. Crear la asignación
+      await supabase.from('asignaciones').insert({
+        empresa_id: empresaId,
+        empleado_id: participante.id,
+        empleado_nombre: participante.nombre,
+        curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
+        modalidad_asignacion: 'zoom', fecha_programada: fecha,
+        estado: 'asignado', notas: 'Asignado manualmente por admin'
+      })
+      // 2. Dar acceso al examen
+      await supabase.from('participantes').update({ acceso_examen: true }).eq('id', participante.id)
+      // 3. Registrar en cursos confirmados (calendario)
+      try {
+        await supabase.from('cursos_confirmados').insert({
+          curso_id: curso.id, curso_nombre: curso.nombre,
+          empresa_id: empresaId,
+          empresa_nombre: participante.empresa?.nombre || (empresaId ? 'Empresa' : 'Individual'),
+          participante_id: participante.id, participante_nombre: participante.nombre,
+          fecha_inicio: fecha, hora, num_participantes: 1,
+          origen: 'programado_admin', modalidad: 'zoom', estado: 'confirmado',
+          notas: 'Asignación manual desde Participantes'
+        })
+      } catch (_) {}
+
+      alert(`✅ Curso "${curso.nombre}" asignado a ${participante.nombre} para el ${new Date(fecha).toLocaleDateString('es-MX')}.`)
+      onDone()
+    } catch (e) {
+      alert('Error al asignar: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Asignar curso</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
+          A: <strong>{participante.nombre}</strong> {participante.id_empleado && `(${participante.id_empleado})`}
+        </p>
+
+        <label style={labelStyle}>Curso</label>
+        <select value={cursoId} onChange={e => setCursoId(e.target.value)} style={inputStyle}>
+          <option value="">— Selecciona un curso —</option>
+          {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+
+        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Fecha *</label>
+            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Hora</label>
+            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Asignando...' : 'Asignar curso'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 const inputStyle = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none', color: '#1e293b', background: '#fff' }
 const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }
