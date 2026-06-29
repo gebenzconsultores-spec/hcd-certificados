@@ -198,6 +198,38 @@ function TabResumen({ empresa, empleados, asignaciones, certificados, cursos }) 
 // ─── TAB EMPLEADOS ────────────────────────────────────────────
 function TabEmpleados({ empresa, empleados, recargar }) {
   const [modal, setModal] = useState(false)
+  const [cursosPorEmpleado, setCursosPorEmpleado] = useState({})
+  const [modalEstatus, setModalEstatus] = useState(null)
+
+  useEffect(() => {
+    cargarCursos()
+  }, [empleados])
+
+  async function cargarCursos() {
+    if (!empleados || empleados.length === 0) return
+    const ids = empleados.map(e => e.id)
+    const [{ data: asigs }, { data: certs }] = await Promise.all([
+      supabase.from('asignaciones').select('empleado_id, curso_nombre, microcurso_titulo, estado, fecha_programada').in('empleado_id', ids),
+      supabase.from('certificados').select('participante_id, nombre_curso').in('participante_id', ids)
+    ])
+    const mapa = {}
+    empleados.forEach(e => { mapa[e.id] = { tomados: [], porTomar: [] } })
+    ;(certs || []).forEach(cert => {
+      if (mapa[cert.participante_id]) mapa[cert.participante_id].tomados.push(cert.nombre_curso)
+    })
+    ;(asigs || []).forEach(a => {
+      const nombre = a.curso_nombre || a.microcurso_titulo
+      if (!mapa[a.empleado_id]) return
+      // Si está completado o ya tiene certificado, es "tomado"; si no, "por tomar"
+      const yaTomado = mapa[a.empleado_id].tomados.includes(nombre) || a.estado === 'completado'
+      if (yaTomado) {
+        if (!mapa[a.empleado_id].tomados.includes(nombre)) mapa[a.empleado_id].tomados.push(nombre)
+      } else {
+        mapa[a.empleado_id].porTomar.push({ nombre, fecha: a.fecha_programada })
+      }
+    })
+    setCursosPorEmpleado(mapa)
+  }
   const [modalExcel, setModalExcel] = useState(false)
   const [form, setForm] = useState({ nombre: '', correo: '', whatsapp: '', puesto: '' })
   const [saving, setSaving] = useState(false)
@@ -338,7 +370,7 @@ function TabEmpleados({ empresa, empleados, recargar }) {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['ID Empleado', 'Nombre', 'Puesto', 'Correo', 'Acceso al examen', ''].map(h => (
+              {['ID Empleado', 'Nombre', 'Puesto', 'Correo', 'Estatus', ''].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
@@ -347,30 +379,84 @@ function TabEmpleados({ empresa, empleados, recargar }) {
             {empleados.length === 0 && (
               <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no has registrado empleados</td></tr>
             )}
-            {empleados.map(e => (
-              <tr key={e.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '11px 16px' }}><code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{e.id_empleado}</code></td>
-                <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{e.nombre}</td>
-                <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.puesto || '—'}</td>
-                <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.correo}</td>
-                <td style={{ padding: '11px 16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={e.acceso_examen || false} onChange={() => toggleAcceso(e)} style={{ accentColor: '#059669', width: 16, height: 16 }} />
-                    <span style={{ fontSize: 12, color: e.acceso_examen ? '#059669' : '#94a3b8', fontWeight: 600 }}>
-                      {e.acceso_examen ? '✓ Habilitado' : 'Sin acceso'}
-                    </span>
-                  </label>
-                </td>
-                <td style={{ padding: '11px 16px' }}>
-                  <button onClick={() => eliminarEmpleado(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
-                </td>
-              </tr>
-            ))}
+            {empleados.map(e => {
+              const cursos = cursosPorEmpleado[e.id] || { tomados: [], porTomar: [] }
+              const totalTomados = cursos.tomados.length
+              const totalPorTomar = cursos.porTomar.length
+              const resumen = (totalTomados === 0 && totalPorTomar === 0)
+                ? 'Ninguno'
+                : `${totalTomados} tomado${totalTomados !== 1 ? 's' : ''} · ${totalPorTomar} por tomar`
+              return (
+                <tr key={e.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '11px 16px' }}><code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{e.id_empleado}</code></td>
+                  <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{e.nombre}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.puesto || '—'}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.correo}</td>
+                  <td style={{ padding: '11px 16px' }}>
+                    <button onClick={() => setModalEstatus({ empleado: e, cursos })}
+                      style={{ background: resumen === 'Ninguno' ? '#f1f5f9' : '#f0fdf4', color: resumen === 'Ninguno' ? '#94a3b8' : '#059669', border: `1px solid ${resumen === 'Ninguno' ? '#e2e8f0' : '#bbf7d0'}`, borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      {resumen}
+                    </button>
+                  </td>
+                  <td style={{ padding: '11px 16px' }}>
+                    <button onClick={() => eliminarEmpleado(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Modal importar CSV */}
+      {/* Modal de estatus de cursos del empleado */}
+      {modalEstatus && (
+        <div style={overlay} onClick={() => setModalEstatus(null)}>
+          <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{modalEstatus.empleado.nombre}</h3>
+                <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{modalEstatus.empleado.id_empleado}</code>
+              </div>
+              <button onClick={() => setModalEstatus(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+
+            {/* Cursos tomados */}
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: '#059669', marginBottom: 8 }}>✓ Cursos tomados ({modalEstatus.cursos.tomados.length})</h4>
+              {modalEstatus.cursos.tomados.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 13 }}>Ninguno</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {modalEstatus.cursos.tomados.map((c, i) => (
+                    <div key={i} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', color: '#15803d', fontSize: 13, fontWeight: 500 }}>{c}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cursos por tomar */}
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>⏳ Cursos por tomar ({modalEstatus.cursos.porTomar.length})</h4>
+              {modalEstatus.cursos.porTomar.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 13 }}>Ninguno</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {modalEstatus.cursos.porTomar.map((c, i) => (
+                    <div key={i} style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', color: '#92400e', fontSize: 13, fontWeight: 500, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{c.nombre}</span>
+                      {c.fecha && <span style={{ fontSize: 11 }}>📅 {new Date(c.fecha).toLocaleDateString('es-MX')}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setModalEstatus(null)} style={{ ...btnGhost, width: '100%', marginTop: 20 }}>Cerrar</button>
+          </div>
+        </div>
+      )}
+
       {modalExcel && (
         <div style={overlay} onClick={() => { setModalExcel(false); setResultadoImport(null) }}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
@@ -710,28 +796,50 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
   const [saving, setSaving] = useState(false)
 
   const limite = compraData?.num_personas || 1
+  const [yaInscritos, setYaInscritos] = useState([])
+  const fechaCurso = compraData?.fecha_curso
+  const fechaPasada = fechaCurso && new Date(fechaCurso) < new Date(new Date().toDateString())
+  const cupoLleno = yaInscritos.length >= limite && seleccionados.length >= limite
 
   async function validar() {
     if (!idCompra) return
     setError('')
     try {
+      // Buscar la compra (activa o usada — sigue sirviendo mientras haya cupo y no pase la fecha)
       const { data: compra } = await supabase.from('compras').select('*')
         .eq('id_compra', idCompra.toUpperCase().trim())
-        .eq('estado', 'activo').maybeSingle()
-      if (!compra) throw new Error('no')
+        .in('estado', ['activo', 'usado']).maybeSingle()
+      if (!compra) { setError('ID de compra no válido. Verifica con Hablando con Datos.'); return }
+
+      // Verificar que sea para este curso
+      if (compra.curso_id && curso.id && compra.curso_id !== curso.id) {
+        setError('Este ID de compra es para otro curso.'); return
+      }
+      // Verificar fecha
+      if (compra.fecha_curso && new Date(compra.fecha_curso) < new Date(new Date().toDateString())) {
+        setError('La fecha de este curso ya pasó. El ID de compra está vencido.'); return
+      }
+
+      // Cargar quiénes ya están inscritos con este ID
+      const { data: asigsPrevias } = await supabase.from('asignaciones').select('empleado_id')
+        .eq('id_compra', idCompra.toUpperCase().trim())
+      const idsInscritos = (asigsPrevias || []).map(a => a.empleado_id)
+      setYaInscritos(idsInscritos)
+      setSeleccionados(idsInscritos) // precargar la selección actual
+
       setCompraData(compra)
+      setFecha(compra.fecha_curso || '')
       setValidado(true)
-    } catch {
-      setError('ID de compra no válido o ya usado. Verifica con Hablando con Datos.')
+    } catch (e) {
+      setError('Error al validar: ' + (e.message || ''))
     }
   }
 
   function toggle(id) {
     setSeleccionados(s => {
       if (s.includes(id)) return s.filter(x => x !== id)
-      // Respetar el límite de personas de la compra
       if (s.length >= limite) {
-        alert(`Tu ID de compra es para ${limite} persona(s). No puedes seleccionar más.`)
+        alert(`Tu ID de compra es para ${limite} persona(s). Si necesitas agregar a alguien más, contacta a Hablando con Datos.`)
         return s
       }
       return [...s, id]
@@ -739,29 +847,43 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
   }
 
   async function asignar() {
-    if (seleccionados.length === 0) return
-    if (seleccionados.length > limite) {
-      alert(`Solo puedes asignar ${limite} persona(s) con este ID de compra.`)
-      return
-    }
+    if (fechaPasada) { alert('La fecha del curso ya pasó.'); return }
     setSaving(true)
     try {
-      const rows = seleccionados.map(empId => {
-        const emp = empleados.find(e => e.id === empId)
-        return {
-          empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
-          curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
-          modalidad_asignacion: 'zoom', fecha_programada: fecha || null,
-          id_compra: idCompra.toUpperCase().trim(), estado: 'asignado'
-        }
-      })
-      await supabase.from('asignaciones').insert(rows)
-      // Dar acceso al examen a los empleados asignados
-      for (const empId of seleccionados) {
-        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+      const idC = idCompra.toUpperCase().trim()
+      // 1. Borrar asignaciones previas de este ID (para regenerar la lista actual)
+      const { data: previas } = await supabase.from('asignaciones').select('empleado_id').eq('id_compra', idC)
+      const idsPrevios = (previas || []).map(a => a.empleado_id)
+      await supabase.from('asignaciones').delete().eq('id_compra', idC)
+
+      // 2. Quitar acceso a los que estaban antes pero ya no están seleccionados
+      const removidos = idsPrevios.filter(id => !seleccionados.includes(id))
+      for (const empId of removidos) {
+        await supabase.from('participantes').update({ acceso_examen: false }).eq('id', empId)
       }
-      // Marcar compra como usada
-      await supabase.from('compras').update({ estado: 'usado' }).eq('id_compra', idCompra.toUpperCase().trim())
+
+      // 3. Insertar la selección actual
+      if (seleccionados.length > 0) {
+        const rows = seleccionados.map(empId => {
+          const emp = empleados.find(e => e.id === empId)
+          return {
+            empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
+            curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
+            modalidad_asignacion: 'zoom', fecha_programada: fecha || null,
+            id_compra: idC, estado: 'asignado'
+          }
+        })
+        await supabase.from('asignaciones').insert(rows)
+        // Dar acceso a los seleccionados
+        for (const empId of seleccionados) {
+          await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+        }
+      }
+
+      // 4. Marcar la compra: 'usado' si se llenó, 'activo' si aún hay cupo
+      const nuevoEstado = seleccionados.length >= limite ? 'usado' : 'activo'
+      await supabase.from('compras').update({ estado: nuevoEstado }).eq('id_compra', idC)
+
       onDone()
     } catch (e) {
       alert('Error: ' + (e.message || ''))
@@ -791,8 +913,14 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
         ) : (
           <>
             <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#15803d', fontSize: 13 }}>
-              ✅ ID válido para <strong>{limite} persona(s)</strong>. Selecciona a quién inscribir ({seleccionados.length}/{limite}).
+              ✅ ID válido para <strong>{limite} persona(s)</strong>. Seleccionados: {seleccionados.length}/{limite}.
+              {seleccionados.length >= limite && <div style={{ marginTop: 4, fontSize: 12 }}>Cupo lleno. Para agregar a alguien más, contacta a Hablando con Datos.</div>}
             </div>
+            {compraData?.fecha_curso && (
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', marginBottom: 12, color: '#1e40af', fontSize: 12 }}>
+                📅 Fecha del curso: {new Date(compraData.fecha_curso).toLocaleDateString('es-MX')}. Puedes ajustar tu selección hasta esta fecha.
+              </div>
+            )}
             <label style={lbl}>Fecha programada (opcional)</label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
             <label style={lbl}>Empleados ({seleccionados.length})</label>
@@ -806,7 +934,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={onClose} style={btnGhost}>Cancelar</button>
-              <button onClick={asignar} disabled={saving || seleccionados.length === 0} style={btnPrimary}>{saving ? 'Asignando...' : `Inscribir a ${seleccionados.length}`}</button>
+              <button onClick={asignar} disabled={saving || fechaPasada} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar selección'}</button>
             </div>
           </>
         )}
