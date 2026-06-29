@@ -109,6 +109,9 @@ export default function EstudianteDashboard() {
           ))}
         </div>
 
+        {/* Banner convocatoria (solo individuales) */}
+        {!esDeEmpresa && <BannerConvocatoriaEstudiante onIr={() => setTab('proximos')} />}
+
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20 }}>
           {[
@@ -117,7 +120,7 @@ export default function EstudianteDashboard() {
             { id: 'examenes', label: '📊 Mis exámenes' },
             { id: 'cursos', label: '🎓 Mis cursos' },
             ...(!esDeEmpresa ? [{ id: 'desbloquear', label: '🔑 Activar curso pagado' }] : []),
-            ...(!esDeEmpresa ? [{ id: 'proximos', label: '📆 Próximos cursos' }] : []),
+            ...(!esDeEmpresa ? [{ id: 'proximos', label: '📣 Convocatorias HCD' }] : []),
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#1d4ed8' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#1d4ed8' : '#64748b', cursor: 'pointer' }}>
@@ -280,7 +283,7 @@ export default function EstudianteDashboard() {
                 {/* Individual: solo cursos que ha desbloqueado/pagado */}
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
                   <p style={{ color: '#1e40af', fontSize: 13 }}>
-                    ℹ️ Para presentar un examen, primero debes adquirir el curso. Cotiza en "Próximos cursos" o activa tu curso pagado con tu ID de compra.
+                    ℹ️ Para presentar un examen, primero debes adquirir el curso. Cotiza en "Convocatorias HCD" o activa tu curso pagado con tu ID de compra.
                   </p>
                 </div>
                 <MisCursosIndividual estudiante={estudiante} certificados={certificados} />
@@ -445,6 +448,35 @@ function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
 }
 
 // ─── Próximos cursos para estudiante individual ───────────────
+function BannerConvocatoriaEstudiante({ onIr }) {
+  const [convocatoria, setConvocatoria] = useState(null)
+  useEffect(() => {
+    supabase.from('proximos_cursos').select('*').eq('estado', 'abierto')
+      .gte('fecha', new Date().toISOString().split('T')[0])
+      .order('fecha', { ascending: true }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setConvocatoria(data[0]) })
+  }, [])
+  if (!convocatoria) return null
+  return (
+    <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '20px 26px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>📣 Convocatoria HCD</div>
+        <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Hablando con Datos te invita a su siguiente curso</h3>
+        <p style={{ color: 'rgba(255,255,255,.92)', fontSize: 14 }}>
+          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
+        </p>
+        <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
+          {convocatoria.tipo_costo === 'sin_costo' ? '🎁 Sin costo' : '💰 Cupo limitado'}
+        </p>
+        {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
+      </div>
+      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        Inscríbete →
+      </button>
+    </div>
+  )
+}
+
 function ProximosEstudiante({ estudiante }) {
   const [proximos, setProximos] = useState([])
   const [inscripciones, setInscripciones] = useState([])

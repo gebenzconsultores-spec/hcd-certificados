@@ -10,7 +10,7 @@ export default function AdminProximosCursos() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00',
-    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: ''
+    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: ''
   })
   const [saving, setSaving] = useState(false)
 
@@ -41,7 +41,7 @@ export default function AdminProximosCursos() {
   }
 
   function abrirNuevo() {
-    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '' })
+    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '' })
     setModal(true)
   }
 
@@ -63,6 +63,7 @@ export default function AdminProximosCursos() {
         modalidad: 'zoom',
         tipo_costo: form.tipo_costo,
         precio: form.tipo_costo === 'con_costo' ? Number(form.precio) : 0,
+        codigo_promo: form.codigo_promo || null,
         cupo_maximo: Number(form.cupo_maximo),
         cupo_ocupado: 0,
         link_zoom: form.link_zoom,
@@ -207,6 +208,10 @@ export default function AdminProximosCursos() {
 
             <label style={lbl}>Link de Zoom (opcional)</label>
             <input value={form.link_zoom} onChange={e => f('link_zoom')(e.target.value)} placeholder="https://zoom.us/j/..." style={inp} />
+
+            <label style={lbl}>Código promocional (opcional, ej. 2x1)</label>
+            <input value={form.codigo_promo} onChange={e => f('codigo_promo')(e.target.value.toUpperCase())} placeholder="ej. 2X1JULIO o PROMO50" style={inp} />
+            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4, marginBottom: 8 }}>Se mostrará en la convocatoria que ven empresas y estudiantes.</p>
 
             <label style={lbl}>Notas (opcional)</label>
             <textarea value={form.notas} onChange={e => f('notas')(e.target.value)} rows={2} style={{ ...inp, resize: 'none' }} />

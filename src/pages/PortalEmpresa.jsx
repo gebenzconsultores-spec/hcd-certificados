@@ -71,7 +71,7 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '🎓 Cursos y microcredenciales' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
-    { id: 'proximos', label: '📆 Próximos cursos' },
+    { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
   ]
 
@@ -150,6 +150,8 @@ export function EmpresaDashboard() {
               ))}
             </div>
 
+            <BannerConvocatoria onIr={() => setTab('proximos')} />
+
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
@@ -164,6 +166,41 @@ export function EmpresaDashboard() {
 }
 
 // ─── TAB RESUMEN ──────────────────────────────────────────────
+function BannerConvocatoria({ onIr }) {
+  const [convocatoria, setConvocatoria] = useState(null)
+
+  useEffect(() => {
+    // Traer la próxima convocatoria abierta (la más cercana)
+    supabase.from('proximos_cursos').select('*').eq('estado', 'abierto')
+      .gte('fecha', new Date().toISOString().split('T')[0])
+      .order('fecha', { ascending: true }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setConvocatoria(data[0]) })
+  }, [])
+
+  if (!convocatoria) return null
+
+  return (
+    <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '20px 26px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ flex: 1, minWidth: 280 }}>
+        <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>📣 Convocatoria HCD</div>
+        <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 4 }}>
+          Hablando con Datos te invita a su siguiente curso
+        </h3>
+        <p style={{ color: 'rgba(255,255,255,.92)', fontSize: 14 }}>
+          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
+        </p>
+        <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
+          {convocatoria.tipo_costo === 'sin_costo' ? '🎁 Sin costo — inscribe a tus empleados' : '💰 Inscribe a tus empleados'}
+        </p>
+        {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
+      </div>
+      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        Inscribir empleados →
+      </button>
+    </div>
+  )
+}
+
 function TabResumen({ empresa, empleados, asignaciones, certificados, cursos }) {
   const completados = asignaciones.filter(a => a.estado === 'completado').length
   return (
@@ -885,6 +922,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
       await supabase.from('compras').update({ estado: nuevoEstado, fecha_curso: fecha }).eq('id_compra', idC)
 
       // 5. Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
+      let errorConfirmado = null
       try {
         const { data: existente } = await supabase.from('cursos_confirmados')
           .select('id').eq('id_compra', idC).maybeSingle()
@@ -894,9 +932,20 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
           fecha_inicio: fecha, num_participantes: seleccionados.length,
           id_compra: idC, origen: 'orden_compra', estado: 'confirmado'
         }
-        if (existente) await supabase.from('cursos_confirmados').update(payload).eq('id', existente.id)
-        else await supabase.from('cursos_confirmados').insert(payload)
-      } catch (_) {}
+        if (existente) {
+          const { error } = await supabase.from('cursos_confirmados').update(payload).eq('id', existente.id)
+          if (error) errorConfirmado = error
+        } else {
+          const { error } = await supabase.from('cursos_confirmados').insert(payload)
+          if (error) errorConfirmado = error
+        }
+      } catch (e) { errorConfirmado = e }
+
+      if (errorConfirmado) {
+        // No bloquea la asignación, pero avisa
+        console.error('Error al guardar en calendario:', errorConfirmado)
+        alert('Los empleados se asignaron correctamente, pero hubo un problema al guardar en el calendario del admin. Verifica que ejecutaste el SQL de cursos_confirmados. Detalle: ' + (errorConfirmado.message || ''))
+      }
 
       // 6. Notificar al admin
       try {
