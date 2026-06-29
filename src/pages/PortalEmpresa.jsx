@@ -848,6 +848,8 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
 
   async function asignar() {
     if (fechaPasada) { alert('La fecha del curso ya pasó.'); return }
+    if (!fecha) { alert('Debes programar la fecha de inicio del curso.'); return }
+    if (seleccionados.length === 0) { alert('Selecciona al menos un empleado.'); return }
     setSaving(true)
     try {
       const idC = idCompra.toUpperCase().trim()
@@ -863,26 +865,47 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
       }
 
       // 3. Insertar la selección actual
-      if (seleccionados.length > 0) {
-        const rows = seleccionados.map(empId => {
-          const emp = empleados.find(e => e.id === empId)
-          return {
-            empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
-            curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
-            modalidad_asignacion: 'zoom', fecha_programada: fecha || null,
-            id_compra: idC, estado: 'asignado'
-          }
-        })
-        await supabase.from('asignaciones').insert(rows)
-        // Dar acceso a los seleccionados
-        for (const empId of seleccionados) {
-          await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
+      const rows = seleccionados.map(empId => {
+        const emp = empleados.find(e => e.id === empId)
+        return {
+          empresa_id: empresa.id, empleado_id: empId, empleado_nombre: emp?.nombre,
+          curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
+          modalidad_asignacion: 'zoom', fecha_programada: fecha,
+          id_compra: idC, estado: 'asignado'
         }
+      })
+      await supabase.from('asignaciones').insert(rows)
+      // Dar acceso a los seleccionados
+      for (const empId of seleccionados) {
+        await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
       }
 
       // 4. Marcar la compra: 'usado' si se llenó, 'activo' si aún hay cupo
       const nuevoEstado = seleccionados.length >= limite ? 'usado' : 'activo'
-      await supabase.from('compras').update({ estado: nuevoEstado }).eq('id_compra', idC)
+      await supabase.from('compras').update({ estado: nuevoEstado, fecha_curso: fecha }).eq('id_compra', idC)
+
+      // 5. Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
+      try {
+        const { data: existente } = await supabase.from('cursos_confirmados')
+          .select('id').eq('id_compra', idC).maybeSingle()
+        const payload = {
+          curso_id: curso.id, curso_nombre: curso.nombre,
+          empresa_id: empresa.id, empresa_nombre: empresa.nombre,
+          fecha_inicio: fecha, num_participantes: seleccionados.length,
+          id_compra: idC, origen: 'orden_compra', estado: 'confirmado'
+        }
+        if (existente) await supabase.from('cursos_confirmados').update(payload).eq('id', existente.id)
+        else await supabase.from('cursos_confirmados').insert(payload)
+      } catch (_) {}
+
+      // 6. Notificar al admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'programacion', titulo: 'Curso programado',
+          mensaje: `${empresa.nombre} programó ${curso.nombre} para ${new Date(fecha).toLocaleDateString('es-MX')} (${seleccionados.length} asistentes)`,
+          link: '/admin/confirmados'
+        })
+      } catch (_) {}
 
       onDone()
     } catch (e) {
@@ -921,8 +944,13 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
                 📅 Fecha del curso: {new Date(compraData.fecha_curso).toLocaleDateString('es-MX')}. Puedes ajustar tu selección hasta esta fecha.
               </div>
             )}
-            <label style={lbl}>Fecha programada (opcional)</label>
+            <label style={lbl}>Fecha de inicio del curso <span style={{ color: '#dc2626' }}>*</span></label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
+            <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '10px 12px', marginTop: 8, marginBottom: 8 }}>
+              <p style={{ color: '#92400e', fontSize: 12, lineHeight: 1.5 }}>
+                📅 Programa la fecha de inicio del curso. Si deseas <strong>fechas discontinuas</strong> o un <strong>cambio de fecha</strong>, contacta con Hablando con Datos.
+              </p>
+            </div>
             <label style={lbl}>Empleados ({seleccionados.length})</label>
             <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
               {empleados.map(e => (
@@ -934,7 +962,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={onClose} style={btnGhost}>Cancelar</button>
-              <button onClick={asignar} disabled={saving || fechaPasada} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar selección'}</button>
+              <button onClick={asignar} disabled={saving || fechaPasada || !fecha || seleccionados.length === 0} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar selección'}</button>
             </div>
           </>
         )}
@@ -1021,7 +1049,7 @@ function TabCotizaciones({ empresa }) {
 
   // Vencimiento visual a 30 días
   function estaVencida(cot) {
-    if (cot.estado === 'aceptada' || cot.orden_compra_url) return false
+    if (cot.estado === 'aceptada' || cot.estado === 'aceptada_cliente' || cot.orden_compra_url) return false
     const dias = Math.floor((new Date() - new Date(cot.created_at)) / (1000 * 60 * 60 * 24))
     return dias > 30
   }
@@ -1073,10 +1101,10 @@ function TabCotizaciones({ empresa }) {
         tipo_comprador: 'empresa'
       })
 
-      // 3. Actualizar la cotización: aceptada + ID generado
+      // 3. Actualizar la cotización: ACEPTADA POR EL CLIENTE + ID generado
       await supabase.from('cotizaciones').update({
         orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name,
-        estado: 'aceptada', id_compra_generado: idCompra
+        estado: 'aceptada_cliente', id_compra_generado: idCompra
       }).eq('id', cot.id)
 
       // 4. Registrar como VENTA (estatus de cobro: enviar factura)
@@ -1131,7 +1159,7 @@ function TabCotizaciones({ empresa }) {
           {cotizaciones.map(cot => {
             const vencida = estaVencida(cot)
             const dias = diasRestantes(cot)
-            const aceptada = cot.estado === 'aceptada'
+            const aceptada = cot.estado === 'aceptada' || cot.estado === 'aceptada_cliente'
             const cancelada = cot.estado === 'cancelada'
             return (
               <div key={cot.id} style={{ background: '#fff', border: `1px solid ${aceptada ? '#bbf7d0' : cancelada ? '#e2e8f0' : vencida ? '#fecaca' : '#e2e8f0'}`, borderRadius: 14, padding: '20px 24px', opacity: cancelada ? 0.6 : 1 }}>

@@ -33,6 +33,7 @@ import AdminPrecios from './pages/AdminPrecios.jsx'
 import AdminCompras from './pages/AdminCompras.jsx'
 import AdminCotizadorConfig from './pages/AdminCotizadorConfig.jsx'
 import AdminProximosCursos from './pages/AdminProximosCursos.jsx'
+import AdminCursosConfirmados from './pages/AdminCursosConfirmados.jsx'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -64,6 +65,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="auditoria" element={<Auditoria />} />
             <Route path="microcursos" element={<AdminMicrocursos />} />
             <Route path="proximos" element={<AdminProximosCursos />} />
+            <Route path="confirmados" element={<AdminCursosConfirmados />} />
             <Route path="empresas" element={<Empresas />} />
             <Route path="cotizaciones" element={<AdminCotizaciones />} />
             <Route path="cotizador-config" element={<AdminCotizadorConfig />} />

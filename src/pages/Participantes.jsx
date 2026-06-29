@@ -6,6 +6,7 @@ export default function Participantes() {
   const [empresas, setEmpresas] = useState([])
   const [cursosPorParticipante, setCursosPorParticipante] = useState({})
   const [modal, setModal] = useState(false)
+  const [modalEstatus, setModalEstatus] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [filtro, setFiltro] = useState('todos')
   const [form, setForm] = useState({
@@ -50,7 +51,7 @@ export default function Participantes() {
     // Traer certificados y asignaciones para contar cursos por participante
     const [{ data: certs }, { data: asigs }] = await Promise.all([
       supabase.from('certificados').select('participante_id, nombre_curso'),
-      supabase.from('asignaciones').select('empleado_id, curso_nombre, microcurso_titulo')
+      supabase.from('asignaciones').select('empleado_id, curso_nombre, microcurso_titulo, estado, fecha_programada')
     ])
 
     const mapa = {}
@@ -62,7 +63,13 @@ export default function Participantes() {
     ;(asigs || []).forEach(a => {
       if (!a.empleado_id) return
       if (!mapa[a.empleado_id]) mapa[a.empleado_id] = { tomados: [], asignados: [] }
-      mapa[a.empleado_id].asignados.push(a.curso_nombre || a.microcurso_titulo)
+      const nombre = a.curso_nombre || a.microcurso_titulo
+      // Si ya está en tomados, no duplicar; si está completado, va a tomados
+      if (a.estado === 'completado') {
+        if (!mapa[a.empleado_id].tomados.includes(nombre)) mapa[a.empleado_id].tomados.push(nombre)
+      } else {
+        mapa[a.empleado_id].asignados.push({ nombre, fecha: a.fecha_programada })
+      }
     })
     setCursosPorParticipante(mapa)
     setLoading(false)
@@ -143,7 +150,7 @@ export default function Participantes() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['ID', 'Nombre', 'Empresa', 'Cursos', 'Tipo', ''].map(h => (
+              {['ID', 'Nombre', 'Empresa', 'Estatus', 'Tipo', ''].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5, fontWeight: 600 }}>{h}</th>
               ))}
             </tr>
@@ -169,11 +176,13 @@ export default function Participantes() {
                     {p.empresa?.nombre || p.empresa_manual || (p.es_universitario ? p.universidad : '—')}
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    {totalCursos === 0 ? <span style={{ color: '#cbd5e1', fontSize: 12 }}>—</span> : (
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {cursos.tomados.length > 0 && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>✓ {cursos.tomados.length} tomado{cursos.tomados.length > 1 ? 's' : ''}</span>}
-                        {cursos.asignados.length > 0 && <span style={{ background: '#fef9c3', color: '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{cursos.asignados.length} asignado{cursos.asignados.length > 1 ? 's' : ''}</span>}
-                      </div>
+                    {totalCursos === 0 ? (
+                      <span style={{ color: '#cbd5e1', fontSize: 12 }}>Ninguno</span>
+                    ) : (
+                      <button onClick={() => setModalEstatus({ participante: p, cursos })}
+                        style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        {cursos.tomados.length} tomado{cursos.tomados.length !== 1 ? 's' : ''} · {cursos.asignados.length} por tomar
+                      </button>
                     )}
                   </td>
                   <td style={{ padding: '11px 16px' }}>
@@ -194,6 +203,52 @@ export default function Participantes() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal estatus de cursos */}
+      {modalEstatus && (
+        <div style={overlayStyle} onClick={() => setModalEstatus(null)}>
+          <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{modalEstatus.participante.nombre}</h3>
+                {modalEstatus.participante.id_empleado && <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{modalEstatus.participante.id_empleado}</code>}
+              </div>
+              <button onClick={() => setModalEstatus(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: '#059669', marginBottom: 8 }}>✓ Cursos tomados ({modalEstatus.cursos.tomados.length})</h4>
+              {modalEstatus.cursos.tomados.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 13 }}>Ninguno</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {modalEstatus.cursos.tomados.map((c, i) => (
+                    <div key={i} style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', color: '#15803d', fontSize: 13 }}>{c}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4 style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>⏳ Cursos por tomar ({modalEstatus.cursos.asignados.length})</h4>
+              {modalEstatus.cursos.asignados.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 13 }}>Ninguno</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {modalEstatus.cursos.asignados.map((c, i) => (
+                    <div key={i} style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', color: '#92400e', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{typeof c === 'string' ? c : c.nombre}</span>
+                      {typeof c === 'object' && c.fecha && <span style={{ fontSize: 11 }}>📅 {new Date(c.fecha).toLocaleDateString('es-MX')}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setModalEstatus(null)} style={{ ...btnGhost, width: '100%', marginTop: 20 }}>Cerrar</button>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div style={overlayStyle} onClick={() => setModal(false)}>
