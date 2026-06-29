@@ -183,8 +183,15 @@ export default function CotizadorPublico() {
   async function guardarCotizacion() {
     setSaving(true)
     try {
-      const { count } = await supabase.from('cotizaciones').select('id', { count: 'exact', head: true })
-      const folio = `HCD-COT-${new Date().getFullYear()}-${String((count || 0) + 1).padStart(4, '0')}`
+      // Generar folio único buscando el número más alto existente (no por conteo)
+      const year = new Date().getFullYear()
+      const { data: foliosExist } = await supabase.from('cotizaciones').select('folio').like('folio', `HCD-COT-${year}-%`)
+      let maxNum = 0
+      ;(foliosExist || []).forEach(c => {
+        const m = (c.folio || '').match(/HCD-COT-\d+-(\d+)/)
+        if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+      })
+      const folio = `HCD-COT-${year}-${String(maxNum + 1).padStart(4, '0')}`
       const serv = servicios.find(s => s.id === config.servicio_id)
       const zona = viaticosZonas.find(z => z.id === config.zona_viaticos_id)
 
@@ -222,7 +229,16 @@ export default function CotizadorPublico() {
         empresa_registrada: !!empresaPortal,
         estado: 'enviada'
       }
-      const { data: cotCreada, error: errCot } = await supabase.from('cotizaciones').insert(payload).select('id').single()
+      let { data: cotCreada, error: errCot } = await supabase.from('cotizaciones').insert(payload).select('id').single()
+
+      // Si el folio chocó (otra cotización simultánea), reintentar con sufijo
+      if (errCot && (errCot.message || '').includes('duplicate')) {
+        payload.folio = `HCD-COT-${year}-${String(maxNum + 1).padStart(4, '0')}-${Math.random().toString(36).substring(2, 5).toUpperCase()}`
+        const reintento = await supabase.from('cotizaciones').insert(payload).select('id').single()
+        cotCreada = reintento.data
+        errCot = reintento.error
+      }
+
       if (errCot) {
         console.error('Error al guardar cotización:', errCot)
         alert('No se pudo guardar la cotización: ' + (errCot.message || 'error') + '\n\nVerifica que ejecutaste los SQL más recientes en Supabase.')
