@@ -1131,8 +1131,24 @@ function TabCotizaciones({ empresa }) {
 
   async function cancelar(cot) {
     if (!window.confirm('¿Cancelar esta cotización?')) return
-    await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
-    await cargar()
+    try {
+      const { error } = await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
+      if (error) { alert('No se pudo cancelar: ' + error.message); return }
+      await cargar()
+    } catch (e) {
+      alert('Error al cancelar: ' + (e.message || ''))
+    }
+  }
+
+  async function eliminarCotizacion(cot) {
+    if (!window.confirm('¿Eliminar esta cotización permanentemente? No se puede deshacer.')) return
+    try {
+      const { error } = await supabase.from('cotizaciones').delete().eq('id', cot.id)
+      if (error) { alert('No se pudo eliminar: ' + error.message); return }
+      await cargar()
+    } catch (e) {
+      alert('Error al eliminar: ' + (e.message || ''))
+    }
   }
 
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando cotizaciones...</div>
@@ -1177,34 +1193,34 @@ function TabCotizaciones({ empresa }) {
                     <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    {!aceptada && !cancelada && !vencida && (
-                      <>
-                        <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
-                          {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
-                          <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
-                            onChange={e => subirOC(cot, e.target.files[0])} />
-                        </label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" onClick={() => cancelar(cot)}
-                            style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
-                            Generar nueva
-                          </a>
-                          <button onClick={() => cancelar(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {vencida && !aceptada && !cancelada && (
-                      <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
-                        Volver a cotizar
-                      </a>
+                    {!aceptada && !cancelada && (
+                      <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                        {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
+                        <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
+                          onChange={e => subirOC(cot, e.target.files[0])} />
+                      </label>
                     )}
                     {cot.orden_compra_url && (
                       <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
                         📎 Ver OC
                       </a>
                     )}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {!aceptada && (
+                        <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank"
+                          style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
+                          Generar nueva
+                        </a>
+                      )}
+                      {!aceptada && !cancelada && (
+                        <button onClick={() => cancelar(cot)} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                          Cancelar
+                        </button>
+                      )}
+                      <button onClick={() => eliminarCotizacion(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                        🗑 Eliminar
+                      </button>
+                    </div>
                   </div>
                 </div>
 
