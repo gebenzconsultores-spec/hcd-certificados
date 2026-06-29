@@ -170,12 +170,23 @@ function BannerConvocatoria({ onIr }) {
   const [convocatoria, setConvocatoria] = useState(null)
 
   useEffect(() => {
-    // Traer la próxima convocatoria abierta (la más cercana)
-    supabase.from('proximos_cursos').select('*').eq('estado', 'abierto')
-      .gte('fecha', new Date().toISOString().split('T')[0])
-      .order('fecha', { ascending: true }).limit(1)
-      .then(({ data }) => { if (data && data[0]) setConvocatoria(data[0]) })
+    cargarConvocatoria()
   }, [])
+
+  async function cargarConvocatoria() {
+    try {
+      const hoy = new Date().toISOString().split('T')[0]
+      // Traer todas las convocatorias con fecha futura, ordenadas por fecha
+      const { data } = await supabase.from('proximos_cursos')
+        .select('*')
+        .gte('fecha', hoy)
+        .order('fecha', { ascending: true })
+      if (!data || data.length === 0) return
+      // Tomar la primera que esté abierta (o cualquiera si no hay estado)
+      const abierta = data.find(c => !c.estado || c.estado === 'abierto') || data[0]
+      setConvocatoria(abierta)
+    } catch (_) {}
+  }
 
   if (!convocatoria) return null
 
