@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getCertificados, crearCertificado, getCursos, getEmpresas, getParticipantes, siguienteConsecutivo } from '../lib/supabase'
+import { supabase, getCertificados, crearCertificado, getCursos, getEmpresas, getParticipantes, siguienteConsecutivo } from '../lib/supabase'
 import { generarYAbrirCertificado } from '../lib/certificado'
 
 export default function Certificados() {
@@ -29,16 +29,6 @@ export default function Certificados() {
     setCertificados(data)
   }
 
-  async function eliminar(cert) {
-    if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE el certificado ${cert.id_unico}?\n\nEsta acción no se puede deshacer.`)) return
-    try {
-      await supabase.from('certificados').delete().eq('id', cert.id)
-      await cargar()
-    } catch (e) {
-      alert('No se pudo eliminar: ' + (e.message || 'error'))
-    }
-  }
-
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
   // Al seleccionar modalidad, pre-llenar lugar
@@ -56,16 +46,17 @@ export default function Certificados() {
   }
 
   async function emitir() {
-    if (!form.participante_id || !form.curso_id || !form.lugar) return
+    if (!form.participante_id || !form.curso_id || !form.lugar) { alert('Completa participante, curso y lugar'); return }
     setSaving(true)
     try {
       const consec = await siguienteConsecutivo()
       const curso = cursos.find(c => c.id === form.curso_id)
       const participante = participantes.find(p => p.id === form.participante_id)
-      const empresa = empresas.find(e => e.id === form.empresa_id)
-      const id_unico = `HCD-${curso.numero_curso}-${consec}`
+      // Número del curso: usa numero_certificado (499+) si existe, si no numero_curso
+      const numCurso = curso.numero_certificado || curso.numero_curso || consec
+      const id_unico = `HCD-${numCurso}-${consec}`
 
-      const cert = await crearCertificado({
+      const { data: cert, error } = await supabase.from('certificados').insert({
         id_unico,
         participante_id: form.participante_id,
         curso_id: form.curso_id,
@@ -79,12 +70,32 @@ export default function Certificados() {
         instructor_rfc: form.instructor_rfc,
         director_nombre: form.director_nombre,
         fecha_emision: new Date().toISOString(),
-      })
+      }).select().single()
 
-      await generarYAbrirCertificado(cert)
+      if (error) {
+        alert('No se pudo emitir el certificado: ' + error.message)
+        setSaving(false)
+        return
+      }
+
+      try { await generarYAbrirCertificado(cert) } catch (e) { alert('El certificado se guardó, pero hubo un problema al generar el PDF: ' + (e.message || '')) }
       await cargar()
       setModal(false)
+      setForm({ participante_id: '', curso_id: '', empresa_id: '', lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz', instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado', modalidad: 'presencial' })
+    } catch (e) {
+      alert('Error al emitir: ' + (e.message || ''))
     } finally { setSaving(false) }
+  }
+
+  async function eliminarCertificado(cert) {
+    if (!window.confirm(`¿Eliminar el certificado de ${cert.nombre_participante} (${cert.id_unico})? No se puede deshacer.`)) return
+    try {
+      const { error } = await supabase.from('certificados').delete().eq('id', cert.id)
+      if (error) { alert('No se pudo eliminar: ' + error.message); return }
+      await cargar()
+    } catch (e) {
+      alert('Error al eliminar: ' + (e.message || ''))
+    }
   }
 
   const filtrados = certificados.filter(c =>
@@ -136,8 +147,12 @@ export default function Certificados() {
                 </td>
                 <td style={{ padding: '11px 18px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>🖨️ PDF</button>
-                    <button onClick={() => eliminar(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
+                    <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>
+                      🖨️ PDF
+                    </button>
+                    <button onClick={() => eliminarCertificado(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>
+                      🗑
+                    </button>
                   </div>
                 </td>
               </tr>
