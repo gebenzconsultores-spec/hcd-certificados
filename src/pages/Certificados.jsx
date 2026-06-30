@@ -19,10 +19,22 @@ export default function Certificados() {
 
   useEffect(() => {
     cargar()
-    getCursos().then(setCursos)
-    getEmpresas().then(setEmpresas)
-    getParticipantes().then(setParticipantes)
+    getCursos().then(setCursos).catch(() => setCursos([]))
+    getEmpresas().then(setEmpresas).catch(() => setEmpresas([]))
+    cargarParticipantes()
   }, [])
+
+  async function cargarParticipantes() {
+    // Cargar TODOS sin join (el join puede fallar y dejar la lista vacía)
+    try {
+      const { data } = await supabase.from('participantes')
+        .select('id, nombre, correo, id_empleado, empresa_id, registrado_por_empresa, tipo')
+        .order('nombre', { ascending: true })
+      setParticipantes(data || [])
+    } catch (_) {
+      setParticipantes([])
+    }
+  }
 
   async function cargar() {
     const data = await getCertificados()
@@ -168,10 +180,14 @@ export default function Certificados() {
             <h3 style={modalTitle}>Emitir certificado</h3>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Participante *</label>
+              <label style={labelStyle}>Participante * <span style={{ color: '#94a3b8', fontWeight: 400 }}>({participantes.length} registrados)</span></label>
               <select value={form.participante_id} onChange={e => f('participante_id')(e.target.value)} style={inputStyle}>
                 <option value="">— Selecciona participante —</option>
-                {participantes.map(p => <option key={p.id} value={p.id}>{p.nombre} — {p.correo}</option>)}
+                {participantes.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}{p.id_empleado ? ` (${p.id_empleado})` : ''}{p.correo ? ` — ${p.correo}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
 
