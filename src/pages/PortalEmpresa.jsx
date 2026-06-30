@@ -167,31 +167,41 @@ export function EmpresaDashboard() {
 
 // ─── TAB RESUMEN ──────────────────────────────────────────────
 function BannerConvocatoria({ onIr }) {
-  const [convocatoria, setConvocatoria] = useState(null)
+  const [convocatorias, setConvocatorias] = useState([])
+  const [idx, setIdx] = useState(0)
 
   useEffect(() => {
-    cargarConvocatoria()
+    cargarConvocatorias()
   }, [])
 
-  async function cargarConvocatoria() {
+  useEffect(() => {
+    if (convocatorias.length <= 1) return
+    const t = setInterval(() => setIdx(i => (i + 1) % convocatorias.length), 5000)
+    return () => clearInterval(t)
+  }, [convocatorias])
+
+  async function cargarConvocatorias() {
     try {
       const hoy = new Date().toISOString().split('T')[0]
-      // Traer todas las convocatorias con fecha futura, ordenadas por fecha
       const { data } = await supabase.from('proximos_cursos')
         .select('*')
         .gte('fecha', hoy)
         .order('fecha', { ascending: true })
       if (!data || data.length === 0) return
-      // Tomar la primera que esté abierta (o cualquiera si no hay estado)
-      const abierta = data.find(c => !c.estado || c.estado === 'abierto') || data[0]
-      setConvocatoria(abierta)
+      // Solo las dirigidas a EMPRESA (mostrar_en = 'empresa' o 'ambos', o sin definir = ambos)
+      const visibles = data.filter(c =>
+        (!c.estado || c.estado === 'abierto') &&
+        (!c.mostrar_en || c.mostrar_en === 'empresa' || c.mostrar_en === 'ambos')
+      )
+      setConvocatorias(visibles)
     } catch (_) {}
   }
 
-  if (!convocatoria) return null
+  if (convocatorias.length === 0) return null
+  const convocatoria = convocatorias[idx]
 
   return (
-    <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '20px 26px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+    <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#a52222)', borderRadius: 14, padding: '20px 26px', marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16, position: 'relative' }}>
       <div style={{ flex: 1, minWidth: 280 }}>
         <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>📣 Convocatoria HCD</div>
         <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 4 }}>
@@ -208,6 +218,14 @@ function BannerConvocatoria({ onIr }) {
       <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
         Inscribir empleados →
       </button>
+      {/* Indicadores del carrusel */}
+      {convocatorias.length > 1 && (
+        <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
+          {convocatorias.map((_, i) => (
+            <div key={i} onClick={() => setIdx(i)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 3, background: i === idx ? '#fff' : 'rgba(255,255,255,.4)', cursor: 'pointer', transition: 'all .3s' }} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

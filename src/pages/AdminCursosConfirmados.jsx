@@ -35,7 +35,20 @@ export default function AdminCursosConfirmados() {
   async function cargar() {
     setLoading(true)
     const { data } = await supabase.from('cursos_confirmados').select('*').order('fecha_inicio', { ascending: true })
-    setConfirmados(data || [])
+    const cursos = data || []
+    // Calcular el número REAL de asistentes de cada curso (asignaciones vivas)
+    const { data: todasAsigs } = await supabase.from('asignaciones').select('id_compra, curso_nombre, fecha_programada')
+    const asigs = todasAsigs || []
+    const conConteo = cursos.map(c => {
+      let real
+      if (c.id_compra) {
+        real = asigs.filter(a => a.id_compra === c.id_compra).length
+      } else {
+        real = asigs.filter(a => a.curso_nombre === c.curso_nombre && a.fecha_programada === c.fecha_inicio).length
+      }
+      return { ...c, num_participantes: real }
+    })
+    setConfirmados(conConteo)
     setLoading(false)
   }
 

@@ -12,7 +12,7 @@ export default function AdminProximosCursos() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00',
-    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: ''
+    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos'
   })
   const [saving, setSaving] = useState(false)
 
@@ -47,7 +47,7 @@ export default function AdminProximosCursos() {
   }
 
   function abrirNuevo() {
-    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '' })
+    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos' })
     setModal(true)
   }
 
@@ -83,6 +83,7 @@ export default function AdminProximosCursos() {
         tipo_costo: form.tipo_costo,
         precio: form.tipo_costo === 'con_costo' ? Number(form.precio) : 0,
         codigo_promo: form.codigo_promo || null,
+        mostrar_en: form.mostrar_en,
         cupo_maximo: Number(form.cupo_maximo),
         cupo_ocupado: 0,
         link_zoom: form.link_zoom,
@@ -283,6 +284,17 @@ export default function AdminProximosCursos() {
 
             <label style={lbl}>Link de Zoom (opcional)</label>
             <input value={form.link_zoom} onChange={e => f('link_zoom')(e.target.value)} placeholder="https://zoom.us/j/..." style={inp} />
+
+            <label style={lbl}>¿Dónde se muestra el cintillo?</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+              {[['ambos', '🏢👤 Ambos'], ['empresa', '🏢 Empresas'], ['estudiante', '👤 Estudiantes']].map(([v, l]) => (
+                <button key={v} type="button" onClick={() => f('mostrar_en')(v)}
+                  style={{ flex: 1, padding: '10px', border: `2px solid ${form.mostrar_en === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: form.mostrar_en === v ? '#f9f0f0' : '#fff', color: form.mostrar_en === v ? '#8B1A1A' : '#475569', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8 }}>Elige en qué portal aparece la invitación de este curso.</p>
 
             <label style={lbl}>Código promocional (opcional, ej. 2x1)</label>
             <input value={form.codigo_promo} onChange={e => f('codigo_promo')(e.target.value.toUpperCase())} placeholder="ej. 2X1JULIO o PROMO50" style={inp} />
