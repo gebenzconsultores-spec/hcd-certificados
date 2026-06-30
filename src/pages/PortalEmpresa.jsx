@@ -69,7 +69,7 @@ export function EmpresaDashboard() {
   const TABS = [
     { id: 'resumen', label: '📊 Resumen' },
     { id: 'empleados', label: '👥 Empleados' },
-    { id: 'cursos', label: '🎓 Cursos y microcredenciales' },
+    { id: 'cursos', label: '📚 Catálogo de cursos' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
     { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
@@ -581,58 +581,110 @@ function TabEmpleados({ empresa, empleados, recargar }) {
 
 // ─── TAB CURSOS Y MICROCREDENCIALES ───────────────────────────
 function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
-  const [modalAsignar, setModalAsignar] = useState(null) // {item, tipo}
+  const [modalAsignar, setModalAsignar] = useState(null)
   const [modalCompra, setModalCompra] = useState(null)
+  const [vista, setVista] = useState('cursos') // 'cursos' o 'microcredenciales'
+  const [familiaAbierta, setFamiliaAbierta] = useState('todas')
+
+  const COLOR_FAMILIA = {
+    'Sistemas de Gestión': '#1d4ed8',
+    'Herramientas Automotrices': '#8B1A1A',
+    'Lean Six Sigma': '#059669',
+    'Estadística y Software': '#7c3aed',
+  }
+
+  // Agrupar cursos por familia
+  const familias = [...new Set(cursos.map(c => c.familia?.nombre).filter(Boolean))]
+  const cursosFiltrados = familiaAbierta === 'todas' ? cursos : cursos.filter(c => c.familia?.nombre === familiaAbierta)
 
   return (
     <div>
-      {/* MICROCREDENCIALES */}
-      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>⚡ Microcredenciales</h3>
-      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Cápsulas de 20 min que tus empleados toman desde su teléfono</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14, marginBottom: 32 }}>
-        {microcursos.map(mc => (
-          <div key={mc.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-              {mc.es_gratuito && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>🎁 Gratis</span>}
-              <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{mc.duracion_min} min</span>
-            </div>
-            <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{mc.titulo}</h4>
-            {mc.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>{mc.descripcion}</p>}
-            <button onClick={() => setModalAsignar({ item: mc, tipo: 'microcurso' })}
-              style={{ ...btnPrimary, width: '100%', padding: '8px' }}>Asignar a empleados</button>
-          </div>
-        ))}
+      {/* Sub-pestañas */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setVista('cursos')} style={{ background: vista === 'cursos' ? '#8B1A1A' : '#f1f5f9', color: vista === 'cursos' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📚 Cursos</button>
+        <button onClick={() => setVista('microcredenciales')} style={{ background: vista === 'microcredenciales' ? '#8B1A1A' : '#f1f5f9', color: vista === 'microcredenciales' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>⚡ Microcredenciales</button>
       </div>
 
-      {/* CURSOS */}
-      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>🎓 Cursos</h3>
-      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Capacitaciones formales con certificado</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 14 }}>
-        {cursos.map(c => (
-          <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>#{c.numero_curso}</span>
-              <span style={{ color: '#64748b', fontSize: 11 }}>{c.duracion} hrs</span>
-            </div>
-            <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h4>
-            {c.temario && (
-              <details style={{ marginBottom: 12 }}>
-                <summary style={{ color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Ver temario</summary>
-                <p style={{ color: '#64748b', fontSize: 12, marginTop: 6, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.temario}</p>
-              </details>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <a href={`/cotizar?curso=${c.id}&empresa=${empresa.id}`} target="_blank"
-                style={{ ...btnPrimary, width: '100%', padding: '9px', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
-                💰 Cotizar este curso
-              </a>
-              <button onClick={() => setModalCompra(c)} style={{ ...btnSecondary, width: '100%', padding: '8px', fontSize: 12 }}>
-                Ya pagué — Asignar con ID de compra
-              </button>
-            </div>
+      {vista === 'cursos' ? (
+        <>
+          {/* Pestañas de familias */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <button onClick={() => setFamiliaAbierta('todas')}
+              style={{ background: familiaAbierta === 'todas' ? '#1e293b' : '#fff', color: familiaAbierta === 'todas' ? '#fff' : '#475569', border: '2px solid #1e293b', borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              Todas ({cursos.length})
+            </button>
+            {familias.map(fam => {
+              const count = cursos.filter(c => c.familia?.nombre === fam).length
+              const color = COLOR_FAMILIA[fam] || '#64748b'
+              const activa = familiaAbierta === fam
+              return (
+                <button key={fam} onClick={() => setFamiliaAbierta(fam)}
+                  style={{ background: activa ? color : '#fff', color: activa ? '#fff' : color, border: `2px solid ${color}`, borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  {fam} ({count})
+                </button>
+              )
+            })}
           </div>
-        ))}
-      </div>
+
+          {/* Cursos de la familia */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 14 }}>
+            {cursosFiltrados.length === 0 ? (
+              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta familia.</div>
+            ) : (
+              cursosFiltrados.map(c => {
+                const color = COLOR_FAMILIA[c.familia?.nombre] || '#8B1A1A'
+                return (
+                  <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
+                      {c.familia?.nombre && <span style={{ background: `${color}15`, color, padding: '2px 10px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{c.familia.nombre}</span>}
+                      <span style={{ color: '#64748b', fontSize: 11 }}>{c.duracion} hrs</span>
+                    </div>
+                    <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h4>
+                    {c.temario && (
+                      <details style={{ marginBottom: 12 }}>
+                        <summary style={{ color: '#1d4ed8', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>Ver temario</summary>
+                        <p style={{ color: '#64748b', fontSize: 12, marginTop: 6, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.temario}</p>
+                      </details>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <a href={`/cotizar?curso=${c.id}&empresa=${empresa.id}`} target="_blank"
+                        style={{ ...btnPrimary, width: '100%', padding: '9px', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+                        💰 Cotizar este curso
+                      </a>
+                      <button onClick={() => setModalCompra(c)} style={{ ...btnSecondary, width: '100%', padding: '8px', fontSize: 12 }}>
+                        Ya pagué — Asignar con ID de compra
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </>
+      ) : (
+        /* MICROCREDENCIALES */
+        <>
+          <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Cápsulas de 20 min que tus empleados toman desde su teléfono</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
+            {microcursos.length === 0 ? (
+              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay microcredenciales disponibles.</div>
+            ) : (
+              microcursos.map(mc => (
+                <div key={mc.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {mc.es_gratuito && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>🎁 Gratis</span>}
+                    <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{mc.duracion_min} min</span>
+                  </div>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{mc.titulo}</h4>
+                  {mc.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12 }}>{mc.descripcion}</p>}
+                  <button onClick={() => setModalAsignar({ item: mc, tipo: 'microcurso' })}
+                    style={{ ...btnPrimary, width: '100%', padding: '8px' }}>Asignar a empleados</button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
 
       {/* Modales */}
       {modalAsignar && <ModalAsignar empresa={empresa} item={modalAsignar.item} tipo={modalAsignar.tipo} empleados={empleados} onClose={() => setModalAsignar(null)} onDone={() => { setModalAsignar(null); recargar() }} />}
@@ -1137,17 +1189,22 @@ function TabCotizaciones({ empresa }) {
     if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
     setSubiendo(cot.id)
     try {
-      // 1. Subir el PDF
+      // 1. Subir el PDF a Storage
       const nombreArchivo = `${cot.folio}_${Date.now()}.pdf`
       const { error: upErr } = await supabase.storage.from('ordenes-compra').upload(nombreArchivo, file, { upsert: true })
-      if (upErr) throw upErr
+      if (upErr) {
+        alert('No se pudo subir el PDF. Falta crear el bucket "ordenes-compra" en Supabase Storage.\n\nDetalle: ' + (upErr.message || ''))
+        setSubiendo(null)
+        return
+      }
       const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
 
-      // 2. Generar ID de compra automático (con el # de empleados cotizados)
+      // 2. Generar ID de compra automático
       const idCompra = await generarIdCompra()
       const numPersonas = cot.num_personas || 1
 
-      await supabase.from('compras').insert({
+      // 3. Insertar la compra
+      const { error: errCompra } = await supabase.from('compras').insert({
         id_compra: idCompra,
         empresa_id: empresa.id,
         empresa_nombre: empresa.nombre,
@@ -1160,15 +1217,25 @@ function TabCotizaciones({ empresa }) {
         fecha_curso: cot.fecha_deseada || null,
         tipo_comprador: 'empresa'
       })
+      if (errCompra) {
+        alert('El PDF se subió, pero falló al registrar la compra: ' + (errCompra.message || '') + '\n\nVerifica que ejecutaste el SQL del flujo comercial.')
+        setSubiendo(null)
+        return
+      }
 
-      // 3. Actualizar la cotización: ACEPTADA POR EL CLIENTE + ID generado
-      await supabase.from('cotizaciones').update({
+      // 4. Actualizar la cotización: ACEPTADA POR EL CLIENTE + ID generado
+      const { error: errCot } = await supabase.from('cotizaciones').update({
         orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name,
         estado: 'aceptada_cliente', id_compra_generado: idCompra
       }).eq('id', cot.id)
+      if (errCot) {
+        alert('Hubo un problema al actualizar la cotización: ' + (errCot.message || ''))
+        setSubiendo(null)
+        return
+      }
 
-      // 4. Registrar como VENTA (estatus de cobro: enviar factura)
-      await supabase.from('ventas').insert({
+      // 5. Registrar como VENTA (no bloquea si falla, pero avisa)
+      const { error: errVenta } = await supabase.from('ventas').insert({
         empresa_id: empresa.id,
         empresa_nombre: empresa.nombre,
         curso_nombre: cot.curso_nombre,
@@ -1181,8 +1248,12 @@ function TabCotizaciones({ empresa }) {
         fecha_curso: cot.fecha_deseada || null,
         estatus_cobro: 'enviar_factura'
       })
+      if (errVenta) {
+        console.error('Error al registrar venta:', errVenta)
+        // No bloqueamos: la OC ya quedó y la cotización aceptada
+      }
 
-      // 5. Notificar al admin
+      // 6. Notificar al admin
       try {
         await supabase.from('notificaciones').insert({
           tipo: 'orden_compra', titulo: 'Orden de compra recibida',
@@ -1191,16 +1262,33 @@ function TabCotizaciones({ empresa }) {
         })
       } catch (_) {}
 
+      alert('✅ Orden de compra recibida. Tu ID de compra es: ' + idCompra)
       await cargar()
     } catch (e) {
-      alert('Error al subir: ' + (e.message || 'verifica el bucket en Supabase'))
+      alert('Error inesperado: ' + (e.message || 'intenta de nuevo'))
     } finally { setSubiendo(null) }
   }
 
   async function cancelar(cot) {
     if (!window.confirm('¿Cancelar esta cotización?')) return
-    await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
-    await cargar()
+    try {
+      const { error } = await supabase.from('cotizaciones').update({ estado: 'cancelada' }).eq('id', cot.id)
+      if (error) { alert('No se pudo cancelar: ' + error.message); return }
+      await cargar()
+    } catch (e) {
+      alert('Error al cancelar: ' + (e.message || ''))
+    }
+  }
+
+  async function eliminarCotizacion(cot) {
+    if (!window.confirm('¿Eliminar esta cotización permanentemente? No se puede deshacer.')) return
+    try {
+      const { error } = await supabase.from('cotizaciones').delete().eq('id', cot.id)
+      if (error) { alert('No se pudo eliminar: ' + error.message); return }
+      await cargar()
+    } catch (e) {
+      alert('Error al eliminar: ' + (e.message || ''))
+    }
   }
 
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando cotizaciones...</div>
@@ -1245,34 +1333,34 @@ function TabCotizaciones({ empresa }) {
                     <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    {!aceptada && !cancelada && !vencida && (
-                      <>
-                        <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
-                          {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
-                          <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
-                            onChange={e => subirOC(cot, e.target.files[0])} />
-                        </label>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" onClick={() => cancelar(cot)}
-                            style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
-                            Generar nueva
-                          </a>
-                          <button onClick={() => cancelar(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {vencida && !aceptada && !cancelada && (
-                      <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank" style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
-                        Volver a cotizar
-                      </a>
+                    {!aceptada && !cancelada && (
+                      <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
+                        {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
+                        <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
+                          onChange={e => subirOC(cot, e.target.files[0])} />
+                      </label>
                     )}
                     {cot.orden_compra_url && (
                       <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
                         📎 Ver OC
                       </a>
                     )}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      {!aceptada && (
+                        <a href={`/cotizar?curso=${cot.curso_id}&empresa=${empresa.id}`} target="_blank"
+                          style={{ background: '#f1f5f9', color: '#475569', padding: '6px 12px', borderRadius: 8, fontSize: 11, textDecoration: 'none', border: '1px solid #e2e8f0' }}>
+                          Generar nueva
+                        </a>
+                      )}
+                      {!aceptada && !cancelada && (
+                        <button onClick={() => cancelar(cot)} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                          Cancelar
+                        </button>
+                      )}
+                      <button onClick={() => eliminarCotizacion(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer' }}>
+                        🗑 Eliminar
+                      </button>
+                    </div>
                   </div>
                 </div>
 
