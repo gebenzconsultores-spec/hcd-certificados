@@ -248,6 +248,7 @@ function TabEmpleados({ empresa, empleados, recargar }) {
   const [modal, setModal] = useState(false)
   const [cursosPorEmpleado, setCursosPorEmpleado] = useState({})
   const [modalEstatus, setModalEstatus] = useState(null)
+  const [modalEditar, setModalEditar] = useState(null)
 
   useEffect(() => {
     cargarCursos()
@@ -323,6 +324,20 @@ function TabEmpleados({ empresa, empleados, recargar }) {
       await recargar()
     } catch (e) {
       alert('No se pudo eliminar: ' + (e.message || 'error'))
+    }
+  }
+
+  async function guardarEdicionEmpleado(datos) {
+    try {
+      const { error } = await supabase.from('participantes').update({
+        nombre: datos.nombre, correo: datos.correo, whatsapp: datos.whatsapp, puesto: datos.puesto
+      }).eq('id', datos.id)
+      if (error) { alert('No se pudo guardar: ' + error.message); return false }
+      await recargar()
+      return true
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+      return false
     }
   }
 
@@ -447,7 +462,10 @@ function TabEmpleados({ empresa, empleados, recargar }) {
                     </button>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    <button onClick={() => eliminarEmpleado(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => setModalEditar({ ...e })} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>✏️ Editar</button>
+                      <button onClick={() => eliminarEmpleado(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -458,6 +476,9 @@ function TabEmpleados({ empresa, empleados, recargar }) {
 
       {/* Modal importar CSV */}
       {/* Modal de estatus de cursos del empleado */}
+      {modalEditar && (
+        <ModalEditarEmpleado empleado={modalEditar} onGuardar={guardarEdicionEmpleado} onClose={() => setModalEditar(null)} />
+      )}
       {modalEstatus && (
         <div style={overlay} onClick={() => setModalEstatus(null)}>
           <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
@@ -575,6 +596,55 @@ function TabEmpleados({ empresa, empleados, recargar }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Modal: editar datos de empleado (portal empresa) ─────────
+function ModalEditarEmpleado({ empleado, onGuardar, onClose }) {
+  const [datos, setDatos] = useState({
+    id: empleado.id,
+    nombre: empleado.nombre || '',
+    correo: empleado.correo || '',
+    whatsapp: empleado.whatsapp || '',
+    puesto: empleado.puesto || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const d = k => v => setDatos(p => ({ ...p, [k]: v }))
+
+  async function guardar() {
+    if (!datos.nombre) { alert('El nombre es obligatorio'); return }
+    setSaving(true)
+    const ok = await onGuardar(datos)
+    setSaving(false)
+    if (ok) onClose()
+  }
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Editar empleado</h3>
+        <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>
+          <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4 }}>{empleado.id_empleado}</code> · Corrige sus datos de contacto.
+        </p>
+
+        <label style={lbl}>Nombre completo *</label>
+        <input value={datos.nombre} onChange={e => d('nombre')(e.target.value)} style={inp} />
+
+        <label style={{ ...lbl, marginTop: 12 }}>Correo</label>
+        <input value={datos.correo} onChange={e => d('correo')(e.target.value)} placeholder="correo@ejemplo.com" style={inp} />
+
+        <label style={{ ...lbl, marginTop: 12 }}>WhatsApp</label>
+        <input value={datos.whatsapp} onChange={e => d('whatsapp')(e.target.value)} placeholder="2221234567" style={inp} />
+
+        <label style={{ ...lbl, marginTop: 12 }}>Puesto</label>
+        <input value={datos.puesto} onChange={e => d('puesto')(e.target.value)} style={inp} />
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
+        </div>
+      </div>
     </div>
   )
 }

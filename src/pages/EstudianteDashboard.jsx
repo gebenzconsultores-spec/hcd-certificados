@@ -14,6 +14,7 @@ export default function EstudianteDashboard() {
   const [asignaciones, setAsignaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('asignados')
+  const [modalDatos, setModalDatos] = useState(false)
 
   useEffect(() => {
     const data = sessionStorage.getItem('estudiante_portal')
@@ -83,9 +84,14 @@ export default function EstudianteDashboard() {
               <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{estudiante.id_empleado}</code>
             )}
           </div>
-          <button onClick={salir} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
-            Cerrar sesión
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setModalDatos(true)} style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#1d4ed8', cursor: 'pointer', fontWeight: 600 }}>
+              ✏️ Mis datos
+            </button>
+            <button onClick={salir} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </div>
 
@@ -302,9 +308,71 @@ export default function EstudianteDashboard() {
           <ProximosEstudiante estudiante={estudiante} />
         )}
       </div>
+
+      {modalDatos && (
+        <ModalMisDatos estudiante={estudiante} onClose={() => setModalDatos(false)} onActualizado={(nuevos) => setEstudiante(e => ({ ...e, ...nuevos }))} />
+      )}
     </div>
   )
 }
+
+// ─── Modal: el estudiante edita sus propios datos ─────────────
+function ModalMisDatos({ estudiante, onClose, onActualizado }) {
+  const [datos, setDatos] = useState({
+    nombre: estudiante.nombre || '',
+    correo: estudiante.correo || '',
+    whatsapp: estudiante.whatsapp || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const d = k => v => setDatos(p => ({ ...p, [k]: v }))
+
+  async function guardar() {
+    if (!datos.nombre) { alert('El nombre es obligatorio'); return }
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('participantes').update({
+        nombre: datos.nombre, correo: datos.correo, whatsapp: datos.whatsapp
+      }).eq('id', estudiante.id)
+      if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
+      // Actualizar la sesión guardada
+      try {
+        const sesion = JSON.parse(sessionStorage.getItem('estudiante_portal') || '{}')
+        sessionStorage.setItem('estudiante_portal', JSON.stringify({ ...sesion, ...datos }))
+      } catch (_) {}
+      onActualizado(datos)
+      alert('✅ Tus datos se actualizaron correctamente.')
+      onClose()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Mis datos</h3>
+        <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>Corrige tu información de contacto.</p>
+
+        <label style={estLbl}>Nombre completo *</label>
+        <input value={datos.nombre} onChange={e => d('nombre')(e.target.value)} style={estInp} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>Correo</label>
+        <input value={datos.correo} onChange={e => d('correo')(e.target.value)} placeholder="correo@ejemplo.com" style={estInp} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>WhatsApp</label>
+        <input value={datos.whatsapp} onChange={e => d('whatsapp')(e.target.value)} placeholder="2221234567" style={estInp} />
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Guardar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const estLbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }
+const estInp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 
 // ─── Cursos asignados (empleado de empresa) ───────────────────
 function CursosAsignados({ estudiante, certificados }) {
@@ -341,24 +409,41 @@ function CursosAsignados({ estudiante, certificados }) {
 
 // ─── Mis cursos (individual: solo los desbloqueados) ──────────
 function MisCursosIndividual({ estudiante, certificados }) {
-  const [compras, setCompras] = useState([])
+  const [cursos, setCursos] = useState([])
   useEffect(() => {
-    supabase.from('compras').select('*').eq('participante_id', estudiante.id).eq('estado', 'usado').then(({ data }) => setCompras(data || []))
+    cargarCursos()
   }, [])
 
-  if (compras.length === 0) {
-    return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no tienes cursos activos. Activa uno con tu ID de compra en la pestaña "Activar curso pagado".</div>
+  async function cargarCursos() {
+    // Combinar: cursos comprados (con ID) + cursos asignados (convocatorias, manual)
+    const [{ data: compras }, { data: asigs }] = await Promise.all([
+      supabase.from('compras').select('*').eq('participante_id', estudiante.id).eq('estado', 'usado'),
+      supabase.from('asignaciones').select('*').eq('empleado_id', estudiante.id)
+    ])
+    const lista = []
+    ;(compras || []).forEach(c => lista.push({ id: 'c' + c.id, curso_id: c.curso_id, curso_nombre: c.curso_nombre, fecha: c.fecha_curso }))
+    ;(asigs || []).forEach(a => {
+      // Evitar duplicar si ya está por compra
+      if (!lista.find(x => x.curso_nombre === (a.curso_nombre || a.microcurso_titulo))) {
+        lista.push({ id: 'a' + a.id, curso_id: a.curso_id, curso_nombre: a.curso_nombre || a.microcurso_titulo, fecha: a.fecha_programada })
+      }
+    })
+    setCursos(lista)
+  }
+
+  if (cursos.length === 0) {
+    return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no tienes cursos activos. Activa uno con tu ID de compra o inscríbete a una convocatoria.</div>
   }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
-      {compras.map(c => {
+      {cursos.map(c => {
         const yaHecho = certificados.some(cert => cert.nombre_curso === c.curso_nombre)
         return (
           <div key={c.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
             {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{c.curso_nombre}</h3>
-            {c.fecha_curso && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(c.fecha_curso).toLocaleDateString('es-MX')}</p>}
+            {c.fecha && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(c.fecha).toLocaleDateString('es-MX')}</p>}
             {!yaHecho && c.curso_id && (
               <a href={`/examen/${c.curso_id}`} target="_blank"
                 style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
@@ -451,15 +536,10 @@ function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
 function BannerConvocatoriaEstudiante({ onIr }) {
   const [convocatoria, setConvocatoria] = useState(null)
   useEffect(() => {
-    (async () => {
-      try {
-        const hoy = new Date().toISOString().split('T')[0]
-        const { data } = await supabase.from('proximos_cursos').select('*').gte('fecha', hoy).order('fecha', { ascending: true })
-        if (!data || data.length === 0) return
-        const abierta = data.find(c => !c.estado || c.estado === 'abierto') || data[0]
-        setConvocatoria(abierta)
-      } catch (_) {}
-    })()
+    supabase.from('proximos_cursos').select('*').eq('estado', 'abierto')
+      .gte('fecha', new Date().toISOString().split('T')[0])
+      .order('fecha', { ascending: true }).limit(1)
+      .then(({ data }) => { if (data && data[0]) setConvocatoria(data[0]) })
   }, [])
   if (!convocatoria) return null
   return (

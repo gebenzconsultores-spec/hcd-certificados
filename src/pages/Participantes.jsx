@@ -17,6 +17,7 @@ export default function Participantes() {
   })
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [modalEditar, setModalEditar] = useState(null)
 
   useEffect(() => {
     cargar()
@@ -223,6 +224,7 @@ export default function Participantes() {
                   <td style={{ padding: '11px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => setModalAsignar(p)} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>➕ Asignar curso</button>
+                      <button onClick={() => setModalEditar({ ...p })} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>✏️ Editar</button>
                       <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
                     </div>
                   </td>
@@ -234,6 +236,15 @@ export default function Participantes() {
       </div>
 
       {/* Modal estatus de cursos */}
+      {modalEditar && (
+        <ModalEditarParticipante
+          participante={modalEditar}
+          empresas={empresas}
+          onClose={() => setModalEditar(null)}
+          onDone={() => { setModalEditar(null); cargar() }}
+        />
+      )}
+
       {modalAsignar && (
         <ModalAsignarCurso
           participante={modalAsignar}
@@ -512,6 +523,98 @@ function ModalAsignarCursoVIEJO({ participante, cursos, onClose, onDone }) {
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
           <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Asignando...' : 'Asignar curso'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: editar datos de un participante ───────────────────
+function ModalEditarParticipante({ participante, empresas, onClose, onDone }) {
+  const [datos, setDatos] = useState({
+    nombre: participante.nombre || '',
+    correo: participante.correo || '',
+    whatsapp: participante.whatsapp || '',
+    puesto: participante.puesto || '',
+    empresa_id: participante.empresa_id || participante.registrado_por_empresa || '',
+    empresa_manual: participante.empresa_manual || '',
+    universidad: participante.universidad || '',
+    carrera: participante.carrera || '',
+  })
+  const [saving, setSaving] = useState(false)
+  const esEmpresa = participante.tipo === 'empresa' || !!(participante.empresa_id || participante.registrado_por_empresa)
+
+  const d = k => v => setDatos(p => ({ ...p, [k]: v }))
+
+  async function guardar() {
+    if (!datos.nombre) { alert('El nombre es obligatorio'); return }
+    setSaving(true)
+    try {
+      const payload = {
+        nombre: datos.nombre,
+        correo: datos.correo,
+        whatsapp: datos.whatsapp,
+        puesto: datos.puesto,
+        universidad: datos.universidad || null,
+        carrera: datos.carrera || null,
+      }
+      // Permitir cambiar empresa (solo admin)
+      if (esEmpresa && datos.empresa_id) {
+        payload.empresa_id = datos.empresa_id
+        payload.registrado_por_empresa = datos.empresa_id
+      }
+      if (!esEmpresa) payload.empresa_manual = datos.empresa_manual || null
+
+      const { error } = await supabase.from('participantes').update(payload).eq('id', participante.id)
+      if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
+      alert('✅ Datos actualizados. El cambio se refleja en el portal de la empresa o del estudiante.')
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={{ ...modalStyle, maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Editar participante</h3>
+        <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>
+          {participante.id_empleado && <code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 4 }}>{participante.id_empleado}</code>}
+          {' '}· El ID y el tipo no se modifican.
+        </p>
+
+        <label style={labelStyle}>Nombre completo *</label>
+        <input value={datos.nombre} onChange={e => d('nombre')(e.target.value)} style={inputStyle} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Correo</label>
+        <input value={datos.correo} onChange={e => d('correo')(e.target.value)} placeholder="correo@ejemplo.com" style={inputStyle} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>WhatsApp</label>
+        <input value={datos.whatsapp} onChange={e => d('whatsapp')(e.target.value)} placeholder="2221234567" style={inputStyle} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Puesto</label>
+        <input value={datos.puesto} onChange={e => d('puesto')(e.target.value)} style={inputStyle} />
+
+        {esEmpresa ? (
+          <>
+            <label style={{ ...labelStyle, marginTop: 12 }}>Empresa</label>
+            <select value={datos.empresa_id} onChange={e => d('empresa_id')(e.target.value)} style={inputStyle}>
+              <option value="">— Sin empresa —</option>
+              {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+            </select>
+          </>
+        ) : (
+          <>
+            <label style={{ ...labelStyle, marginTop: 12 }}>Universidad (si aplica)</label>
+            <input value={datos.universidad} onChange={e => d('universidad')(e.target.value)} style={inputStyle} />
+            <label style={{ ...labelStyle, marginTop: 12 }}>Carrera (si aplica)</label>
+            <input value={datos.carrera} onChange={e => d('carrera')(e.target.value)} style={inputStyle} />
+          </>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
         </div>
       </div>
     </div>
