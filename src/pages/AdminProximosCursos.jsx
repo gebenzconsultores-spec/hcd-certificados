@@ -55,10 +55,22 @@ export default function AdminProximosCursos() {
     setForm(p => ({ ...p, tipo_costo: tipo, cupo_maximo: tipo === 'sin_costo' ? 10 : 20 }))
   }
 
+  // Genera el número de certificado: empieza en 499, siempre máximo + 1 (nunca se reutiliza)
+  async function generarNumeroCertificado() {
+    const { data } = await supabase.from('proximos_cursos').select('numero_certificado').not('numero_certificado', 'is', null)
+    let max = 498 // para que el primero sea 499
+    ;(data || []).forEach(c => {
+      if (c.numero_certificado && c.numero_certificado > max) max = c.numero_certificado
+    })
+    return max + 1
+  }
+
   async function guardar() {
     if (!form.curso_nombre || !form.fecha) return
     setSaving(true)
     try {
+      // Generar número de certificado consecutivo (empieza en 499, nunca se reutiliza)
+      const numeroCert = await generarNumeroCertificado()
       await supabase.from('proximos_cursos').insert({
         curso_id: form.curso_id || null,
         curso_nombre: form.curso_nombre,
@@ -66,6 +78,7 @@ export default function AdminProximosCursos() {
         fecha: form.fecha,
         hora: form.hora,
         modalidad: 'zoom',
+        numero_certificado: numeroCert,
         tipo_costo: form.tipo_costo,
         precio: form.tipo_costo === 'con_costo' ? Number(form.precio) : 0,
         codigo_promo: form.codigo_promo || null,
@@ -135,6 +148,9 @@ export default function AdminProximosCursos() {
                   <button onClick={() => eliminar(p.id)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  {p.numero_certificado && <span style={{ background: '#8B1A1A', color: '#fff', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800 }}>Curso N° {p.numero_certificado}</span>}
+                </div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{p.curso_nombre}</h3>
                 <div style={{ color: '#475569', fontSize: 13, marginBottom: 4 }}>📅 {fmtFecha(p.fecha)}</div>
                 <div style={{ color: '#475569', fontSize: 13, marginBottom: 12 }}>🕐 {p.hora} · 🎥 Zoom</div>
@@ -313,6 +329,7 @@ function ModalInscribirParticipantes({ convocatoria, participantes, onClose, onD
     try {
       const rows = seleccionados.map(pid => {
         const p = participantes.find(x => x.id === pid)
+        const esEmpresa = !!(p?.empresa_id || p?.registrado_por_empresa)
         return {
           proximo_curso_id: convocatoria.id,
           curso_nombre: convocatoria.curso_nombre,
@@ -321,11 +338,16 @@ function ModalInscribirParticipantes({ convocatoria, participantes, onClose, onD
           participante_nombre: p?.nombre,
           participante_correo: p?.correo,
           empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
-          origen: (p?.empresa_id || p?.registrado_por_empresa) ? 'empresa' : 'individual',
+          origen: esEmpresa ? 'empresa' : 'individual',
           estado: 'inscrito'
         }
       })
-      await supabase.from('inscripciones').insert(rows)
+      const { error: errIns } = await supabase.from('inscripciones').insert(rows)
+      if (errIns) {
+        alert('No se pudo inscribir: ' + errIns.message + '\n\nVerifica que ejecutaste el SQL de inscripciones.')
+        setSaving(false)
+        return
+      }
       // Actualizar cupo
       await supabase.from('proximos_cursos').update({ cupo_ocupado: (convocatoria.cupo_ocupado || 0) + seleccionados.length }).eq('id', convocatoria.id)
       // Dar acceso al examen
@@ -345,6 +367,21 @@ function ModalInscribirParticipantes({ convocatoria, participantes, onClose, onD
             origen: 'proximo_curso', modalidad: 'zoom', estado: 'confirmado', notas: 'Convocatoria HCD'
           })
         }
+      } catch (_) {}
+
+      // Crear ASIGNACIONES para que se refleje en los portales (empresa e individual)
+      try {
+        const asigs = seleccionados.map(pid => {
+          const p = participantes.find(x => x.id === pid)
+          return {
+            empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
+            empleado_id: pid, empleado_nombre: p?.nombre,
+            curso_id: convocatoria.curso_id, curso_nombre: convocatoria.curso_nombre, tipo: 'curso',
+            modalidad_asignacion: 'zoom', fecha_programada: convocatoria.fecha,
+            estado: 'asignado', notas: 'Inscrito a convocatoria HCD'
+          }
+        })
+        await supabase.from('asignaciones').insert(asigs)
       } catch (_) {}
 
       alert(`✅ ${seleccionados.length} participante(s) inscrito(s) en la convocatoria.`)

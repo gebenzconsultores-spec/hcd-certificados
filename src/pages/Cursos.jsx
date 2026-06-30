@@ -1,87 +1,118 @@
 import { useEffect, useState } from 'react'
-import { getCursos, crearCurso, actualizarCurso, siguienteNumeroCurso, guardarPreguntas, getExamenPorCurso, supabase } from '../lib/supabase'
-import { parsearExcelPreguntas } from '../lib/excelPreguntas'
+import { supabase } from '../lib/supabase'
+import { getCursos, crearCurso, getExamenPorCurso, guardarPreguntas } from '../lib/supabase'
+
+const COLOR_FAMILIA = {
+  'Sistemas de Gestión': '#1d4ed8',
+  'Herramientas Automotrices': '#8B1A1A',
+  'Lean Six Sigma': '#059669',
+  'Estadística y Software': '#7c3aed',
+}
+const PREFIJO_FAMILIA = {
+  'Sistemas de Gestión': 'SG',
+  'Herramientas Automotrices': 'AUTO',
+  'Lean Six Sigma': 'LEAN',
+  'Estadística y Software': 'EST',
+}
 
 export default function Cursos() {
   const [cursos, setCursos] = useState([])
+  const [familias, setFamilias] = useState([])
   const [loading, setLoading] = useState(true)
+  const [familiaAbierta, setFamiliaAbierta] = useState(null)
+  const [vista, setVista] = useState('cursos') // 'cursos' o 'microcredenciales'
+  const [microcursos, setMicrocursos] = useState([])
+
   const [modal, setModal] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
   const [modalExamen, setModalExamen] = useState(null)
-  const [modalBorrar, setModalBorrar] = useState(null)
-  const [form, setForm] = useState({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
+  const [form, setForm] = useState({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
-  const [borrandoId, setBorrandoId] = useState(null)
-  const [msgExcel, setMsgExcel] = useState(null)
 
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
     setLoading(true)
-    const data = await getCursos()
-    setCursos(data)
+    const [cur, { data: fam }, { data: micro }] = await Promise.all([
+      getCursos(),
+      supabase.from('familias').select('*').order('orden'),
+      supabase.from('microcursos').select('*').order('titulo')
+    ])
+    setCursos(cur || [])
+    setFamilias(fam || [])
+    setMicrocursos(micro || [])
+    if (fam && fam.length && !familiaAbierta) setFamiliaAbierta(fam[0].id)
     setLoading(false)
   }
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
-  async function guardarCurso() {
-    if (!form.nombre || !form.duracion) return
-    setSaving(true)
-    try {
-      const numero = await siguienteNumeroCurso()
-      await crearCurso({ ...form, numero_curso: numero, lugar_online: form.modalidad === 'online' ? 'Puebla, Pue.' : '', temario: form.temario })
-      await cargar()
-      setModal(false)
-      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
-    } finally { setSaving(false) }
+  // Genera clave interna automática tipo SG-01, AUTO-05 según familia
+  async function generarClaveInterna(familiaId) {
+    const familia = familias.find(x => x.id === familiaId)
+    const prefijo = PREFIJO_FAMILIA[familia?.nombre] || 'CUR'
+    const mismosFamilia = cursos.filter(c => c.familia_id === familiaId)
+    let maxNum = 0
+    mismosFamilia.forEach(c => {
+      const m = (c.clave_interna || '').match(new RegExp(`${prefijo}-(\\d+)`))
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `${prefijo}-${String(maxNum + 1).padStart(2, '0')}`
   }
 
-  function abrirEditar(curso) {
-    setForm({ nombre: curso.nombre, duracion: String(curso.duracion), modalidad: curso.modalidad, aval_institucion: curso.aval_institucion || false, nombre_aval: curso.nombre_aval || '', temario: curso.temario || '' })
-    setModalEditar(curso)
+  async function guardarCurso() {
+    if (!form.nombre || !form.duracion || !form.familia_id) { alert('Completa nombre, duración y familia'); return }
+    setSaving(true)
+    try {
+      const clave_interna = await generarClaveInterna(form.familia_id)
+      await crearCurso({
+        nombre: form.nombre, duracion: Number(form.duracion),
+        familia_id: form.familia_id, clave_interna,
+        modalidad: form.modalidad, aval_institucion: form.aval_institucion,
+        nombre_aval: form.nombre_aval, activo: true, es_publico: true
+      })
+      await cargar()
+      setModal(false)
+      setForm({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+    } catch (e) {
+      alert('No se pudo crear: ' + (e.message || ''))
+    } finally { setSaving(false) }
   }
 
   async function guardarEdicion() {
-    if (!form.nombre || !form.duracion || !modalEditar) return
     setSaving(true)
     try {
-      await actualizarCurso(modalEditar.id, { nombre: form.nombre, duracion: Number(form.duracion), modalidad: form.modalidad, aval_institucion: form.aval_institucion, nombre_aval: form.nombre_aval, temario: form.temario })
+      await supabase.from('cursos').update({
+        nombre: modalEditar.nombre, duracion: Number(modalEditar.duracion),
+        familia_id: modalEditar.familia_id
+      }).eq('id', modalEditar.id)
       await cargar()
       setModalEditar(null)
-      setForm({ nombre: '', duracion: '', modalidad: 'presencial', aval_institucion: false, nombre_aval: '', temario: '' })
+    } catch (e) {
+      alert('No se pudo guardar: ' + (e.message || ''))
     } finally { setSaving(false) }
   }
 
-  async function borrarCurso() {
-    if (!modalBorrar) return
-    setBorrandoId(modalBorrar.id)
-    try {
-      await supabase.from('preguntas').delete().eq('curso_id', modalBorrar.id)
-      await supabase.from('cursos').delete().eq('id', modalBorrar.id)
-      await cargar()
-      setModalBorrar(null)
-    } finally { setBorrandoId(null) }
+  async function borrarCurso(curso) {
+    if (!window.confirm(`¿Eliminar "${curso.nombre}" del catálogo?`)) return
+    await supabase.from('cursos').delete().eq('id', curso.id)
+    await cargar()
   }
 
+  // ── Examen ──
   async function abrirExamen(curso) {
     const pregs = await getExamenPorCurso(curso.id)
     setPreguntas(pregs.length > 0 ? pregs.map(p => ({ ...p, opciones: p.opciones || ['', '', '', ''] })) : [preguntaVacia()])
-    setMsgExcel(null)
     setModalExamen(curso)
   }
-
   function preguntaVacia() {
     return { pregunta: '', tipo: 'opcion_multiple', opciones: ['', '', '', ''], respuesta_correcta: 0 }
   }
-
   function agregarPregunta() { setPreguntas(p => [...p, preguntaVacia()]) }
-
   function actualizarPregunta(idx, campo, valor) {
     setPreguntas(p => p.map((q, i) => i === idx ? { ...q, [campo]: valor } : q))
   }
-
   function actualizarOpcion(idx, oidx, valor) {
     setPreguntas(p => p.map((q, i) => {
       if (i !== idx) return q
@@ -89,28 +120,6 @@ export default function Cursos() {
       return { ...q, opciones: ops }
     }))
   }
-
-  async function cargarExcel(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setMsgExcel({ tipo: 'cargando', texto: 'Leyendo archivo...' })
-    try {
-      const { preguntas: nuevas, errores } = await parsearExcelPreguntas(file)
-      if (nuevas.length === 0) {
-        setMsgExcel({ tipo: 'error', texto: errores[0] || 'No se encontraron preguntas válidas' })
-        return
-      }
-      // Reemplazar las preguntas actuales con las del Excel
-      setPreguntas(nuevas)
-      let texto = `✅ ${nuevas.length} preguntas cargadas correctamente`
-      if (errores.length > 0) texto += `. ${errores.length} fila(s) con problemas se omitieron.`
-      setMsgExcel({ tipo: 'ok', texto })
-    } catch (err) {
-      setMsgExcel({ tipo: 'error', texto: 'No se pudo leer el archivo. Verifica que sea un Excel válido (.xlsx)' })
-    }
-    e.target.value = '' // reset input
-  }
-
   async function guardarExamen() {
     if (!modalExamen) return
     setSaving(true)
@@ -125,79 +134,113 @@ export default function Cursos() {
     } finally { setSaving(false) }
   }
 
-  if (loading) return <div style={{ color: '#64748b', padding: 40 }}>Cargando cursos...</div>
+  if (loading) return <div style={{ color: '#64748b', padding: 40 }}>Cargando catálogo...</div>
+
+  const cursosDeFamilia = familiaAbierta ? cursos.filter(c => c.familia_id === familiaAbierta) : []
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Cursos</h1>
-          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Administra el catálogo de cursos y sus exámenes</p>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Catálogo de cursos</h1>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Cursos organizados por familia, con clave interna y exámenes</p>
         </div>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo curso</button>
+        {vista === 'cursos' && <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo curso</button>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 16 }}>
-        {cursos.length === 0 && (
-          <div style={{ gridColumn: '1/-1', padding: 60, textAlign: 'center', color: '#94a3b8' }}>
-            No hay cursos. Crea el primero.
-          </div>
-        )}
-        {cursos.map(c => (
-          <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-              <span style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
-                Curso #{c.numero_curso}
-              </span>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <span style={{ background: c.modalidad === 'presencial' ? '#eff6ff' : '#f0fdf4', color: c.modalidad === 'presencial' ? '#1d4ed8' : '#059669', padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
-                  {c.modalidad === 'presencial' ? 'Presencial' : 'Online'}
-                </span>
-                <button onClick={() => abrirEditar(c)} title="Editar curso"
-                  style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#475569' }}>✏️</button>
-                <button onClick={() => setModalBorrar(c)} title="Eliminar curso"
-                  style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 13, color: '#dc2626' }}>🗑</button>
-              </div>
-            </div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 14 }}>⏱ {c.duracion} horas</p>
-            {c.aval_institucion && <p style={{ color: '#7c3aed', fontSize: 12, marginBottom: 10 }}>🏛 Aval: {c.nombre_aval}</p>}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => abrirExamen(c)} style={btnSecondary}>📝 Editar examen</button>
-              <a href={`/examen/${c.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
-            </div>
-          </div>
-        ))}
+      {/* Sub-pestañas: Cursos / Microcredenciales */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <button onClick={() => setVista('cursos')} style={{ background: vista === 'cursos' ? '#8B1A1A' : '#f1f5f9', color: vista === 'cursos' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📚 Cursos</button>
+        <button onClick={() => setVista('microcredenciales')} style={{ background: vista === 'microcredenciales' ? '#8B1A1A' : '#f1f5f9', color: vista === 'microcredenciales' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 18px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>⚡ Microcredenciales</button>
       </div>
+
+      {vista === 'cursos' ? (
+        <>
+          {/* Familias como pestañas */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            {familias.map(fam => {
+              const count = cursos.filter(c => c.familia_id === fam.id).length
+              const color = COLOR_FAMILIA[fam.nombre] || '#64748b'
+              const activa = familiaAbierta === fam.id
+              return (
+                <button key={fam.id} onClick={() => setFamiliaAbierta(fam.id)}
+                  style={{ background: activa ? color : '#fff', color: activa ? '#fff' : color, border: `2px solid ${color}`, borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  {fam.nombre} ({count})
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Cursos de la familia abierta */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 16 }}>
+            {cursosDeFamilia.length === 0 ? (
+              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta familia.</div>
+            ) : (
+              cursosDeFamilia.map(c => {
+                const fam = familias.find(x => x.id === c.familia_id)
+                const color = COLOR_FAMILIA[fam?.nombre] || '#64748b'
+                return (
+                  <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <span style={{ background: `${color}15`, color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                        🔑 {c.clave_interna || 'Sin clave'}
+                      </span>
+                      <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h</span>
+                    </div>
+                    <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12, lineHeight: 1.3 }}>{c.nombre}</h3>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button onClick={() => abrirExamen(c)} style={btnSecondary}>📝 Editar examen</button>
+                      <a href={`/examen/${c.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
+                      <button onClick={() => setModalEditar({ ...c })} style={{ ...btnSecondary, padding: '7px 12px' }}>✏️</button>
+                      <button onClick={() => borrarCurso(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </>
+      ) : (
+        /* Microcredenciales */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 16 }}>
+          {microcursos.length === 0 ? (
+            <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay microcredenciales registradas.</div>
+          ) : (
+            microcursos.map(m => (
+              <div key={m.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+                <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>⚡ Microcredencial</span>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', margin: '12px 0 8px', lineHeight: 1.3 }}>{m.titulo}</h3>
+                {m.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{m.descripcion}</p>}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => abrirExamen(m)} style={btnSecondary}>📝 Editar examen</button>
+                  <a href={`/examen/${m.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Modal nuevo curso */}
       {modal && (
-        <div style={overlayStyle} onClick={() => setModal(false)}>
+        <div style={overlay} onClick={() => setModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Nuevo curso</h3>
-            <Field label="Nombre del curso *" value={form.nombre} onChange={f('nombre')} placeholder="ej. Core Tools, 8D, ISO 9001" />
-            <Field label="Duración en horas *" value={form.duracion} onChange={f('duracion')} placeholder="ej. 24" type="number" />
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Modalidad *</label>
-              <select value={form.modalidad} onChange={e => f('modalidad')(e.target.value)} style={inputStyle}>
-                <option value="presencial">Presencial</option>
-                <option value="online">Online</option>
-              </select>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Temario / Descripción (se muestra a las empresas)</label>
-              <textarea value={form.temario} onChange={e => f('temario')(e.target.value)} rows={4} placeholder="Describe los temas que cubre el curso, uno por línea..." style={{ ...inputStyle, resize: 'vertical' }} />
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
-              <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} />
-              <span style={{ color: '#374151', fontSize: 13 }}>¿Tiene aval de institución certificadora?</span>
-            </label>
-            {form.aval_institucion && <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} placeholder="ej. Ceneval, UNAM, TEC" />}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>La clave interna se genera automáticamente según la familia.</p>
+
+            <Field label="Nombre del curso" value={form.nombre} onChange={f('nombre')} placeholder="ej. ISO 9001:2015 Interpretación" />
+
+            <label style={lbl}>Familia</label>
+            <select value={form.familia_id} onChange={e => f('familia_id')(e.target.value)} style={inp}>
+              <option value="">— Selecciona la familia —</option>
+              {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.nombre}</option>)}
+            </select>
+
+            <Field label="Duración (horas)" value={form.duracion} onChange={f('duracion')} placeholder="ej. 8" type="number" />
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
               <button onClick={() => setModal(false)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardarCurso} disabled={saving || !form.nombre || !form.duracion} style={btnPrimary}>
-                {saving ? 'Guardando...' : 'Crear curso'}
-              </button>
+              <button onClick={guardarCurso} disabled={saving} style={btnPrimary}>{saving ? 'Creando...' : 'Crear curso'}</button>
             </div>
           </div>
         </div>
@@ -205,54 +248,18 @@ export default function Cursos() {
 
       {/* Modal editar curso */}
       {modalEditar && (
-        <div style={overlayStyle} onClick={() => setModalEditar(null)}>
+        <div style={overlay} onClick={() => setModalEditar(null)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={modalTitle}>Editar curso #{modalEditar.numero_curso}</h3>
-            <Field label="Nombre del curso *" value={form.nombre} onChange={f('nombre')} />
-            <Field label="Duración en horas *" value={form.duracion} onChange={f('duracion')} type="number" />
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Modalidad *</label>
-              <select value={form.modalidad} onChange={e => f('modalidad')(e.target.value)} style={inputStyle}>
-                <option value="presencial">Presencial</option>
-                <option value="online">Online</option>
-              </select>
-            </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Temario / Descripción (se muestra a las empresas)</label>
-              <textarea value={form.temario} onChange={e => f('temario')(e.target.value)} rows={4} placeholder="Describe los temas que cubre el curso, uno por línea..." style={{ ...inputStyle, resize: 'vertical' }} />
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
-              <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} />
-              <span style={{ color: '#374151', fontSize: 13 }}>¿Tiene aval de institución certificadora?</span>
-            </label>
-            {form.aval_institucion && <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} />}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+            <h3 style={modalTitle}>Editar curso · {modalEditar.clave_interna}</h3>
+            <Field label="Nombre" value={modalEditar.nombre} onChange={v => setModalEditar(p => ({ ...p, nombre: v }))} />
+            <label style={lbl}>Familia</label>
+            <select value={modalEditar.familia_id || ''} onChange={e => setModalEditar(p => ({ ...p, familia_id: e.target.value }))} style={inp}>
+              {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.nombre}</option>)}
+            </select>
+            <Field label="Duración (horas)" value={modalEditar.duracion} onChange={v => setModalEditar(p => ({ ...p, duracion: v }))} type="number" />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
               <button onClick={() => setModalEditar(null)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardarEdicion} disabled={saving || !form.nombre || !form.duracion} style={btnPrimary}>
-                {saving ? 'Guardando...' : 'Guardar cambios'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal confirmar borrar */}
-      {modalBorrar && (
-        <div style={overlayStyle} onClick={() => setModalBorrar(null)}>
-          <div style={{ ...modalStyle, width: 420 }} onClick={e => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>¿Eliminar este curso?</h3>
-              <p style={{ color: '#64748b', fontSize: 14 }}>
-                Se eliminará <strong>"{modalBorrar.nombre}"</strong> y todas sus preguntas. Los certificados ya emitidos no se afectan.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button onClick={() => setModalBorrar(null)} style={btnGhost}>Cancelar</button>
-              <button onClick={borrarCurso} disabled={!!borrandoId}
-                style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                {borrandoId ? 'Eliminando...' : 'Sí, eliminar'}
-              </button>
+              <button onClick={guardarEdicion} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar'}</button>
             </div>
           </div>
         </div>
@@ -260,83 +267,29 @@ export default function Cursos() {
 
       {/* Modal examen */}
       {modalExamen && (
-        <div style={overlayStyle}>
-          <div style={{ ...modalStyle, width: 720, maxHeight: '88vh', overflowY: 'auto' }}>
-            <h3 style={modalTitle}>Examen: {modalExamen.nombre}</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Mínimo aprobatorio: 60%. Los participantes pueden repetirlo.</p>
-
-            {/* CARGA DESDE EXCEL */}
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '16px 20px', marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <div>
-                  <div style={{ color: '#059669', fontWeight: 700, fontSize: 14, marginBottom: 2 }}>⚡ Carga rápida desde Excel</div>
-                  <div style={{ color: '#475569', fontSize: 12 }}>Sube tu archivo y se cargan todas las preguntas de golpe</div>
+        <div style={overlay} onClick={() => setModalExamen(null)}>
+          <div style={{ ...modalStyle, width: 640, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <h3 style={modalTitle}>Examen · {modalExamen.nombre || modalExamen.titulo}</h3>
+            {preguntas.map((q, idx) => (
+              <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A' }}>Pregunta {idx + 1}</span>
+                  <button onClick={() => setPreguntas(p => p.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Eliminar</button>
                 </div>
-                <label style={{ background: '#059669', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  📂 Subir Excel
-                  <input type="file" accept=".xlsx,.xls" onChange={cargarExcel} style={{ display: 'none' }} />
-                </label>
-              </div>
-              {msgExcel && (
-                <div style={{ marginTop: 12, padding: '8px 14px', borderRadius: 8, fontSize: 13,
-                  background: msgExcel.tipo === 'ok' ? '#dcfce7' : msgExcel.tipo === 'error' ? '#fef2f2' : '#f1f5f9',
-                  color: msgExcel.tipo === 'ok' ? '#15803d' : msgExcel.tipo === 'error' ? '#dc2626' : '#475569' }}>
-                  {msgExcel.texto}
-                </div>
-              )}
-            </div>
-
-            {preguntas.map((p, idx) => (
-              <div key={idx} style={{ background: '#f8f9fb', borderRadius: 10, padding: 16, marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>Pregunta {idx + 1}</span>
-                  <button onClick={() => setPreguntas(pr => pr.filter((_, i) => i !== idx))}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}>✕</button>
-                </div>
-                <textarea value={p.pregunta} onChange={e => actualizarPregunta(idx, 'pregunta', e.target.value)}
-                  placeholder="Escribe la pregunta aquí..." rows={2} style={{ ...inputStyle, resize: 'none', marginBottom: 10 }} />
-                <div style={{ marginBottom: 8 }}>
-                  <label style={labelStyle}>Tipo</label>
-                  <select value={p.tipo} onChange={e => actualizarPregunta(idx, 'tipo', e.target.value)} style={inputStyle}>
-                    <option value="opcion_multiple">Opción múltiple</option>
-                    <option value="verdadero_falso">Verdadero / Falso</option>
-                  </select>
-                </div>
-                {p.tipo === 'opcion_multiple' && (
-                  <div>
-                    <label style={labelStyle}>Opciones (selecciona la correcta)</label>
-                    {(p.opciones || ['', '', '', '']).map((op, oidx) => (
-                      <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <input type="radio" name={`correcta_${idx}`} checked={Number(p.respuesta_correcta) === oidx}
-                          onChange={() => actualizarPregunta(idx, 'respuesta_correcta', oidx)} />
-                        <input value={op} onChange={e => actualizarOpcion(idx, oidx, e.target.value)}
-                          placeholder={`Opción ${oidx + 1}`} style={{ ...inputStyle, flex: 1 }} />
-                      </div>
-                    ))}
+                <input value={q.pregunta} onChange={e => actualizarPregunta(idx, 'pregunta', e.target.value)} placeholder="Escribe la pregunta" style={{ ...inp, marginBottom: 10 }} />
+                {q.opciones.map((op, oidx) => (
+                  <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <input type="radio" checked={q.respuesta_correcta === oidx} onChange={() => actualizarPregunta(idx, 'respuesta_correcta', oidx)} style={{ accentColor: '#059669' }} />
+                    <input value={op} onChange={e => actualizarOpcion(idx, oidx, e.target.value)} placeholder={`Opción ${oidx + 1}`} style={{ ...inp, flex: 1 }} />
                   </div>
-                )}
-                {p.tipo === 'verdadero_falso' && (
-                  <div>
-                    <label style={labelStyle}>Respuesta correcta</label>
-                    <select value={p.respuesta_correcta} onChange={e => actualizarPregunta(idx, 'respuesta_correcta', Number(e.target.value))} style={inputStyle}>
-                      <option value={0}>Verdadero</option>
-                      <option value={1}>Falso</option>
-                    </select>
-                  </div>
-                )}
+                ))}
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Marca el círculo de la respuesta correcta.</p>
               </div>
             ))}
-
-            <button onClick={agregarPregunta} style={{ ...btnSecondary, marginBottom: 20 }}>+ Agregar pregunta manual</button>
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#64748b', fontSize: 13 }}>{preguntas.filter(p => p.pregunta.trim()).length} preguntas en total</span>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setModalExamen(null)} style={btnGhost}>Cancelar</button>
-                <button onClick={guardarExamen} disabled={saving} style={btnPrimary}>
-                  {saving ? 'Guardando...' : 'Guardar examen'}
-                </button>
-              </div>
+            <button onClick={agregarPregunta} style={{ ...btnSecondary, width: '100%', marginBottom: 16 }}>+ Agregar pregunta</button>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => setModalExamen(null)} style={btnGhost}>Cancelar</button>
+              <button onClick={guardarExamen} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar examen'}</button>
             </div>
           </div>
         </div>
@@ -347,18 +300,18 @@ export default function Cursos() {
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={labelStyle}>{label}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
-    </div>
+    <>
+      <label style={lbl}>{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inp} />
+    </>
   )
 }
 
-const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }
-const inputStyle = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none', color: '#1e293b', background: '#fff' }
+const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5, marginTop: 12 }
+const inp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
+const modalStyle = { background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
+const modalTitle = { fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 16 }
 const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
-const btnSecondary = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer' }
-const btnGhost = { background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }
-const overlayStyle = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }
-const modalStyle = { background: '#fff', borderRadius: 16, padding: '28px 32px', width: 500, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
-const modalTitle = { fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 20 }
+const btnSecondary = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }
+const btnGhost = { background: 'none', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer' }

@@ -85,7 +85,7 @@ export default function AdminCursosConfirmados() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Cursos confirmados</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Calendario de cursos</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Calendario de cursos agendados (con orden de compra o programados por ti)</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
