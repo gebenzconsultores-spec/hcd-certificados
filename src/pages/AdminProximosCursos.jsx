@@ -110,6 +110,58 @@ export default function AdminProximosCursos() {
     setDetalle({ ...prox, inscritos })
   }
 
+  async function reprogramarConvocatoria(prox, nuevaFecha) {
+    if (!nuevaFecha) return
+    try {
+      // 1. Actualizar la convocatoria
+      await supabase.from('proximos_cursos').update({ fecha: nuevaFecha }).eq('id', prox.id)
+      // 2. Actualizar inscripciones
+      await supabase.from('inscripciones').update({ fecha: nuevaFecha }).eq('proximo_curso_id', prox.id)
+      // 3. Actualizar asignaciones de los inscritos
+      await supabase.from('asignaciones').update({ fecha_programada: nuevaFecha }).eq('curso_nombre', prox.curso_nombre).eq('fecha_programada', prox.fecha)
+      // 4. Actualizar el calendario de cursos
+      await supabase.from('cursos_confirmados').update({ fecha_inicio: nuevaFecha }).eq('curso_nombre', prox.curso_nombre).eq('fecha_inicio', prox.fecha)
+      // 5. Notificar
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'programacion', titulo: 'Curso reprogramado',
+          mensaje: `${prox.curso_nombre} se reprogramó al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}`,
+          link: '/admin/proximos'
+        })
+      } catch (_) {}
+      alert(`✅ Reprogramado al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}. Actualizado en todos los portales.`)
+      setDetalle(null)
+      await cargar()
+    } catch (e) {
+      alert('Error al reprogramar: ' + (e.message || ''))
+    }
+  }
+
+  async function darDeBajaInscrito(prox, ins) {
+    if (!window.confirm(`¿Dar de baja a "${ins.participante_nombre}" de este curso?`)) return
+    try {
+      // 1. Borrar la inscripción
+      await supabase.from('inscripciones').delete().eq('id', ins.id)
+      // 2. Borrar la asignación y quitar acceso
+      if (ins.participante_id) {
+        await supabase.from('asignaciones').delete().eq('empleado_id', ins.participante_id).eq('curso_nombre', prox.curso_nombre)
+        await supabase.from('participantes').update({ acceso_examen: false }).eq('id', ins.participante_id)
+      }
+      // 3. Liberar cupo
+      await supabase.from('proximos_cursos').update({ cupo_ocupado: Math.max(0, (prox.cupo_ocupado || 1) - 1) }).eq('id', prox.id)
+      // 4. Reducir en el calendario
+      const { data: conf } = await supabase.from('cursos_confirmados').select('id, num_participantes').eq('curso_nombre', prox.curso_nombre).eq('fecha_inicio', prox.fecha).maybeSingle()
+      if (conf) await supabase.from('cursos_confirmados').update({ num_participantes: Math.max(0, (conf.num_participantes || 1) - 1) }).eq('id', conf.id)
+
+      await cargar()
+      // Refrescar el modal
+      const { data: insActualizadas } = await supabase.from('inscripciones').select('*').eq('proximo_curso_id', prox.id)
+      setDetalle(d => d ? { ...d, inscritos: insActualizadas || [], cupo_ocupado: Math.max(0, (prox.cupo_ocupado || 1) - 1) } : d)
+    } catch (e) {
+      alert('Error al dar de baja: ' + (e.message || ''))
+    }
+  }
+
   function fmtFecha(f) {
     return new Date(f + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   }
@@ -259,22 +311,39 @@ export default function AdminProximosCursos() {
               <button onClick={() => setDetalle(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>✕</button>
             </div>
 
+            {/* Reprogramar convocatoria */}
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📅 REPROGRAMAR ESTE CURSO</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="date" id={`reprog-prox-${detalle.id}`} defaultValue={detalle.fecha}
+                  style={{ flex: 1, border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none' }} />
+                <button onClick={() => {
+                  const val = document.getElementById(`reprog-prox-${detalle.id}`).value
+                  reprogramarConvocatoria(detalle, val)
+                }} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Reprogramar
+                </button>
+              </div>
+              <p style={{ color: '#64748b', fontSize: 11, marginTop: 6 }}>Se actualiza para todos los inscritos y en sus portales.</p>
+            </div>
+
             <div style={{ color: '#64748b', fontSize: 13, fontWeight: 700, marginBottom: 12 }}>INSCRITOS ({detalle.inscritos.length} / {detalle.cupo_maximo})</div>
             {detalle.inscritos.length === 0 ? (
               <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Sin inscritos aún</div>
             ) : (
               <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden' }}>
                 {detalle.inscritos.map(ins => (
-                  <div key={ins.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
+                  <div key={ins.id} style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1 }}>
                       <div style={{ color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{ins.participante_nombre}</div>
                       <div style={{ color: '#94a3b8', fontSize: 11 }}>
-                        {ins.origen === 'empresa' ? `🏢 ${ins.empresa_nombre}` : '👤 Individual'} · {ins.participante_correo}
+                        {ins.origen === 'empresa' ? `🏢 ${ins.empresa_nombre || 'Empresa'}` : '👤 Individual'} · {ins.participante_correo}
                       </div>
                     </div>
                     <span style={{ background: ins.estado === 'completado' ? '#f0fdf4' : '#eff6ff', color: ins.estado === 'completado' ? '#059669' : '#1d4ed8', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                       {ins.estado}
                     </span>
+                    <button onClick={() => darDeBajaInscrito(detalle, ins)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Dar de baja</button>
                   </div>
                 ))}
               </div>

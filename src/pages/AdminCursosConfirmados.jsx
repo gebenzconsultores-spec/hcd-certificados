@@ -41,18 +41,88 @@ export default function AdminCursosConfirmados() {
 
   async function verDetalle(curso) {
     setDetalle(curso)
+    await cargarAsistentes(curso)
+  }
+
+  async function cargarAsistentes(curso) {
+    let data = []
     if (curso.id_compra) {
-      const { data } = await supabase.from('asignaciones').select('*').eq('id_compra', curso.id_compra)
-      setAsistentes(data || [])
+      const r = await supabase.from('asignaciones').select('*').eq('id_compra', curso.id_compra)
+      data = r.data || []
     } else {
-      setAsistentes([])
+      // Por curso + fecha (convocatorias y programados manual)
+      const r = await supabase.from('asignaciones').select('*').eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
+      data = r.data || []
     }
+    setAsistentes(data)
   }
 
   async function cambiarEstado(curso, estado) {
     await supabase.from('cursos_confirmados').update({ estado }).eq('id', curso.id)
     await cargar()
     if (detalle?.id === curso.id) setDetalle({ ...detalle, estado })
+  }
+
+  // REPROGRAMAR: cambia la fecha en el calendario, asignaciones e inscripciones
+  async function reprogramar(curso, nuevaFecha) {
+    if (!nuevaFecha) return
+    try {
+      // 1. Actualizar el curso en el calendario
+      await supabase.from('cursos_confirmados').update({ fecha_inicio: nuevaFecha }).eq('id', curso.id)
+      // 2. Actualizar asignaciones (lo que ven los portales)
+      if (curso.id_compra) {
+        await supabase.from('asignaciones').update({ fecha_programada: nuevaFecha }).eq('id_compra', curso.id_compra)
+      } else {
+        await supabase.from('asignaciones').update({ fecha_programada: nuevaFecha }).eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
+      }
+      // 3. Actualizar la convocatoria si existe (por nombre+fecha)
+      await supabase.from('proximos_cursos').update({ fecha: nuevaFecha }).eq('curso_nombre', curso.curso_nombre).eq('fecha', curso.fecha_inicio)
+      // 4. Actualizar inscripciones
+      await supabase.from('inscripciones').update({ fecha: nuevaFecha }).eq('curso_nombre', curso.curso_nombre).eq('fecha', curso.fecha_inicio)
+      // 5. Actualizar compras (fecha del curso)
+      if (curso.id_compra) await supabase.from('compras').update({ fecha_curso: nuevaFecha }).eq('id_compra', curso.id_compra)
+      // 6. Notificar
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'programacion', titulo: 'Curso reprogramado',
+          mensaje: `${curso.curso_nombre} se reprogramó al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}`,
+          link: '/admin/confirmados'
+        })
+      } catch (_) {}
+
+      alert(`✅ Curso reprogramado al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}. Se actualizó en todos los portales.`)
+      setDetalle(null)
+      await cargar()
+    } catch (e) {
+      alert('Error al reprogramar: ' + (e.message || ''))
+    }
+  }
+
+  // DAR DE BAJA a un asistente del curso
+  async function darDeBaja(curso, asistente) {
+    if (!window.confirm(`¿Dar de baja a "${asistente.empleado_nombre}" de este curso?`)) return
+    try {
+      // 1. Borrar la asignación
+      await supabase.from('asignaciones').delete().eq('id', asistente.id)
+      // 2. Quitar acceso al examen
+      if (asistente.empleado_id) {
+        await supabase.from('participantes').update({ acceso_examen: false }).eq('id', asistente.empleado_id)
+        // 3. Borrar su inscripción a la convocatoria
+        await supabase.from('inscripciones').delete().eq('participante_id', asistente.empleado_id).eq('curso_nombre', curso.curso_nombre)
+      }
+      // 4. Reducir el contador de participantes y liberar cupo
+      const nuevoNum = Math.max(0, (curso.num_participantes || 1) - 1)
+      await supabase.from('cursos_confirmados').update({ num_participantes: nuevoNum }).eq('id', curso.id)
+      // Liberar cupo en la convocatoria si existe
+      const { data: conv } = await supabase.from('proximos_cursos').select('id, cupo_ocupado').eq('curso_nombre', curso.curso_nombre).eq('fecha', curso.fecha_inicio).maybeSingle()
+      if (conv) await supabase.from('proximos_cursos').update({ cupo_ocupado: Math.max(0, (conv.cupo_ocupado || 1) - 1) }).eq('id', conv.id)
+
+      await cargarAsistentes({ ...curso, num_participantes: nuevoNum })
+      setDetalle(d => d ? { ...d, num_participantes: nuevoNum } : d)
+      await cargar()
+    } catch (e) {
+      alert('Error al dar de baja: ' + (e.message || ''))
+    }
   }
 
   async function eliminar(curso) {
@@ -207,17 +277,34 @@ export default function AdminCursosConfirmados() {
             {/* Lista de asistentes */}
             {asistentes.length > 0 && (
               <div style={{ marginBottom: 20 }}>
-                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>👥 Asistentes inscritos</h4>
+                <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>👥 Asistentes inscritos ({asistentes.length})</h4>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
                   {asistentes.map(a => (
-                    <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: '#1e293b', fontSize: 13, fontWeight: 500 }}>{a.empleado_nombre}</span>
+                    <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: '#1e293b', fontSize: 13, fontWeight: 500, flex: 1 }}>{a.empleado_nombre}</span>
                       <span style={{ background: a.estado === 'completado' ? '#f0fdf4' : '#fef9c3', color: a.estado === 'completado' ? '#059669' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{a.estado}</span>
+                      <button onClick={() => darDeBaja(detalle, a)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Dar de baja</button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Reprogramar */}
+            <div style={{ marginBottom: 16, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+              <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>📅 REPROGRAMAR CURSO</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input type="date" id={`reprog-${detalle.id}`} defaultValue={detalle.fecha_inicio}
+                  style={{ flex: 1, border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 10px', fontSize: 13, outline: 'none' }} />
+                <button onClick={() => {
+                  const val = document.getElementById(`reprog-${detalle.id}`).value
+                  reprogramar(detalle, val)
+                }} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  Reprogramar
+                </button>
+              </div>
+              <p style={{ color: '#64748b', fontSize: 11, marginTop: 6 }}>La nueva fecha se actualiza para todos los inscritos y en sus portales.</p>
+            </div>
 
             {/* Cambiar estado */}
             <div style={{ marginBottom: 16 }}>
