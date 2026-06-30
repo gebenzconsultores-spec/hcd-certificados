@@ -1205,7 +1205,13 @@ function TabAsignaciones({ asignaciones, empleados }) {
                   </span>
                 </td>
                 <td style={{ padding: '11px 16px', color: '#475569', fontSize: 12 }}>{a.modalidad_asignacion === 'autogestivo' ? '📱 Autogestivo' : '🎥 Zoom'}</td>
-                <td style={{ padding: '11px 16px', color: '#94a3b8', fontSize: 12 }}>{a.fecha_programada ? new Date(a.fecha_programada).toLocaleDateString('es-MX') : '—'}</td>
+                <td style={{ padding: '11px 16px', color: '#94a3b8', fontSize: 12 }}>
+                  {a.fecha_programada
+                    ? (a.fecha_fin && a.fecha_fin !== a.fecha_programada
+                        ? `${new Date(a.fecha_programada).toLocaleDateString('es-MX')} al ${new Date(a.fecha_fin).toLocaleDateString('es-MX')}`
+                        : new Date(a.fecha_programada).toLocaleDateString('es-MX'))
+                    : '—'}
+                </td>
                 <td style={{ padding: '11px 16px' }}>
                   <span style={{ background: a.estado === 'completado' ? '#f0fdf4' : '#fef9c3', color: a.estado === 'completado' ? '#059669' : '#92400e', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                     {a.estado}

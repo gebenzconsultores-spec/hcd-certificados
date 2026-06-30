@@ -6,6 +6,7 @@ const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 export default function AdminCursosConfirmados() {
   const [confirmados, setConfirmados] = useState([])
+  const [diasCurso, setDiasCurso] = useState([])
   const [loading, setLoading] = useState(true)
   const [vista, setVista] = useState('calendario')
   const [mesActual, setMesActual] = useState(new Date())
@@ -49,6 +50,11 @@ export default function AdminCursosConfirmados() {
       return { ...c, num_participantes: real }
     })
     setConfirmados(conConteo)
+    // Cargar los días de cada curso (para mostrarlos en el calendario)
+    try {
+      const { data: dias } = await supabase.from('dias_curso').select('*')
+      setDiasCurso(dias || [])
+    } catch (_) { setDiasCurso([]) }
     setLoading(false)
   }
 
@@ -157,7 +163,25 @@ export default function AdminCursosConfirmados() {
   function cursosDelDia(dia) {
     if (!dia) return []
     const fechaStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
-    return confirmados.filter(c => c.fecha_inicio === fechaStr)
+    const resultado = []
+    // 1. Cursos cuyo fecha_inicio es este día (cursos de 1 día o el inicio)
+    confirmados.forEach(c => {
+      if (c.fecha_inicio === fechaStr) resultado.push(c)
+    })
+    // 2. Días registrados en dias_curso (para cursos de varios días, incluye los días extra)
+    diasCurso.forEach(d => {
+      if (d.fecha === fechaStr) {
+        // Buscar el curso confirmado al que pertenece
+        const curso = confirmados.find(c => c.id === d.curso_confirmado_id)
+        if (curso && curso.fecha_inicio !== fechaStr) {
+          // Es un día adicional (no el inicio, que ya se agregó arriba)
+          resultado.push({ ...curso, _esDiaExtra: true })
+        } else if (!curso) {
+          resultado.push({ id: d.id, curso_nombre: d.curso_nombre, fecha_inicio: d.fecha, estado: 'confirmado', _esDiaExtra: true })
+        }
+      }
+    })
+    return resultado
   }
 
   const COLORES_ESTADO = {
@@ -279,13 +303,32 @@ export default function AdminCursosConfirmados() {
                 <div style={{ color: '#64748b', fontSize: 11 }}>Asistentes</div>
                 <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>{detalle.num_participantes} persona(s)</div>
               </div>
-              {detalle.id_compra && (
-                <div style={{ background: '#f9f0f0', borderRadius: 8, padding: '12px 14px', gridColumn: '1/-1' }}>
-                  <div style={{ color: '#64748b', fontSize: 11 }}>ID de compra</div>
-                  <code style={{ color: '#8B1A1A', fontSize: 14, fontWeight: 700 }}>{detalle.id_compra}</code>
-                </div>
-              )}
             </div>
+
+            {/* Días del curso */}
+            {(() => {
+              const dias = diasCurso.filter(d => d.curso_confirmado_id === detalle.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
+              if (dias.length <= 1) return null
+              return (
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+                  <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🗓️ DÍAS DEL CURSO ({dias.length})</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {dias.map(d => (
+                      <span key={d.id} style={{ background: '#fff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                        {new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {detalle.id_compra && (
+              <div style={{ background: '#f9f0f0', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
+                <div style={{ color: '#64748b', fontSize: 11 }}>ID de compra</div>
+                <code style={{ color: '#8B1A1A', fontSize: 14, fontWeight: 700 }}>{detalle.id_compra}</code>
+              </div>
+            )}
 
             {/* Lista de asistentes */}
             {asistentes.length > 0 && (
@@ -357,9 +400,40 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
   const [empresaId, setEmpresaId] = useState('')
   const [fecha, setFecha] = useState('')
   const [hora, setHora] = useState('10:00')
+  const [tipoFechas, setTipoFechas] = useState('continuo') // 'continuo' o 'escalonado'
+  const [numDias, setNumDias] = useState(1)
+  const [diasEscalonados, setDiasEscalonados] = useState([]) // array de fechas (strings)
+  const [nuevoDia, setNuevoDia] = useState('')
   const [seleccionados, setSeleccionados] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Calcular los días del curso según el tipo
+  function calcularDias() {
+    if (tipoFechas === 'continuo') {
+      if (!fecha) return []
+      const dias = []
+      const base = new Date(fecha + 'T00:00:00')
+      for (let i = 0; i < numDias; i++) {
+        const d = new Date(base)
+        d.setDate(base.getDate() + i)
+        dias.push(d.toISOString().split('T')[0])
+      }
+      return dias
+    } else {
+      return [...diasEscalonados].sort()
+    }
+  }
+
+  function agregarDiaEscalonado() {
+    if (!nuevoDia) return
+    if (diasEscalonados.includes(nuevoDia)) { alert('Ese día ya está agregado'); return }
+    setDiasEscalonados(d => [...d, nuevoDia].sort())
+    setNuevoDia('')
+  }
+  function quitarDiaEscalonado(dia) {
+    setDiasEscalonados(d => d.filter(x => x !== dia))
+  }
 
   // Lista de alumnos a mostrar según tipo
   let alumnosDisponibles = participantes
@@ -377,32 +451,47 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
   async function guardar() {
     const curso = cursos.find(c => c.id === cursoId)
     if (!curso) { alert('Selecciona un curso'); return }
-    if (!fecha) { alert('Selecciona la fecha del curso'); return }
+    const dias = calcularDias()
+    if (dias.length === 0) { alert('Define al menos un día para el curso'); return }
     if (tipo === 'empresa' && !empresaId) { alert('Selecciona la empresa'); return }
     if (seleccionados.length === 0) { alert('Selecciona al menos un alumno'); return }
     setSaving(true)
     try {
       const empresa = empresas.find(e => e.id === empresaId)
-      // 1. Crear el curso confirmado
-      await supabase.from('cursos_confirmados').insert({
+      const fechaInicio = dias[0]
+      const fechaFin = dias[dias.length - 1]
+
+      // 1. Crear el curso confirmado (con inicio, fin, tipo y num de días)
+      const { data: confirmado } = await supabase.from('cursos_confirmados').insert({
         curso_id: curso.id, curso_nombre: curso.nombre,
         empresa_id: tipo === 'empresa' ? empresaId : null,
         empresa_nombre: tipo === 'empresa' ? empresa?.nombre : 'Curso abierto HCD',
-        fecha_inicio: fecha, hora,
+        fecha_inicio: fechaInicio, fecha_fin: fechaFin, hora,
         num_participantes: seleccionados.length,
-        origen: tipo === 'empresa' ? 'programado_admin' : 'programado_admin',
+        tipo_fechas: tipoFechas, num_dias: dias.length,
+        origen: 'programado_admin',
         modalidad: 'zoom', estado: 'confirmado',
         notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
-      })
+      }).select().single()
 
-      // 2. Crear asignaciones para cada alumno + dar acceso al examen
+      // 2. Crear un registro por cada DÍA del curso (para el calendario)
+      if (confirmado) {
+        const diasRows = dias.map(d => ({
+          curso_confirmado_id: confirmado.id,
+          curso_nombre: curso.nombre,
+          fecha: d, hora
+        }))
+        await supabase.from('dias_curso').insert(diasRows)
+      }
+
+      // 3. Crear asignaciones para cada alumno + dar acceso al examen
       const rows = seleccionados.map(pid => {
         const p = participantes.find(x => x.id === pid)
         return {
           empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
           empleado_id: pid, empleado_nombre: p?.nombre,
           curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
-          modalidad_asignacion: 'zoom', fecha_programada: fecha,
+          modalidad_asignacion: 'zoom', fecha_programada: fechaInicio, fecha_fin: fechaFin,
           estado: 'asignado', notas: 'Inscrito manualmente por admin'
         }
       })
@@ -411,7 +500,10 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         await supabase.from('participantes').update({ acceso_examen: true }).eq('id', pid)
       }
 
-      alert(`✅ Curso programado para ${new Date(fecha).toLocaleDateString('es-MX')} con ${seleccionados.length} alumno(s).`)
+      const textoFechas = dias.length === 1
+        ? new Date(fechaInicio).toLocaleDateString('es-MX')
+        : `${dias.length} días (del ${new Date(fechaInicio).toLocaleDateString('es-MX')} al ${new Date(fechaFin).toLocaleDateString('es-MX')})`
+      alert(`✅ Curso programado: ${textoFechas} con ${seleccionados.length} alumno(s).`)
       onDone()
     } catch (e) {
       alert('Error: ' + (e.message || ''))
@@ -454,17 +546,59 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
           </>
         )}
 
-        {/* Fecha y hora */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <label style={lbl}>Fecha del curso *</label>
-            <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={lbl}>Hora</label>
-            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
-          </div>
+        {/* Tipo de fechas: continuo o escalonado */}
+        <label style={lbl}>¿Cómo son las fechas del curso?</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+          {[['continuo', '📆 Días continuos', 'ej. 8, 9 y 10 seguidos'], ['escalonado', '🗓️ Fechas escalonadas', 'días sueltos, ej. 8, 15 y 22']].map(([v, l, d]) => (
+            <button key={v} type="button" onClick={() => setTipoFechas(v)}
+              style={{ flex: 1, padding: '10px', border: `2px solid ${tipoFechas === v ? '#1d4ed8' : '#e2e8f0'}`, borderRadius: 10, background: tipoFechas === v ? '#eff6ff' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: tipoFechas === v ? '#1d4ed8' : '#475569' }}>{l}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{d}</div>
+            </button>
+          ))}
         </div>
+
+        {tipoFechas === 'continuo' ? (
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Fecha de inicio *</label>
+              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>N° de días *</label>
+              <input type="number" min={1} max={30} value={numDias} onChange={e => setNumDias(Math.max(1, Number(e.target.value)))} style={inp} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Hora</label>
+              <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label style={lbl}>Agregar día</label>
+                <input type="date" value={nuevoDia} onChange={e => setNuevoDia(e.target.value)} style={inp} />
+              </div>
+              <div style={{ width: 110 }}>
+                <label style={lbl}>Hora</label>
+                <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
+              </div>
+              <button type="button" onClick={agregarDiaEscalonado} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', height: 40 }}>+ Día</button>
+            </div>
+            {diasEscalonados.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {diasEscalonados.map(d => (
+                  <span key={d} style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 20, padding: '4px 10px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                    <button type="button" onClick={() => quitarDiaEscalonado(d)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>Agrega cada día que requiere el curso (aunque estén en distintas semanas). Todos quedan ligados al mismo curso.</p>
+          </div>
+        )}
 
         {/* Selección de alumnos */}
         <label style={lbl}>Inscribir alumnos ({seleccionados.length} seleccionados)</label>
