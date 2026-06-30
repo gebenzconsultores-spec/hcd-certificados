@@ -21,7 +21,8 @@ export default function Participantes() {
   useEffect(() => {
     cargar()
     getEmpresas().then(setEmpresas)
-    supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true).then(({ data }) => setCursosDisponibles(data || []))
+    // Cargar SOLO los cursos de Próximos cursos (convocatorias abiertas con su número 499+)
+    supabase.from('proximos_cursos').select('*').gte('fecha', new Date().toISOString().split('T')[0]).order('fecha', { ascending: true }).then(({ data }) => setCursosDisponibles(data || []))
   }, [])
 
   async function cargar() {
@@ -349,8 +350,112 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
   )
 }
 
-// ─── Modal: asignar curso a un participante ───────────────────
+// ─── Modal: asignar curso (de Próximos cursos) a un participante ───
 function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
+  const [proximoId, setProximoId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const proximo = cursos.find(c => c.id === proximoId)
+
+  async function guardar() {
+    if (!proximo) { alert('Selecciona un curso de la lista'); return }
+    setSaving(true)
+    try {
+      const empresaId = participante.empresa_id || participante.registrado_por_empresa || null
+      const esEmpresa = !!empresaId
+
+      // 1. Inscribir en la convocatoria (tabla inscripciones)
+      await supabase.from('inscripciones').insert({
+        proximo_curso_id: proximo.id,
+        curso_nombre: proximo.curso_nombre,
+        fecha: proximo.fecha,
+        participante_id: participante.id,
+        participante_nombre: participante.nombre,
+        participante_correo: participante.correo,
+        empresa_id: empresaId,
+        origen: esEmpresa ? 'empresa' : 'individual',
+        estado: 'inscrito'
+      })
+
+      // 2. Crear la asignación (para que aparezca en su portal)
+      await supabase.from('asignaciones').insert({
+        empresa_id: empresaId,
+        empleado_id: participante.id,
+        empleado_nombre: participante.nombre,
+        curso_id: proximo.curso_id, curso_nombre: proximo.curso_nombre, tipo: 'curso',
+        modalidad_asignacion: 'zoom', fecha_programada: proximo.fecha,
+        estado: 'asignado', notas: `Inscrito a convocatoria (Curso N° ${proximo.numero_certificado || ''})`
+      })
+
+      // 3. Dar acceso al examen
+      await supabase.from('participantes').update({ acceso_examen: true }).eq('id', participante.id)
+
+      // 4. Actualizar cupo de la convocatoria
+      await supabase.from('proximos_cursos').update({ cupo_ocupado: (proximo.cupo_ocupado || 0) + 1 }).eq('id', proximo.id)
+
+      // 5. Registrar/actualizar en el calendario de cursos
+      try {
+        const { data: existe } = await supabase.from('cursos_confirmados')
+          .select('id, num_participantes').eq('curso_nombre', proximo.curso_nombre).eq('fecha_inicio', proximo.fecha).maybeSingle()
+        if (existe) {
+          await supabase.from('cursos_confirmados').update({ num_participantes: (existe.num_participantes || 0) + 1 }).eq('id', existe.id)
+        } else {
+          await supabase.from('cursos_confirmados').insert({
+            curso_id: proximo.curso_id, curso_nombre: proximo.curso_nombre,
+            empresa_id: empresaId,
+            empresa_nombre: esEmpresa ? 'Empresa' : 'Individual',
+            fecha_inicio: proximo.fecha, hora: proximo.hora, num_participantes: 1,
+            origen: 'proximo_curso', modalidad: 'zoom', estado: 'confirmado', notas: 'Convocatoria HCD'
+          })
+        }
+      } catch (_) {}
+
+      alert(`✅ ${participante.nombre} inscrito en "${proximo.curso_nombre}" (Curso N° ${proximo.numero_certificado || ''}) para el ${new Date(proximo.fecha).toLocaleDateString('es-MX')}.`)
+      onDone()
+    } catch (e) {
+      alert('Error al asignar: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir a un curso</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>
+          A: <strong>{participante.nombre}</strong> {participante.id_empleado && `(${participante.id_empleado})`}
+        </p>
+
+        <label style={labelStyle}>Curso programado</label>
+        {cursos.length === 0 ? (
+          <p style={{ color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>No hay cursos en Próximos cursos. Crea uno primero en Convocatorias.</p>
+        ) : (
+          <select value={proximoId} onChange={e => setProximoId(e.target.value)} style={inputStyle}>
+            <option value="">— Selecciona un curso programado —</option>
+            {cursos.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.numero_certificado ? `N° ${c.numero_certificado} · ` : ''}{c.curso_nombre} — {new Date(c.fecha).toLocaleDateString('es-MX')}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {proximo && (
+          <div style={{ background: '#f9f0f0', borderRadius: 10, padding: '12px 14px', marginTop: 12 }}>
+            <div style={{ fontSize: 13, color: '#8B1A1A', fontWeight: 700 }}>{proximo.numero_certificado ? `Curso N° ${proximo.numero_certificado}` : 'Curso'}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>📅 {new Date(proximo.fecha).toLocaleDateString('es-MX')} · 🕐 {proximo.hora || '—'} · 🎥 Zoom</div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          <button onClick={guardar} disabled={saving || !proximoId} style={btnPrimary}>{saving ? 'Inscribiendo...' : 'Inscribir'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModalAsignarCursoVIEJO({ participante, cursos, onClose, onDone }) {
   const [cursoId, setCursoId] = useState('')
   const [fecha, setFecha] = useState('')
   const [hora, setHora] = useState('10:00')
@@ -363,7 +468,6 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
     setSaving(true)
     try {
       const empresaId = participante.empresa_id || participante.registrado_por_empresa || null
-      // 1. Crear la asignación
       await supabase.from('asignaciones').insert({
         empresa_id: empresaId,
         empleado_id: participante.id,
@@ -372,22 +476,8 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
         modalidad_asignacion: 'zoom', fecha_programada: fecha,
         estado: 'asignado', notas: 'Asignado manualmente por admin'
       })
-      // 2. Dar acceso al examen
       await supabase.from('participantes').update({ acceso_examen: true }).eq('id', participante.id)
-      // 3. Registrar en cursos confirmados (calendario)
-      try {
-        await supabase.from('cursos_confirmados').insert({
-          curso_id: curso.id, curso_nombre: curso.nombre,
-          empresa_id: empresaId,
-          empresa_nombre: participante.empresa?.nombre || (empresaId ? 'Empresa' : 'Individual'),
-          participante_id: participante.id, participante_nombre: participante.nombre,
-          fecha_inicio: fecha, hora, num_participantes: 1,
-          origen: 'programado_admin', modalidad: 'zoom', estado: 'confirmado',
-          notas: 'Asignación manual desde Participantes'
-        })
-      } catch (_) {}
-
-      alert(`✅ Curso "${curso.nombre}" asignado a ${participante.nombre} para el ${new Date(fecha).toLocaleDateString('es-MX')}.`)
+      alert('asignado')
       onDone()
     } catch (e) {
       alert('Error al asignar: ' + (e.message || ''))

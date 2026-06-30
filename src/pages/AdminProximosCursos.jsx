@@ -23,14 +23,15 @@ export default function AdminProximosCursos() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: prox }, { data: curs }, { data: insc }] = await Promise.all([
-      supabase.from('proximos_cursos').select('*').order('fecha', { ascending: true }),
-      supabase.from('cursos').select('id, nombre, temario, duracion').eq('activo', true),
-      supabase.from('inscripciones').select('*').order('created_at', { ascending: false })
-    ])
+    // Cargar cada cosa por separado para que un fallo no rompa todo
+    const { data: prox } = await supabase.from('proximos_cursos').select('*').order('fecha', { ascending: true })
     setProximos(prox || [])
+    const { data: curs } = await supabase.from('cursos').select('id, nombre, temario, duracion').eq('activo', true)
     setCursos(curs || [])
-    setInscripciones(insc || [])
+    try {
+      const { data: insc } = await supabase.from('inscripciones').select('*').order('created_at', { ascending: false })
+      setInscripciones(insc || [])
+    } catch (_) { setInscripciones([]) }
     setLoading(false)
   }
 
