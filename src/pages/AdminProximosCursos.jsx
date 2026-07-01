@@ -12,8 +12,11 @@ export default function AdminProximosCursos() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00',
-    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos'
+    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos',
+    tipo_curso: 'hcd', // 'hcd' (abierto) o 'empresa'
+    empresa_id: '', empresa_nueva_nombre: '', empresa_nueva_correo: '', empresa_nueva_contacto: ''
   })
+  const [empresas, setEmpresas] = useState([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -32,6 +35,10 @@ export default function AdminProximosCursos() {
       const { data: insc } = await supabase.from('inscripciones').select('*').order('created_at', { ascending: false })
       setInscripciones(insc || [])
     } catch (_) { setInscripciones([]) }
+    try {
+      const { data: emp } = await supabase.from('empresas').select('id, nombre').order('nombre')
+      setEmpresas(emp || [])
+    } catch (_) { setEmpresas([]) }
     setLoading(false)
   }
 
@@ -68,8 +75,47 @@ export default function AdminProximosCursos() {
 
   async function guardar() {
     if (!form.curso_nombre || !form.fecha) return
+    // Validar empresa si es curso de empresa
+    if (form.tipo_curso === 'empresa' && !form.empresa_id && !form.empresa_nueva_nombre) {
+      alert('Selecciona una empresa o escribe el nombre de la nueva empresa'); return
+    }
     setSaving(true)
     try {
+      let empresaId = form.empresa_id || null
+      let empresaNombre = null
+
+      // Si es curso de empresa y se escribió una nueva, crear el perfil
+      if (form.tipo_curso === 'empresa') {
+        if (form.empresa_id) {
+          const emp = empresas.find(e => e.id === form.empresa_id)
+          empresaNombre = emp?.nombre
+        } else if (form.empresa_nueva_nombre) {
+          // Crear el perfil de empresa automáticamente
+          const idEmpresa = await generarIdEmpresa()
+          const password = Math.random().toString(36).substring(2, 8).toUpperCase()
+          const { data: nuevaEmp, error: errEmp } = await supabase.from('empresas').insert({
+            id_empresa: idEmpresa,
+            nombre: form.empresa_nueva_nombre,
+            correo: form.empresa_nueva_correo || null,
+            contacto: form.empresa_nueva_contacto || null,
+            portal_password: password,
+            activo: true
+          }).select().single()
+          if (errEmp) { alert('No se pudo crear la empresa: ' + errEmp.message); setSaving(false); return }
+          empresaId = nuevaEmp.id
+          empresaNombre = nuevaEmp.nombre
+          // Notificar
+          try {
+            await supabase.from('notificaciones').insert({
+              tipo: 'empresa', titulo: 'Empresa creada manualmente',
+              mensaje: `Se creó el perfil de ${form.empresa_nueva_nombre} (${idEmpresa}). Contraseña de portal: ${password}`,
+              link: '/admin/empresas'
+            })
+          } catch (_) {}
+          alert(`✅ Perfil de empresa creado:\nID: ${idEmpresa}\nContraseña de portal: ${password}\n\nGuarda estos datos para dárselos a la empresa.`)
+        }
+      }
+
       // Generar número de certificado consecutivo (empieza en 499, nunca se reutiliza)
       const numeroCert = await generarNumeroCertificado()
       await supabase.from('proximos_cursos').insert({
@@ -88,11 +134,31 @@ export default function AdminProximosCursos() {
         cupo_ocupado: 0,
         link_zoom: form.link_zoom,
         notas: form.notas,
-        estado: 'abierto'
+        estado: 'abierto',
+        tipo_curso: form.tipo_curso,
+        empresa_id: empresaId,
+        empresa_nombre: empresaNombre
       })
       await cargar()
       setModal(false)
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
     } finally { setSaving(false) }
+  }
+
+  // Genera ID de empresa sin duplicados
+  async function generarIdEmpresa() {
+    try {
+      const { data } = await supabase.rpc('siguiente_id', { p_prefijo: 'EMP', p_tabla: 'empresas', p_columna: 'id_empresa' })
+      if (data) return data
+    } catch (_) {}
+    const { data: existentes } = await supabase.from('empresas').select('id_empresa').not('id_empresa', 'is', null)
+    let maxNum = 0
+    ;(existentes || []).forEach(e => {
+      const m = (e.id_empresa || '').match(/EMP-(\d+)/)
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `EMP-${String(maxNum + 1).padStart(4, '0')}`
   }
 
   async function cambiarEstado(id, estado) {
@@ -240,6 +306,47 @@ export default function AdminProximosCursos() {
         <div style={overlay} onClick={() => setModal(false)}>
           <div style={{ ...modalStyle, maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 20 }}>Programar próximo curso</h3>
+
+            {/* Tipo de curso */}
+            <label style={lbl}>¿De quién es este curso?</label>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+              {[['hcd', '🌐 Curso de HCD', 'Abierto, cualquiera se inscribe'], ['empresa', '🏢 Curso de empresa', 'Para una empresa específica']].map(([v, l, d]) => (
+                <button key={v} type="button" onClick={() => f('tipo_curso')(v)}
+                  style={{ flex: 1, padding: '12px', border: `2px solid ${form.tipo_curso === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 10, background: form.tipo_curso === v ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: form.tipo_curso === v ? '#8B1A1A' : '#475569' }}>{l}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{d}</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Datos de empresa si es curso de empresa */}
+            {form.tipo_curso === 'empresa' && (
+              <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 10, padding: '14px 16px', marginBottom: 8 }}>
+                <label style={{ ...lbl, marginTop: 0 }}>Empresa existente</label>
+                <select value={form.empresa_id} onChange={e => f('empresa_id')(e.target.value)} style={inp}>
+                  <option value="">— Selecciona si ya existe —</option>
+                  {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                </select>
+                {!form.empresa_id && (
+                  <>
+                    <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 12, margin: '10px 0' }}>— o crea una nueva —</div>
+                    <label style={lbl}>Nombre de la empresa nueva</label>
+                    <input value={form.empresa_nueva_nombre} onChange={e => f('empresa_nueva_nombre')(e.target.value)} placeholder="ej. Industrias del Norte SA" style={inp} />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={lbl}>Correo (opcional)</label>
+                        <input value={form.empresa_nueva_correo} onChange={e => f('empresa_nueva_correo')(e.target.value)} placeholder="correo@empresa.com" style={inp} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <label style={lbl}>Contacto (opcional)</label>
+                        <input value={form.empresa_nueva_contacto} onChange={e => f('empresa_nueva_contacto')(e.target.value)} placeholder="Nombre del contacto" style={inp} />
+                      </div>
+                    </div>
+                    <p style={{ color: '#991b1b', fontSize: 11, marginTop: 6 }}>Se creará el perfil con su ID (EMP-xxxx) y contraseña de portal automáticamente.</p>
+                  </>
+                )}
+              </div>
+            )}
 
             <label style={lbl}>Curso del catálogo</label>
             <select value={form.curso_id} onChange={e => seleccionarCurso(e.target.value)} style={inp}>

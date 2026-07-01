@@ -12,6 +12,7 @@ export default function AdminCursosConfirmados() {
   const [mesActual, setMesActual] = useState(new Date())
   const [detalle, setDetalle] = useState(null)
   const [modalProgramar, setModalProgramar] = useState(false)
+  const [modalEditarDias, setModalEditarDias] = useState(null)
   const [cursos, setCursos] = useState([])
   const [empresas, setEmpresas] = useState([])
   const [participantes, setParticipantes] = useState([])
@@ -308,16 +309,22 @@ export default function AdminCursosConfirmados() {
             {/* Días del curso */}
             {(() => {
               const dias = diasCurso.filter(d => d.curso_confirmado_id === detalle.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
-              if (dias.length <= 1) return null
               return (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
-                  <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>🗓️ DÍAS DEL CURSO ({dias.length})</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700 }}>🗓️ DÍAS DEL CURSO ({dias.length || 1})</div>
+                    <button onClick={() => setModalEditarDias(detalle)} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ Editar días</button>
+                  </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {dias.map(d => (
+                    {dias.length > 0 ? dias.map(d => (
                       <span key={d.id} style={{ background: '#fff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
                         {new Date(d.fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
                       </span>
-                    ))}
+                    )) : (
+                      <span style={{ background: '#fff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                        {new Date(detalle.fecha_inicio + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })} (día único)
+                      </span>
+                    )}
                   </div>
                 </div>
               )
@@ -387,6 +394,15 @@ export default function AdminCursosConfirmados() {
           cursos={cursos} empresas={empresas} participantes={participantes}
           onClose={() => setModalProgramar(false)}
           onDone={() => { setModalProgramar(false); cargar() }}
+        />
+      )}
+
+      {modalEditarDias && (
+        <ModalEditarDias
+          curso={modalEditarDias}
+          diasActuales={diasCurso.filter(d => d.curso_confirmado_id === modalEditarDias.id)}
+          onClose={() => setModalEditarDias(null)}
+          onDone={() => { setModalEditarDias(null); setDetalle(null); cargar() }}
         />
       )}
     </div>
@@ -633,6 +649,97 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
           <button onClick={guardar} disabled={saving} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
             {saving ? 'Programando...' : 'Programar curso'}
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: editar los días de un curso existente ─────────────
+function ModalEditarDias({ curso, diasActuales, onClose, onDone }) {
+  const inicial = diasActuales.length > 0
+    ? diasActuales.map(d => d.fecha).sort()
+    : (curso.fecha_inicio ? [curso.fecha_inicio] : [])
+  const [dias, setDias] = useState(inicial)
+  const [nuevoDia, setNuevoDia] = useState('')
+  const [hora, setHora] = useState(curso.hora || '10:00')
+  const [saving, setSaving] = useState(false)
+
+  function agregar() {
+    if (!nuevoDia) return
+    if (dias.includes(nuevoDia)) { alert('Ese día ya está'); return }
+    setDias(d => [...d, nuevoDia].sort())
+    setNuevoDia('')
+  }
+  function quitar(d) {
+    if (dias.length === 1) { alert('Debe quedar al menos un día'); return }
+    setDias(arr => arr.filter(x => x !== d))
+  }
+
+  async function guardar() {
+    if (dias.length === 0) { alert('Agrega al menos un día'); return }
+    setSaving(true)
+    try {
+      const fechaInicio = dias[0]
+      const fechaFin = dias[dias.length - 1]
+
+      // 1. Borrar los días anteriores y volver a crearlos
+      await supabase.from('dias_curso').delete().eq('curso_confirmado_id', curso.id)
+      const diasRows = dias.map(d => ({
+        curso_confirmado_id: curso.id,
+        curso_nombre: curso.curso_nombre,
+        fecha: d, hora
+      }))
+      await supabase.from('dias_curso').insert(diasRows)
+
+      // 2. Actualizar el curso confirmado (inicio, fin, num días)
+      await supabase.from('cursos_confirmados').update({
+        fecha_inicio: fechaInicio, fecha_fin: fechaFin,
+        num_dias: dias.length,
+        tipo_fechas: dias.length > 1 ? 'multiple' : 'continuo'
+      }).eq('id', curso.id)
+
+      // 3. Actualizar las asignaciones (inicio y fin que ve la empresa)
+      await supabase.from('asignaciones').update({ fecha_programada: fechaInicio, fecha_fin: fechaFin })
+        .eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
+
+      alert(`✅ Días actualizados: ${dias.length} día(s), del ${new Date(fechaInicio).toLocaleDateString('es-MX')} al ${new Date(fechaFin).toLocaleDateString('es-MX')}.`)
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Editar días del curso</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>{curso.curso_nombre}</p>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Agregar día</label>
+            <input type="date" value={nuevoDia} onChange={e => setNuevoDia(e.target.value)} style={inp} />
+          </div>
+          <div style={{ width: 100 }}>
+            <label style={lbl}>Hora</label>
+            <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={inp} />
+          </div>
+          <button type="button" onClick={agregar} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', height: 40 }}>+ Día</button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+          {dias.map(d => (
+            <span key={d} style={{ background: '#eff6ff', color: '#1d4ed8', borderRadius: 20, padding: '5px 12px', fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+              <button type="button" onClick={() => quitar(d)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 15, padding: 0 }}>×</button>
+            </span>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Guardar días'}</button>
         </div>
       </div>
     </div>
