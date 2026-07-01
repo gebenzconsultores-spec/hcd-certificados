@@ -150,14 +150,14 @@ export function EmpresaDashboard() {
               ))}
             </div>
 
-            <BannerConvocatoria onIr={() => setTab('proximos')} />
+            <BannerConvocatoria empresa={empresa} onIr={() => setTab('proximos')} />
 
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} />}
             {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
-            {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} />}
+            {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
           </>
         )}
       </div>
@@ -166,7 +166,7 @@ export function EmpresaDashboard() {
 }
 
 // ─── TAB RESUMEN ──────────────────────────────────────────────
-function BannerConvocatoria({ onIr }) {
+function BannerConvocatoria({ empresa, onIr }) {
   const [convocatorias, setConvocatorias] = useState([])
   const [idx, setIdx] = useState(0)
 
@@ -215,9 +215,16 @@ function BannerConvocatoria({ onIr }) {
         </p>
         {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
       </div>
-      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        Inscribir empleados →
-      </button>
+      {convocatoria.tipo_costo === 'sin_costo' ? (
+        <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          Inscribir empleados →
+        </button>
+      ) : (
+        <a href={`/cotizar?curso=${convocatoria.curso_id || ''}&empresa=${empresa?.id || ''}&convocatoria=${convocatoria.id}`} target="_blank"
+          style={{ background: '#fff', color: '#8B1A1A', textDecoration: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
+          Cotizar e inscribir →
+        </a>
+      )}
       {/* Indicadores del carrusel */}
       {convocatorias.length > 1 && (
         <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
@@ -974,8 +981,8 @@ function ModalProgramar({ empresa, curso, onClose }) {
 }
 
 // Modal asignar con ID de compra
-function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
-  const [idCompra, setIdCompra] = useState('')
+function ModalCompra({ empresa, curso, empleados, onClose, onDone, idPrecargado }) {
+  const [idCompra, setIdCompra] = useState(idPrecargado || '')
   const [validado, setValidado] = useState(false)
   const [compraData, setCompraData] = useState(null)
   const [error, setError] = useState('')
@@ -988,6 +995,11 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone }) {
   const fechaCurso = compraData?.fecha_curso
   const fechaPasada = fechaCurso && new Date(fechaCurso) < new Date(new Date().toDateString())
   const cupoLleno = yaInscritos.length >= limite && seleccionados.length >= limite
+
+  // Si viene con ID precargado, validar automáticamente al abrir
+  useEffect(() => {
+    if (idPrecargado) validar()
+  }, [])
 
   async function validar() {
     if (!idCompra) return
@@ -1227,10 +1239,21 @@ function TabAsignaciones({ asignaciones, empleados }) {
 }
 
 // ─── TAB COTIZACIONES (empresa) ───────────────────────────────
-function TabCotizaciones({ empresa }) {
+function TabCotizaciones({ empresa, empleados, recargar }) {
   const [cotizaciones, setCotizaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [subiendo, setSubiendo] = useState(null)
+  const [modalInscribir, setModalInscribir] = useState(null)
+
+  function onInscribir(cot) {
+    // Abrir el modal de compra precargado con el ID de compra y el curso
+    setModalInscribir({
+      id: cot.curso_id,
+      nombre: cot.curso_nombre,
+      _idCompra: cot.id_compra_generado,
+      _numPersonas: cot.num_personas
+    })
+  }
 
   useEffect(() => { cargar() }, [])
 
@@ -1463,21 +1486,36 @@ function TabCotizaciones({ empresa }) {
                   <div style={{ marginTop: 16, background: '#f9f0f0', border: '2px dashed #8B1A1A', borderRadius: 10, padding: '16px 18px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <div>
-                        <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>TU ID DE COMPRA (uso único)</div>
-                        <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{cot.id_compra_generado}</div>
+                        <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>TU ID DE COMPRA</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{cot.id_compra_generado}</div>
+                          <button onClick={() => { navigator.clipboard?.writeText(cot.id_compra_generado); alert('ID copiado: ' + cot.id_compra_generado) }}
+                            style={{ background: '#fff', border: '1px solid #8B1A1A', color: '#8B1A1A', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>📋 Copiar</button>
+                        </div>
                       </div>
                       <div style={{ flex: 1, minWidth: 200 }}>
                         <p style={{ color: '#7c2d2d', fontSize: 12, lineHeight: 1.5 }}>
-                          📋 <strong>Siguiente paso:</strong> ve a la pestaña <strong>"Cursos"</strong>, busca <strong>{cot.curso_nombre}</strong>, haz clic en "Ya pagué — Asignar con ID de compra", ingresa este ID y selecciona los <strong>{cot.num_personas} empleado(s)</strong> que asistirán.
+                          Inscribe a los <strong>{cot.num_personas} empleado(s)</strong> que asistirán a <strong>{cot.curso_nombre}</strong>.
                         </p>
                       </div>
                     </div>
+                    <button onClick={() => onInscribir(cot)}
+                      style={{ width: '100%', marginTop: 12, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      👥 Inscribir empleados con este ID
+                    </button>
                   </div>
                 )}
               </div>
             )
           })}
         </div>
+      )}
+
+      {modalInscribir && (
+        <ModalCompra empresa={empresa} curso={modalInscribir} empleados={empleados}
+          idPrecargado={modalInscribir._idCompra}
+          onClose={() => setModalInscribir(null)}
+          onDone={() => { setModalInscribir(null); recargar && recargar() }} />
       )}
     </div>
   )
@@ -1553,9 +1591,16 @@ function TabProximos({ empresa, empleados, recargar }) {
                     Cupo lleno
                   </button>
                 ) : (
-                  <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    {p.tipo_costo === 'sin_costo' ? 'Inscribir empleados (gratis)' : 'Inscribir (con orden de compra)'}
-                  </button>
+                  {p.tipo_costo === 'sin_costo' ? (
+                    <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                      Inscribir empleados (gratis)
+                    </button>
+                  ) : (
+                    <a href={`/cotizar?curso=${p.curso_id || ''}&empresa=${empresa.id}&convocatoria=${p.id}`} target="_blank"
+                      style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', background: '#8B1A1A', color: '#fff', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, boxSizing: 'border-box' }}>
+                      Cotizar e inscribir empleados →
+                    </a>
+                  )}
                 )}
               </div>
             )
