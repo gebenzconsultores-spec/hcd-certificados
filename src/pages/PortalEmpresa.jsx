@@ -155,7 +155,7 @@ export function EmpresaDashboard() {
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
-            {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} />}
+            {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} empresa={empresa} recargar={() => cargar(empresa)} />}
             {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
           </>
@@ -481,10 +481,13 @@ function TabEmpleados({ empresa, empleados, recargar }) {
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.puesto || '—'}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{e.correo}</td>
                   <td style={{ padding: '11px 16px' }}>
-                    <button onClick={() => setModalEstatus({ empleado: e, cursos })}
-                      style={{ background: resumen === 'Ninguno' ? '#f1f5f9' : '#f0fdf4', color: resumen === 'Ninguno' ? '#94a3b8' : '#059669', border: `1px solid ${resumen === 'Ninguno' ? '#e2e8f0' : '#bbf7d0'}`, borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      {resumen}
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                      <button onClick={() => setModalEstatus({ empleado: e, cursos })}
+                        style={{ background: resumen === 'Ninguno' ? '#f1f5f9' : '#f0fdf4', color: resumen === 'Ninguno' ? '#94a3b8' : '#059669', border: `1px solid ${resumen === 'Ninguno' ? '#e2e8f0' : '#bbf7d0'}`, borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        {resumen}
+                      </button>
+                      {e.acceso_examen && <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Examen habilitado</span>}
+                    </div>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -1184,18 +1187,62 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone, idPrecargado 
 }
 
 // ─── TAB ASIGNACIONES ─────────────────────────────────────────
-function TabAsignaciones({ asignaciones, empleados }) {
+function TabAsignaciones({ asignaciones, empleados, empresa, recargar }) {
+  const [modalCambiar, setModalCambiar] = useState(null)
   // Mapa de empleado_id -> id_empleado (clave)
   const claveEmpleado = {}
   ;(empleados || []).forEach(e => { claveEmpleado[e.id] = e.id_empleado })
+
+  // Quitar a un asignado (pierde acceso al examen, libera lugar)
+  async function quitar(a) {
+    if (!window.confirm(`¿Quitar a "${a.empleado_nombre}" de ${a.curso_nombre}? Perderá el acceso al examen.`)) return
+    try {
+      await supabase.from('asignaciones').delete().eq('id', a.id)
+      if (a.empleado_id) await supabase.from('participantes').update({ acceso_examen: false }).eq('id', a.empleado_id)
+      await recargar()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    }
+  }
+
+  // Reemplazar a un asignado por otro empleado
+  async function reemplazar(asignacion, nuevoEmpleadoId) {
+    const nuevo = empleados.find(e => e.id === nuevoEmpleadoId)
+    if (!nuevo) return
+    try {
+      // 1. Actualizar la asignación con el nuevo empleado
+      await supabase.from('asignaciones').update({
+        empleado_id: nuevo.id, empleado_nombre: nuevo.nombre
+      }).eq('id', asignacion.id)
+      // 2. El nuevo gana acceso, el anterior lo pierde
+      await supabase.from('participantes').update({ acceso_examen: true }).eq('id', nuevo.id)
+      if (asignacion.empleado_id && asignacion.empleado_id !== nuevo.id) {
+        // Verificar si el anterior tiene otras asignaciones antes de quitarle acceso
+        const { data: otras } = await supabase.from('asignaciones').select('id').eq('empleado_id', asignacion.empleado_id).neq('id', asignacion.id)
+        if (!otras || otras.length === 0) {
+          await supabase.from('participantes').update({ acceso_examen: false }).eq('id', asignacion.empleado_id)
+        }
+      }
+      setModalCambiar(null)
+      await recargar()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    }
+  }
+
   return (
     <div>
+      <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+        <p style={{ color: '#1e40af', fontSize: 13 }}>
+          💡 Los empleados asignados a un curso son quienes tienen <strong>derecho al examen</strong>. Puedes cambiar o quitar a alguien con los botones de cada fila.
+        </p>
+      </div>
       <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>{asignaciones.length} asignaciones registradas</p>
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Clave', 'Empleado', 'Curso / Microcurso', 'Tipo', 'Modalidad', 'Fecha', 'Estado'].map(h => (
+              {['Clave', 'Empleado', 'Curso / Microcurso', 'Tipo', 'Fecha', 'Estado', 'Gestionar'].map(h => (
                 <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
@@ -1216,12 +1263,11 @@ function TabAsignaciones({ asignaciones, empleados }) {
                     {a.tipo === 'microcurso' ? 'Microcurso' : 'Curso'}
                   </span>
                 </td>
-                <td style={{ padding: '11px 16px', color: '#475569', fontSize: 12 }}>{a.modalidad_asignacion === 'autogestivo' ? '📱 Autogestivo' : '🎥 Zoom'}</td>
                 <td style={{ padding: '11px 16px', color: '#94a3b8', fontSize: 12 }}>
                   {a.fecha_programada
                     ? (a.fecha_fin && a.fecha_fin !== a.fecha_programada
-                        ? `${new Date(a.fecha_programada).toLocaleDateString('es-MX')} al ${new Date(a.fecha_fin).toLocaleDateString('es-MX')}`
-                        : new Date(a.fecha_programada).toLocaleDateString('es-MX'))
+                        ? `${new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} al ${new Date(a.fecha_fin + 'T00:00:00').toLocaleDateString('es-MX')}`
+                        : new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX'))
                     : '—'}
                 </td>
                 <td style={{ padding: '11px 16px' }}>
@@ -1229,15 +1275,66 @@ function TabAsignaciones({ asignaciones, empleados }) {
                     {a.estado}
                   </span>
                 </td>
+                <td style={{ padding: '11px 16px' }}>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button onClick={() => setModalCambiar(a)} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>🔄 Cambiar</button>
+                    <button onClick={() => quitar(a)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Quitar</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {modalCambiar && (
+        <ModalCambiarAsignado
+          asignacion={modalCambiar}
+          empleados={empleados}
+          asignaciones={asignaciones}
+          onReemplazar={reemplazar}
+          onClose={() => setModalCambiar(null)}
+        />
+      )}
     </div>
   )
 }
 
+// ─── Modal: cambiar el empleado asignado a un curso ───────────
+function ModalCambiarAsignado({ asignacion, empleados, asignaciones, onReemplazar, onClose }) {
+  const [nuevoId, setNuevoId] = useState('')
+  // Empleados ya asignados a ESTE mismo curso (para no duplicar)
+  const yaEnCurso = asignaciones
+    .filter(a => a.curso_nombre === asignacion.curso_nombre && a.fecha_programada === asignacion.fecha_programada)
+    .map(a => a.empleado_id)
+  const disponibles = empleados.filter(e => !yaEnCurso.includes(e.id) || e.id === asignacion.empleado_id)
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={modalStyle} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Cambiar asistente</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
+          Curso: <strong>{asignacion.curso_nombre}</strong><br/>
+          Actual: <strong>{asignacion.empleado_nombre}</strong>
+        </p>
+
+        <label style={lbl}>Reemplazar por</label>
+        <select value={nuevoId} onChange={e => setNuevoId(e.target.value)} style={inp}>
+          <option value="">— Selecciona un empleado —</option>
+          {disponibles.map(e => (
+            <option key={e.id} value={e.id}>{e.nombre}{e.id_empleado ? ` (${e.id_empleado})` : ''}</option>
+          ))}
+        </select>
+        <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>El nuevo empleado tendrá derecho al examen y el anterior lo perderá (si no tiene otros cursos).</p>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
+          <button onClick={onClose} style={btnGhost}>Cancelar</button>
+          <button onClick={() => onReemplazar(asignacion, nuevoId)} disabled={!nuevoId} style={btnPrimary}>Cambiar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 // ─── TAB COTIZACIONES (empresa) ───────────────────────────────
 function TabCotizaciones({ empresa, empleados, recargar }) {
   const [cotizaciones, setCotizaciones] = useState([])

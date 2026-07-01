@@ -4,6 +4,15 @@ import { supabase } from '../lib/supabase'
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
+// Formatea una fecha 'YYYY-MM-DD' sin que se corra un día por zona horaria
+function fmtFechaSegura(fecha, largo = false) {
+  if (!fecha) return '—'
+  const opts = largo
+    ? { weekday: 'long', day: 'numeric', month: 'long' }
+    : { day: 'numeric', month: 'numeric', year: 'numeric' }
+  return new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', opts)
+}
+
 export default function AdminCursosConfirmados() {
   const [confirmados, setConfirmados] = useState([])
   const [diasCurso, setDiasCurso] = useState([])
@@ -105,12 +114,12 @@ export default function AdminCursosConfirmados() {
       try {
         await supabase.from('notificaciones').insert({
           tipo: 'programacion', titulo: 'Curso reprogramado',
-          mensaje: `${curso.curso_nombre} se reprogramó al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}`,
+          mensaje: `${curso.curso_nombre} se reprogramó al ${new Date(nuevaFecha + 'T00:00:00').toLocaleDateString('es-MX')}`,
           link: '/admin/confirmados'
         })
       } catch (_) {}
 
-      alert(`✅ Curso reprogramado al ${new Date(nuevaFecha).toLocaleDateString('es-MX')}. Se actualizó en todos los portales.`)
+      alert(`✅ Curso reprogramado al ${new Date(nuevaFecha + 'T00:00:00').toLocaleDateString('es-MX')}. Se actualizó en todos los portales.`)
       setDetalle(null)
       await cargar()
     } catch (e) {
@@ -261,7 +270,7 @@ export default function AdminCursosConfirmados() {
               )}
               {confirmados.map(c => (
                 <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{new Date(c.fecha_inicio).toLocaleDateString('es-MX')}</td>
+                  <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{fmtFechaSegura(c.fecha_inicio)}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.curso_nombre}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.empresa_nombre || c.participante_nombre || '—'}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.num_participantes}</td>
@@ -298,7 +307,7 @@ export default function AdminCursosConfirmados() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
               <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '12px 14px' }}>
                 <div style={{ color: '#64748b', fontSize: 11 }}>Fecha de inicio</div>
-                <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>{new Date(detalle.fecha_inicio).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>{fmtFechaSegura(detalle.fecha_inicio, true)}</div>
               </div>
               <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '12px 14px' }}>
                 <div style={{ color: '#64748b', fontSize: 11 }}>Asistentes</div>
@@ -517,8 +526,8 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
       }
 
       const textoFechas = dias.length === 1
-        ? new Date(fechaInicio).toLocaleDateString('es-MX')
-        : `${dias.length} días (del ${new Date(fechaInicio).toLocaleDateString('es-MX')} al ${new Date(fechaFin).toLocaleDateString('es-MX')})`
+        ? new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')
+        : `${dias.length} días (del ${new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')} al ${new Date(fechaFin + 'T00:00:00').toLocaleDateString('es-MX')})`
       alert(`✅ Curso programado: ${textoFechas} con ${seleccionados.length} alumno(s).`)
       onDone()
     } catch (e) {
@@ -703,7 +712,7 @@ function ModalEditarDias({ curso, diasActuales, onClose, onDone }) {
       await supabase.from('asignaciones').update({ fecha_programada: fechaInicio, fecha_fin: fechaFin })
         .eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
 
-      alert(`✅ Días actualizados: ${dias.length} día(s), del ${new Date(fechaInicio).toLocaleDateString('es-MX')} al ${new Date(fechaFin).toLocaleDateString('es-MX')}.`)
+      alert(`✅ Días actualizados: ${dias.length} día(s), del ${new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')} al ${new Date(fechaFin + 'T00:00:00').toLocaleDateString('es-MX')}.`)
       onDone()
     } catch (e) {
       alert('Error: ' + (e.message || ''))
