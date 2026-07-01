@@ -156,7 +156,7 @@ export default function EstudianteDashboard() {
                     </div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{a.microcurso_titulo || a.curso_nombre}</h3>
                     {a.microcurso?.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{a.microcurso.descripcion}</p>}
-                    {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 10 }}>📅 {new Date(a.fecha_programada).toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
+                    {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 10 }}>📅 {new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
                     {a.microcurso?.link_externo ? (
                       <a href={a.microcurso.link_externo} target="_blank"
                         style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '8px 18px', fontSize: 13, fontWeight: 700 }}>
@@ -393,7 +393,7 @@ function CursosAsignados({ estudiante, certificados }) {
           <div key={a.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
             {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{a.curso_nombre || a.microcurso_titulo}</h3>
-            {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(a.fecha_programada).toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
+            {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
             {!yaHecho && a.curso_id && (
               <a href={`/examen/${a.curso_id}`} target="_blank"
                 style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
@@ -568,7 +568,7 @@ function BannerConvocatoriaEstudiante({ onIr }) {
         <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 12, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>📣 Convocatoria HCD</div>
         <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Hablando con Datos te invita a su siguiente curso</h3>
         <p style={{ color: 'rgba(255,255,255,.92)', fontSize: 14 }}>
-          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
+          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
         </p>
         <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
           {convocatoria.tipo_costo === 'sin_costo' ? '🎁 Sin costo' : '💰 Cupo limitado'}

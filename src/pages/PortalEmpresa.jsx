@@ -41,17 +41,33 @@ export function EmpresaDashboard() {
 
   async function cargar(emp) {
     setLoading(true)
-    const [{ data: emps }, { data: curs }, { data: mc }, { data: asig }, { data: certs }] = await Promise.all([
-      supabase.from('participantes').select('*').eq('registrado_por_empresa', emp.id).order('created_at', { ascending: false }),
+    // Empleados: por registrado_por_empresa O empresa_id (capta ambas formas)
+    let emps = []
+    const e1 = await supabase.from('participantes').select('*').eq('registrado_por_empresa', emp.id)
+    emps = e1.data || []
+    const e2 = await supabase.from('participantes').select('*').eq('empresa_id', emp.id)
+    ;(e2.data || []).forEach(p => { if (!emps.find(x => x.id === p.id)) emps.push(p) })
+
+    const [{ data: curs }, { data: mc }, { data: certs }] = await Promise.all([
       supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).order('numero_curso', { ascending: false }),
       supabase.from('microcursos').select('*').eq('activo', true).order('orden'),
-      supabase.from('asignaciones').select('*').eq('empresa_id', emp.id).order('created_at', { ascending: false }),
       supabase.from('certificados').select('*').eq('empresa_id', emp.id)
     ])
-    setEmpleados(emps || [])
+
+    // Asignaciones: por empresa_id O por empleado (para captar las de empleados de esta empresa)
+    let asig = []
+    const a1 = await supabase.from('asignaciones').select('*').eq('empresa_id', emp.id).order('created_at', { ascending: false })
+    asig = a1.data || []
+    const idsEmp = emps.map(p => p.id)
+    if (idsEmp.length > 0) {
+      const a2 = await supabase.from('asignaciones').select('*').in('empleado_id', idsEmp)
+      ;(a2.data || []).forEach(a => { if (!asig.find(x => x.id === a.id)) asig.push(a) })
+    }
+
+    setEmpleados(emps)
     setCursos(curs || [])
     setMicrocursos(mc || [])
-    setAsignaciones(asig || [])
+    setAsignaciones(asig)
     setCertificados(certs || [])
     setLoading(false)
   }
@@ -208,7 +224,7 @@ function BannerConvocatoria({ empresa, onIr }) {
           Hablando con Datos te invita a su siguiente curso
         </h3>
         <p style={{ color: 'rgba(255,255,255,.92)', fontSize: 14 }}>
-          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
+          <strong>{convocatoria.curso_nombre}</strong> · 📅 {new Date(convocatoria.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{convocatoria.hora ? ` · ${convocatoria.hora}` : ''} · vía Zoom
         </p>
         <p style={{ color: 'rgba(255,255,255,.85)', fontSize: 13, marginTop: 4 }}>
           {convocatoria.tipo_costo === 'sin_costo' ? '🎁 Sin costo — inscribe a tus empleados' : '💰 Inscribe a tus empleados'}
@@ -1543,7 +1559,7 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
                     <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>
                       {cot.num_personas} empleado(s) solicitado(s) · Total: <strong style={{ color: '#8B1A1A' }}>${cot.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</strong>
                     </p>
-                    {cot.fecha_deseada && <p style={{ color: '#1d4ed8', fontSize: 12, marginTop: 4 }}>📅 Fecha deseada: {new Date(cot.fecha_deseada).toLocaleDateString('es-MX')}</p>}
+                    {cot.fecha_deseada && <p style={{ color: '#1d4ed8', fontSize: 12, marginTop: 4 }}>📅 Fecha deseada: {new Date(cot.fecha_deseada + 'T00:00:00').toLocaleDateString('es-MX')}</p>}
                     <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
