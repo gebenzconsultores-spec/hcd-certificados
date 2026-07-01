@@ -375,6 +375,15 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
       const empresaId = participante.empresa_id || participante.registrado_por_empresa || null
       const esEmpresa = !!empresaId
 
+      // 0. VALIDAR que no esté ya inscrito en este curso (evitar duplicados)
+      const { data: yaAsig } = await supabase.from('asignaciones')
+        .select('id').eq('empleado_id', participante.id).eq('curso_nombre', proximo.curso_nombre)
+      if (yaAsig && yaAsig.length > 0) {
+        alert(`${participante.nombre} ya está inscrito en "${proximo.curso_nombre}".`)
+        setSaving(false)
+        return
+      }
+
       // 1. Inscribir en la convocatoria (tabla inscripciones)
       await supabase.from('inscripciones').insert({
         proximo_curso_id: proximo.id,

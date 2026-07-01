@@ -1205,9 +1205,21 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone, idPrecargado 
 // ─── TAB ASIGNACIONES ─────────────────────────────────────────
 function TabAsignaciones({ asignaciones, empleados, empresa, recargar }) {
   const [modalCambiar, setModalCambiar] = useState(null)
+  const [modalGrupo, setModalGrupo] = useState(null)
   // Mapa de empleado_id -> id_empleado (clave)
   const claveEmpleado = {}
   ;(empleados || []).forEach(e => { claveEmpleado[e.id] = e.id_empleado })
+
+  // Agrupar asignaciones por curso+id_compra para el botón "Gestionar grupo"
+  const gruposConId = {}
+  ;(asignaciones || []).forEach(a => {
+    if (a.id_compra) {
+      const key = a.id_compra
+      if (!gruposConId[key]) gruposConId[key] = { id_compra: a.id_compra, curso_id: a.curso_id, curso_nombre: a.curso_nombre, count: 0 }
+      gruposConId[key].count++
+    }
+  })
+  const grupos = Object.values(gruposConId)
 
   // Quitar a un asignado (pierde acceso al examen, libera lugar)
   async function quitar(a) {
@@ -1253,6 +1265,28 @@ function TabAsignaciones({ asignaciones, empleados, empresa, recargar }) {
           💡 Los empleados asignados a un curso son quienes tienen <strong>derecho al examen</strong>. Puedes cambiar o quitar a alguien con los botones de cada fila.
         </p>
       </div>
+
+      {/* Grupos con ID de compra: gestionar (agregar/quitar hasta el cupo) */}
+      {grupos.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>🎫 Grupos de curso (con ID de compra)</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {grupos.map(g => (
+              <div key={g.id_compra} style={{ background: '#f9f0f0', border: '1px solid #f0d0d0', borderRadius: 10, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{g.curso_nombre}</div>
+                  <div style={{ fontSize: 12, color: '#8B1A1A' }}>ID: <strong>{g.id_compra}</strong> · {g.count} inscrito(s)</div>
+                </div>
+                <button onClick={() => setModalGrupo({ id: g.curso_id, nombre: g.curso_nombre, _idCompra: g.id_compra })}
+                  style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  👥 Gestionar grupo
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>{asignaciones.length} asignaciones registradas</p>
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1302,6 +1336,13 @@ function TabAsignaciones({ asignaciones, empleados, empresa, recargar }) {
           </tbody>
         </table>
       </div>
+
+      {modalGrupo && (
+        <ModalCompra empresa={empresa} curso={modalGrupo} empleados={empleados}
+          idPrecargado={modalGrupo._idCompra}
+          onClose={() => setModalGrupo(null)}
+          onDone={() => { setModalGrupo(null); recargar && recargar() }} />
+      )}
 
       {modalCambiar && (
         <ModalCambiarAsignado

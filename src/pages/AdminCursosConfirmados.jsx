@@ -486,6 +486,24 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
       const fechaInicio = dias[0]
       const fechaFin = dias[dias.length - 1]
 
+      // Generar ID de compra si es curso de empresa (para que pueda gestionarlo en su portal)
+      let idCompra = null
+      if (tipo === 'empresa' && empresaId) {
+        idCompra = await generarIdCompraManual()
+        await supabase.from('compras').insert({
+          id_compra: idCompra,
+          empresa_id: empresaId,
+          empresa_nombre: empresa?.nombre,
+          curso_id: curso.id,
+          curso_nombre: curso.nombre,
+          num_personas: seleccionados.length,
+          estado: 'activo',
+          fecha_curso: fechaInicio,
+          tipo_comprador: 'empresa',
+          monto: 0
+        })
+      }
+
       // 1. Crear el curso confirmado (con inicio, fin, tipo y num de días)
       const { data: confirmado } = await supabase.from('cursos_confirmados').insert({
         curso_id: curso.id, curso_nombre: curso.nombre,
@@ -494,7 +512,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         fecha_inicio: fechaInicio, fecha_fin: fechaFin, hora,
         num_participantes: seleccionados.length,
         tipo_fechas: tipoFechas, num_dias: dias.length,
-        origen: 'programado_admin',
+        origen: 'programado_admin', id_compra: idCompra,
         modalidad: 'zoom', estado: 'confirmado',
         notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
       }).select().single()
@@ -509,30 +527,48 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         await supabase.from('dias_curso').insert(diasRows)
       }
 
-      // 3. Crear asignaciones para cada alumno + dar acceso al examen
-      const rows = seleccionados.map(pid => {
+      // 3. Crear asignaciones para cada alumno + dar acceso al examen (SIN duplicar)
+      for (const pid of seleccionados) {
         const p = participantes.find(x => x.id === pid)
-        return {
-          empresa_id: p?.empresa_id || p?.registrado_por_empresa || null,
+        // Evitar duplicado: revisar si ya está en este curso
+        const { data: ya } = await supabase.from('asignaciones')
+          .select('id').eq('empleado_id', pid).eq('curso_nombre', curso.nombre).eq('fecha_programada', fechaInicio)
+        if (ya && ya.length > 0) continue
+        await supabase.from('asignaciones').insert({
+          empresa_id: tipo === 'empresa' ? empresaId : (p?.empresa_id || p?.registrado_por_empresa || null),
           empleado_id: pid, empleado_nombre: p?.nombre,
           curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
           modalidad_asignacion: 'zoom', fecha_programada: fechaInicio, fecha_fin: fechaFin,
+          id_compra: idCompra,
           estado: 'asignado', notas: 'Inscrito manualmente por admin'
-        }
-      })
-      await supabase.from('asignaciones').insert(rows)
-      for (const pid of seleccionados) {
+        })
         await supabase.from('participantes').update({ acceso_examen: true }).eq('id', pid)
       }
 
       const textoFechas = dias.length === 1
         ? new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')
         : `${dias.length} días (del ${new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')} al ${new Date(fechaFin + 'T00:00:00').toLocaleDateString('es-MX')})`
-      alert(`✅ Curso programado: ${textoFechas} con ${seleccionados.length} alumno(s).`)
+      const msgId = idCompra ? `\n\n🎫 ID de compra generado: ${idCompra}\nLa empresa puede usarlo en su portal para gestionar (agregar/quitar) empleados.` : ''
+      alert(`✅ Curso programado: ${textoFechas} con ${seleccionados.length} alumno(s).${msgId}`)
       onDone()
     } catch (e) {
       alert('Error: ' + (e.message || ''))
     } finally { setSaving(false) }
+  }
+
+  // Genera ID de compra sin duplicados
+  async function generarIdCompraManual() {
+    try {
+      const { data } = await supabase.rpc('siguiente_id', { p_prefijo: 'COMPRA', p_tabla: 'compras', p_columna: 'id_compra' })
+      if (data) return data
+    } catch (_) {}
+    const { data: existentes } = await supabase.from('compras').select('id_compra').not('id_compra', 'is', null)
+    let maxNum = 0
+    ;(existentes || []).forEach(e => {
+      const m = (e.id_compra || '').match(/COMPRA-(\d+)/)
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `COMPRA-${String(maxNum + 1).padStart(4, '0')}`
   }
 
   return (

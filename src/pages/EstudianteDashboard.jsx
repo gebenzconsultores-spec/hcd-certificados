@@ -26,16 +26,29 @@ export default function EstudianteDashboard() {
 
   async function cargar(est) {
     setLoading(true)
-    const [{ data: certs }, { data: res }, { data: cursos }, { data: asig }] = await Promise.all([
-      supabase.from('certificados').select('*, curso:cursos(nombre, aval_institucion, nombre_aval)').eq('participante_id', est.id).order('created_at', { ascending: false }),
-      supabase.from('resultados_examen').select('*, curso:cursos(nombre, numero_curso)').eq('participante_id', est.id).order('created_at', { ascending: false }),
-      supabase.from('cursos').select('*').eq('activo', true).order('numero_curso', { ascending: false }),
-      supabase.from('asignaciones').select('*, microcurso:microcursos(titulo, descripcion, link_externo, duracion_min)').eq('empleado_id', est.id).order('created_at', { ascending: false })
-    ])
-    setCertificados(certs || [])
-    setResultados(res || [])
-    setCursosDisponibles(cursos || [])
-    setAsignaciones(asig || [])
+    // Cargar cada cosa por separado para que un join roto no vacíe todo
+    try {
+      const { data: certs } = await supabase.from('certificados').select('*, curso:cursos(nombre, aval_institucion, nombre_aval)').eq('participante_id', est.id).order('created_at', { ascending: false })
+      setCertificados(certs || [])
+    } catch (_) {
+      const { data: certs } = await supabase.from('certificados').select('*').eq('participante_id', est.id)
+      setCertificados(certs || [])
+    }
+    try {
+      const { data: res } = await supabase.from('resultados_examen').select('*, curso:cursos(nombre, numero_curso)').eq('participante_id', est.id).order('created_at', { ascending: false })
+      setResultados(res || [])
+    } catch (_) { setResultados([]) }
+    try {
+      const { data: cursos } = await supabase.from('cursos').select('*').eq('activo', true).order('numero_curso', { ascending: false })
+      setCursosDisponibles(cursos || [])
+    } catch (_) { setCursosDisponibles([]) }
+    // Asignaciones SIN join primero (más confiable), luego enriquece con microcurso
+    let asig = []
+    try {
+      const r = await supabase.from('asignaciones').select('*').eq('empleado_id', est.id).order('created_at', { ascending: false })
+      asig = r.data || []
+    } catch (_) { asig = [] }
+    setAsignaciones(asig)
     setLoading(false)
   }
 
