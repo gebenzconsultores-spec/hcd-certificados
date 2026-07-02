@@ -15,6 +15,7 @@ const NAV = [
   { to: '/admin/auditoria', label: 'Auditoría / ZIP', icon: '📦' },
   { sep: 'Comercial' },
   { to: '/admin/empresas', label: 'Empresas', icon: '🏢' },
+  { to: '/admin/vendedores', label: 'Vendedores', icon: '🤝' },
   { to: '/admin/precios', label: 'Precios y catálogo', icon: '🏷️' },
   { to: '/admin/cotizaciones', label: 'Cotizaciones', icon: '💼' },
   { to: '/admin/cotizador-config', label: 'Config. cotizador', icon: '⚙️' },
