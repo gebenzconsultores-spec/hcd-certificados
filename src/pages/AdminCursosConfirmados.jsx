@@ -155,10 +155,27 @@ export default function AdminCursosConfirmados() {
   }
 
   async function eliminar(curso) {
-    if (!window.confirm('¿Eliminar este curso confirmado del calendario?')) return
-    await supabase.from('cursos_confirmados').delete().eq('id', curso.id)
-    setDetalle(null)
-    await cargar()
+    if (!window.confirm('¿Eliminar este curso del calendario? Se quitará también de los empleados inscritos y de sus portales.')) return
+    try {
+      // 1. Borrar las asignaciones de este curso (para que desaparezca de empresa/estudiante)
+      // Por id_compra si lo tiene, o por curso+fecha
+      if (curso.id_compra) {
+        await supabase.from('asignaciones').delete().eq('id_compra', curso.id_compra)
+      } else {
+        await supabase.from('asignaciones').delete().eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
+      }
+      // 2. Borrar inscripciones relacionadas
+      await supabase.from('inscripciones').delete().eq('curso_nombre', curso.curso_nombre)
+      // 3. Borrar los días del curso
+      await supabase.from('dias_curso').delete().eq('curso_confirmado_id', curso.id)
+      // 4. Borrar el curso confirmado
+      await supabase.from('cursos_confirmados').delete().eq('id', curso.id)
+      setDetalle(null)
+      await cargar()
+      alert('✅ Curso eliminado. Ya no aparece en los portales de los empleados.')
+    } catch (e) {
+      alert('Error al eliminar: ' + (e.message || ''))
+    }
   }
 
   // Calendario

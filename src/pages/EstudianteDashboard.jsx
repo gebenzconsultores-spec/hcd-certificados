@@ -148,20 +148,22 @@ export default function EstudianteDashboard() {
           ))}
         </div>
 
-        {/* TAB MICROCURSOS ASIGNADOS */}
-        {tab === 'asignados' && (
+        {/* TAB MICROCURSOS ASIGNADOS (solo tipo microcurso) */}
+        {tab === 'asignados' && (() => {
+          const micros = asignaciones.filter(a => a.tipo === 'microcurso' || a.microcurso_titulo)
+          return (
           <div>
-            {asignaciones.length === 0 ? (
+            {micros.length === 0 ? (
               <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-                Tu empresa aún no te ha asignado microcursos. ¡Pronto verás aquí tus capacitaciones!
+                Aún no tienes microcursos asignados.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>
-                {asignaciones.map(a => (
+                {micros.map(a => (
                   <div key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                       <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
-                        {a.modalidad_asignacion === 'autogestivo' ? '📱 Autogestivo' : '🎥 Zoom'}
+                        {a.modalidad_asignacion === 'autogestivo' ? '📱 Autogestivo' : '⚡ Microcurso'}
                       </span>
                       <span style={{ background: a.estado === 'completado' ? '#f0fdf4' : '#fef9c3', color: a.estado === 'completado' ? '#059669' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
                         {a.estado}
@@ -169,23 +171,21 @@ export default function EstudianteDashboard() {
                     </div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{a.microcurso_titulo || a.curso_nombre}</h3>
                     {a.microcurso?.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{a.microcurso.descripcion}</p>}
-                    {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 10 }}>📅 {new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
                     {a.microcurso?.link_externo ? (
                       <a href={a.microcurso.link_externo} target="_blank"
                         style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '8px 18px', fontSize: 13, fontWeight: 700 }}>
                         Tomar microcurso →
                       </a>
-                    ) : a.tipo === 'microcurso' ? (
-                      <span style={{ color: '#f59e0b', fontSize: 12 }}>Enlace próximamente disponible</span>
                     ) : (
-                      <span style={{ color: '#64748b', fontSize: 12 }}>Curso programado por tu empresa</span>
+                      <span style={{ color: '#f59e0b', fontSize: 12 }}>Enlace próximamente disponible</span>
                     )}
                   </div>
                 ))}
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
 
         {/* TAB CERTIFICADOS */}
         {tab === 'certificados' && (
@@ -391,7 +391,14 @@ const estInp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, pa
 function CursosAsignados({ estudiante, certificados }) {
   const [asignaciones, setAsignaciones] = useState([])
   useEffect(() => {
-    supabase.from('asignaciones').select('*').eq('empleado_id', estudiante.id).then(({ data }) => setAsignaciones(data || []))
+    supabase.from('asignaciones').select('*').eq('empleado_id', estudiante.id).then(({ data }) => {
+      // Solo cursos (no microcursos) y que no estén dados de baja/cancelados
+      const soloCursos = (data || []).filter(a =>
+        a.tipo !== 'microcurso' && !a.microcurso_titulo &&
+        a.estado !== 'baja' && a.estado !== 'cancelado'
+      )
+      setAsignaciones(soloCursos)
+    })
   }, [])
 
   if (asignaciones.length === 0) {
@@ -401,11 +408,11 @@ function CursosAsignados({ estudiante, certificados }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: 14 }}>
       {asignaciones.map(a => {
-        const yaHecho = certificados.some(cert => cert.nombre_curso === (a.curso_nombre || a.microcurso_titulo)) || a.estado === 'completado'
+        const yaHecho = certificados.some(cert => cert.nombre_curso === a.curso_nombre) || a.estado === 'completado'
         return (
           <div key={a.id} style={{ background: '#fff', border: `1px solid ${yaHecho ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '18px 20px' }}>
             {yaHecho && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>✓ Completado</span>}
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{a.curso_nombre || a.microcurso_titulo}</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{a.curso_nombre}</h3>
             {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
             {!yaHecho && a.curso_id && (
               <a href={`/examen/${a.curso_id}`} target="_blank"
