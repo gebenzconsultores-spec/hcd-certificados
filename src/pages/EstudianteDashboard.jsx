@@ -134,7 +134,7 @@ export default function EstudianteDashboard() {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20 }}>
           {[
-            { id: 'asignados', label: '⚡ Mis microcursos' },
+            { id: 'asignados', label: '⚡ Microcredenciales' },
             { id: 'certificados', label: '📜 Mis certificados' },
             { id: 'examenes', label: '📊 Mis exámenes' },
             { id: 'cursos', label: '🎓 Mis cursos' },
@@ -155,7 +155,7 @@ export default function EstudianteDashboard() {
           <div>
             {micros.length === 0 ? (
               <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
-                Aún no tienes microcursos asignados.
+                Aún no tienes microcredenciales asignadas.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 14 }}>

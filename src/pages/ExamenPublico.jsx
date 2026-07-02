@@ -3,11 +3,11 @@ import { useParams } from 'react-router-dom'
 import { supabase, getExamenPorCurso, guardarResultadoExamen, crearParticipante, crearCertificado, siguienteConsecutivo } from '../lib/supabase'
 import { generarYAbrirCertificado } from '../lib/certificado'
 
-const MINIMO = 0.6
+const MINIMO = 0.7 // 70% mínimo aprobatorio
 
 export default function ExamenPublico() {
   const { cursoId } = useParams()
-  const [fase, setFase] = useState('registro') // registro | examen | resultado
+  const [fase, setFase] = useState('registro') // registro | examen | resultado | bloqueado
   const [curso, setCurso] = useState(null)
   const [preguntas, setPreguntas] = useState([])
   const [participante, setParticipante] = useState({ nombre: '', correo: '', whatsapp: '', empresa: '', es_universitario: false, universidad: '', carrera: '' })
@@ -15,6 +15,9 @@ export default function ExamenPublico() {
   const [resultado, setResultado] = useState(null)
   const [loading, setLoading] = useState(false)
   const [intento, setIntento] = useState(1)
+  // Alumno reconocido (viene de su portal con sesión activa)
+  const [alumno, setAlumno] = useState(null)
+  const [mensajeBloqueo, setMensajeBloqueo] = useState('')
 
   const p = k => v => setParticipante(prev => ({ ...prev, [k]: v }))
 
@@ -24,11 +27,48 @@ export default function ExamenPublico() {
       setCurso(data)
       const pregs = await getExamenPorCurso(cursoId)
       setPreguntas(pregs)
+
+      // ¿Viene un alumno con sesión activa desde su portal?
+      let sesion = null
+      try { sesion = JSON.parse(sessionStorage.getItem('estudiante_portal') || 'null') } catch (_) {}
+
+      if (sesion && sesion.id) {
+        // Recargar sus datos frescos de la BD (por si cambió el acceso)
+        const { data: alu } = await supabase.from('participantes').select('*').eq('id', sesion.id).maybeSingle()
+        const registro = alu || sesion
+
+        // Validar acceso al examen
+        if (registro.acceso_examen === false) {
+          setMensajeBloqueo('Tu empresa o el administrador aún no te ha habilitado el acceso a este examen. Solicita que te asignen al curso.')
+          setFase('bloqueado')
+          return
+        }
+
+        // Verificar que esté asignado a ESTE curso (asignación viva)
+        const { data: asigs } = await supabase.from('asignaciones')
+          .select('id, estado').eq('empleado_id', registro.id).eq('curso_id', cursoId)
+        const asignado = (asigs || []).some(a => a.estado !== 'baja' && a.estado !== 'cancelado')
+
+        if (!asignado && registro.tipo !== 'individual') {
+          setMensajeBloqueo('No estás asignado a este curso. Pide a tu empresa que te inscriba antes de presentar el examen.')
+          setFase('bloqueado')
+          return
+        }
+
+        // Reconocido y con acceso: precargar datos y saltar registro
+        setAlumno(registro)
+        setParticipante({
+          nombre: registro.nombre || '', correo: registro.correo || '', whatsapp: registro.whatsapp || '',
+          empresa: registro.empresa_manual || '', es_universitario: !!registro.es_universitario,
+          universidad: registro.universidad || '', carrera: registro.carrera || ''
+        })
+        setFase('examen')
+      }
     }
     cargar()
   }, [cursoId])
 
-  async function iniciarExamen() {
+  function iniciarExamen() {
     if (!participante.nombre || !participante.correo || !participante.whatsapp) return
     setFase('examen')
   }
@@ -43,26 +83,33 @@ export default function ExamenPublico() {
     preguntas.forEach(p => {
       if (respuestas[p.id] !== undefined && Number(respuestas[p.id]) === Number(p.respuesta_correcta)) correctas++
     })
-    const calificacion = correctas / preguntas.length
+    const calificacion = preguntas.length > 0 ? correctas / preguntas.length : 0
     const aprobado = calificacion >= MINIMO
 
-    // Buscar o crear participante
+    // Determinar el participante: si es alumno reconocido, usar su id; si no, buscar/crear
     let partId
-    const { data: existing } = await supabase.from('participantes').select('id').eq('correo', participante.correo).maybeSingle()
-    if (existing) {
-      partId = existing.id
+    let empresaIdCert = null
+    if (alumno && alumno.id) {
+      partId = alumno.id
+      empresaIdCert = alumno.empresa_id || alumno.registrado_por_empresa || null
     } else {
-      const nuevo = await crearParticipante({
-        nombre: participante.nombre,
-        correo: participante.correo,
-        whatsapp: participante.whatsapp,
-        empresa_manual: participante.empresa,
-        es_universitario: participante.es_universitario,
-        universidad: participante.universidad || null,
-        carrera: participante.carrera || null,
-        tipo: 'individual'
-      })
-      partId = nuevo.id
+      const { data: existing } = await supabase.from('participantes').select('id, empresa_id, registrado_por_empresa').eq('correo', participante.correo).maybeSingle()
+      if (existing) {
+        partId = existing.id
+        empresaIdCert = existing.empresa_id || existing.registrado_por_empresa || null
+      } else {
+        const nuevo = await crearParticipante({
+          nombre: participante.nombre,
+          correo: participante.correo,
+          whatsapp: participante.whatsapp,
+          empresa_manual: participante.empresa,
+          es_universitario: participante.es_universitario,
+          universidad: participante.universidad || null,
+          carrera: participante.carrera || null,
+          tipo: 'individual'
+        })
+        partId = nuevo.id
+      }
     }
 
     // Guardar resultado
@@ -78,11 +125,13 @@ export default function ExamenPublico() {
     let certData = null
     if (aprobado) {
       const consec = await siguienteConsecutivo()
-      const id_unico = `HCD-${curso.numero_curso}-${consec}`
+      const numCurso = curso.numero_certificado || curso.numero_curso || consec
+      const id_unico = `HCD-${numCurso}-${consec}`
       certData = await crearCertificado({
         id_unico,
         participante_id: partId,
         curso_id: cursoId,
+        empresa_id: empresaIdCert, // liga a la empresa para que aparezca en su portal
         nombre_participante: participante.nombre,
         nombre_curso: curso.nombre,
         lugar: curso.lugar_online || 'Online',
@@ -93,6 +142,11 @@ export default function ExamenPublico() {
         director_nombre: 'Mirna Rosas Delgado',
         fecha_emision: new Date().toISOString(),
       })
+      // Marcar la asignación como completada (si existe)
+      try {
+        await supabase.from('asignaciones').update({ estado: 'completado' })
+          .eq('empleado_id', partId).eq('curso_id', cursoId)
+      } catch (_) {}
     }
 
     setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData })
@@ -119,12 +173,21 @@ export default function ExamenPublico() {
       </div>
 
       <div style={{ maxWidth: 640, margin: '0 auto', padding: '40px 24px' }}>
-        {/* FASE REGISTRO */}
+        {/* FASE BLOQUEADO */}
+        {fase === 'bloqueado' && (
+          <div style={{ background: '#fff', border: '2px solid #f59e0b', borderRadius: 16, padding: '36px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#92400e', marginBottom: 8 }}>Acceso no habilitado</h2>
+            <p style={{ color: '#64748b', fontSize: 15 }}>{mensajeBloqueo}</p>
+          </div>
+        )}
+
+        {/* FASE REGISTRO (solo para individuales sin sesión) */}
         {fase === 'registro' && (
           <div>
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px', marginBottom: 24 }}>
               <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>{curso.nombre}</h1>
-              <p style={{ color: '#64748b', fontSize: 14 }}>Duración: {curso.duracion} horas · Mínimo aprobatorio: 60%</p>
+              <p style={{ color: '#64748b', fontSize: 14 }}>Duración: {curso.duracion} horas · Mínimo aprobatorio: 70%</p>
             </div>
 
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px' }}>
@@ -157,6 +220,11 @@ export default function ExamenPublico() {
         {/* FASE EXAMEN */}
         {fase === 'examen' && (
           <div>
+            {alumno && (
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 16px', marginBottom: 16 }}>
+                <span style={{ color: '#15803d', fontSize: 13 }}>✓ Presentando como <strong>{alumno.nombre}</strong>{alumno.id_empleado ? ` (${alumno.id_empleado})` : ''}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{curso.nombre}</h2>
               <span style={{ color: '#64748b', fontSize: 13 }}>{Object.keys(respuestas).length}/{preguntas.length} respondidas</span>
@@ -202,6 +270,7 @@ export default function ExamenPublico() {
             </h2>
             <p style={{ color: '#64748b', fontSize: 15, marginBottom: 24 }}>
               Obtuviste <strong>{resultado.calificacion}%</strong> — {resultado.correctas} de {resultado.total} respuestas correctas
+              <br /><span style={{ fontSize: 13, color: '#94a3b8' }}>(mínimo para aprobar: 70%)</span>
             </p>
 
             {resultado.aprobado && resultado.cert && (
@@ -214,6 +283,9 @@ export default function ExamenPublico() {
                   style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
                   📜 Descargar mi certificado en PDF
                 </button>
+                {alumno && (alumno.empresa_id || alumno.registrado_por_empresa) && (
+                  <p style={{ color: '#64748b', fontSize: 12 }}>Tu certificado también quedó disponible para tu empresa.</p>
+                )}
               </div>
             )}
 
