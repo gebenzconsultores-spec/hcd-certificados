@@ -5,6 +5,9 @@ export default function Empresas() {
   const [empresas, setEmpresas] = useState([])
   const [vendedores, setVendedores] = useState([])
   const [modal, setModal] = useState(false)
+  const [detalle, setDetalle] = useState(null)
+  const [empleadosEmpresa, setEmpleadosEmpresa] = useState([])
+  const [cargandoEmpleados, setCargandoEmpleados] = useState(false)
   const [filtro, setFiltro] = useState('todas') // 'todas', 'cliente_nuevo', 'cartera'
   const [form, setForm] = useState({
     nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '',
@@ -28,14 +31,29 @@ export default function Empresas() {
     } catch (_) { setVendedores([]) }
   }
 
+  // Al abrir el detalle, cargar los alumnos/empleados de esa empresa
+  async function verDetalle(empresa) {
+    setDetalle(empresa)
+    setCargandoEmpleados(true)
+    setEmpleadosEmpresa([])
+    try {
+      // Empleados por ambos campos (registrado_por_empresa o empresa_id)
+      let emps = []
+      const e1 = await supabase.from('participantes').select('*').eq('registrado_por_empresa', empresa.id)
+      emps = e1.data || []
+      const e2 = await supabase.from('participantes').select('*').eq('empresa_id', empresa.id)
+      ;(e2.data || []).forEach(p => { if (!emps.find(x => x.id === p.id)) emps.push(p) })
+      setEmpleadosEmpresa(emps)
+    } catch (_) { setEmpleadosEmpresa([]) }
+    setCargandoEmpleados(false)
+  }
+
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
   async function guardar() {
     if (!form.nombre) return
     setSaving(true)
     try {
-      // Buscar el vendedor por clave para ligar su id
-      const vend = vendedores.find(v => v.clave === form.clave_vendedor)
       const { error } = await supabase.from('empresas').insert({
         nombre: form.nombre,
         contacto_nombre: form.contacto_nombre,
@@ -83,14 +101,14 @@ export default function Empresas() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Empresa', 'Estatus', 'Vendedor', 'Ciudad', 'Contacto', 'WhatsApp'].map(h => (
+              {['Empresa', 'Estatus', 'Vendedor', 'Ciudad', 'Contacto', 'WhatsApp', ''].map(h => (
                 <th key={h} style={{ padding: '11px 18px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5, fontWeight: 600 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtradas.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay empresas en este filtro</td></tr>
+              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay empresas en este filtro</td></tr>
             )}
             {filtradas.map(e => {
               const nuevo = (e.estatus || 'cliente_nuevo') === 'cliente_nuevo'
@@ -109,12 +127,97 @@ export default function Empresas() {
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.ciudad || '—'}</td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_nombre || '—'}</td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_whatsapp || '—'}</td>
+                  <td style={{ padding: '12px 18px' }}>
+                    <button onClick={() => verDetalle(e)} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>👁 Ver</button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
         </table>
       </div>
+
+      {/* MODAL DETALLE (Ver): información, acceso al portal, alumnos */}
+      {detalle && (
+        <div style={overlayStyle} onClick={() => setDetalle(null)}>
+          <div style={{ ...modalStyle, width: 640 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b' }}>{detalle.nombre}</h3>
+                <span style={{ background: (detalle.estatus || 'cliente_nuevo') === 'cliente_nuevo' ? '#f0fdf4' : '#f1f5f9', color: (detalle.estatus || 'cliente_nuevo') === 'cliente_nuevo' ? '#059669' : '#64748b', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
+                  {(detalle.estatus || 'cliente_nuevo') === 'cliente_nuevo' ? '🟢 Cliente nuevo' : '📁 En cartera'}
+                </span>
+              </div>
+              <button onClick={() => setDetalle(null)} style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {/* Acceso al portal */}
+            <div style={{ background: '#f9f0f0', border: '1px solid #f0d0d0', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+              <div style={{ color: '#8B1A1A', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>🔑 ACCESO AL PORTAL DE EMPRESA</div>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ color: '#94a3b8', fontSize: 11 }}>ID de empresa</div>
+                  <code style={{ color: '#1e293b', fontSize: 15, fontWeight: 700 }}>{detalle.id_empresa || '—'}</code>
+                </div>
+                <div>
+                  <div style={{ color: '#94a3b8', fontSize: 11 }}>Contraseña de portal</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{ color: '#1e293b', fontSize: 15, fontWeight: 700 }}>{detalle.portal_password || '—'}</code>
+                    {detalle.portal_password && (
+                      <button onClick={() => { navigator.clipboard?.writeText(`ID: ${detalle.id_empresa}  Contraseña: ${detalle.portal_password}`); alert('Datos de acceso copiados') }}
+                        style={{ background: '#fff', border: '1px solid #8B1A1A', color: '#8B1A1A', borderRadius: 5, padding: '2px 8px', fontSize: 10, cursor: 'pointer', fontWeight: 600 }}>📋 Copiar</button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 8 }}>La empresa entra en /empresa/acceso con estos datos.</p>
+            </div>
+
+            {/* Información */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <InfoItem label="Vendedor" value={`${detalle.clave_vendedor || 'VEND-GERENCIA'} · ${nombreVendedor(detalle.clave_vendedor)}`} />
+              <InfoItem label="Ciudad" value={detalle.ciudad || '—'} />
+              <InfoItem label="Contacto" value={detalle.contacto_nombre || '—'} />
+              <InfoItem label="Correo" value={detalle.contacto_email || detalle.correo || '—'} />
+              <InfoItem label="WhatsApp" value={detalle.contacto_whatsapp || '—'} />
+            </div>
+
+            {/* Alumnos */}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>👥 Alumnos / empleados ({empleadosEmpresa.length})</div>
+              {cargandoEmpleados ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, padding: 12 }}>Cargando...</div>
+              ) : empleadosEmpresa.length === 0 ? (
+                <div style={{ color: '#94a3b8', fontSize: 13, padding: 12, background: '#f8f9fb', borderRadius: 8 }}>Esta empresa aún no tiene alumnos registrados.</div>
+              ) : (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#f8f9fb' }}>
+                        {['ID', 'Nombre', 'Correo', 'Examen'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: '#64748b', fontSize: 10, fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {empleadosEmpresa.map(emp => (
+                        <tr key={emp.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px 12px' }}><code style={{ background: '#eff6ff', color: '#1d4ed8', padding: '1px 6px', borderRadius: 3, fontSize: 10 }}>{emp.id_empleado || '—'}</code></td>
+                          <td style={{ padding: '8px 12px', color: '#1e293b', fontSize: 12, fontWeight: 600 }}>{emp.nombre}</td>
+                          <td style={{ padding: '8px 12px', color: '#64748b', fontSize: 12 }}>{emp.correo || '—'}</td>
+                          <td style={{ padding: '8px 12px' }}>
+                            {emp.acceso_examen ? <span style={{ color: '#059669', fontSize: 11, fontWeight: 600 }}>✓ Habilitado</span> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {modal && (
         <div style={overlayStyle} onClick={() => setModal(false)}>
@@ -163,6 +266,15 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
     <div style={{ marginBottom: 14 }}>
       <label style={lbl}>{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inp} />
+    </div>
+  )
+}
+
+function InfoItem({ label, value }) {
+  return (
+    <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ color: '#94a3b8', fontSize: 11 }}>{label}</div>
+      <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
     </div>
   )
 }
