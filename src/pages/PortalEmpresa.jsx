@@ -1744,17 +1744,15 @@ function TabProximos({ empresa, empleados, recargar }) {
                   <button disabled style={{ width: '100%', background: '#f1f5f9', color: '#94a3b8', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}>
                     Cupo lleno
                   </button>
+                ) : p.tipo_costo === 'sin_costo' ? (
+                  <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Inscribir empleados (gratis)
+                  </button>
                 ) : (
-                  {p.tipo_costo === 'sin_costo' ? (
-                    <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                      Inscribir empleados (gratis)
-                    </button>
-                  ) : (
-                    <a href={`/cotizar?curso=${p.curso_id || ''}&empresa=${empresa.id}&convocatoria=${p.id}`} target="_blank"
-                      style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', background: '#8B1A1A', color: '#fff', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, boxSizing: 'border-box' }}>
-                      Cotizar e inscribir empleados →
-                    </a>
-                  )}
+                  <a href={`/cotizar?curso=${p.curso_id || ''}&empresa=${empresa.id}&convocatoria=${p.id}`} target="_blank"
+                    style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', background: '#8B1A1A', color: '#fff', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, boxSizing: 'border-box' }}>
+                    Cotizar e inscribir empleados →
+                  </a>
                 )}
               </div>
             )
