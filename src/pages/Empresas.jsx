@@ -14,6 +14,7 @@ export default function Empresas() {
     estatus: 'cliente_nuevo', clave_vendedor: 'VEND-GERENCIA'
   })
   const [saving, setSaving] = useState(false)
+  const [credencialesNuevas, setCredencialesNuevas] = useState(null)
 
   useEffect(() => { cargar() }, [])
 
@@ -29,6 +30,21 @@ export default function Empresas() {
       const { data: v } = await supabase.from('vendedores').select('clave, nombre').eq('activo', true).order('nombre')
       setVendedores(v || [])
     } catch (_) { setVendedores([]) }
+  }
+
+  // Genera ID de empresa EMP-XXXX sin duplicados
+  async function generarIdEmpresa() {
+    try {
+      const { data } = await supabase.rpc('siguiente_id', { p_prefijo: 'EMP', p_tabla: 'empresas', p_columna: 'id_empresa' })
+      if (data) return data
+    } catch (_) {}
+    const { data: existentes } = await supabase.from('empresas').select('id_empresa').not('id_empresa', 'is', null)
+    let maxNum = 0
+    ;(existentes || []).forEach(e => {
+      const m = (e.id_empresa || '').match(/EMP-(\d+)/)
+      if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+    })
+    return `EMP-${String(maxNum + 1).padStart(4, '0')}`
   }
 
   // Al abrir el detalle, cargar los alumnos/empleados de esa empresa
@@ -54,7 +70,11 @@ export default function Empresas() {
     if (!form.nombre) return
     setSaving(true)
     try {
+      const idEmpresa = await generarIdEmpresa()
+      const password = Math.random().toString(36).substring(2, 8).toUpperCase()
       const { error } = await supabase.from('empresas').insert({
+        id_empresa: idEmpresa,
+        portal_password: password,
         nombre: form.nombre,
         contacto_nombre: form.contacto_nombre,
         contacto_email: form.contacto_email,
@@ -67,6 +87,8 @@ export default function Empresas() {
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
       await cargar()
       setModal(false)
+      // Mostrar las credenciales generadas
+      setCredencialesNuevas({ nombre: form.nombre, id_empresa: idEmpresa, password })
       setForm({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '', estatus: 'cliente_nuevo', clave_vendedor: 'VEND-GERENCIA' })
     } catch (e) { alert('Error: ' + (e.message || '')) } finally { setSaving(false) }
   }
@@ -215,6 +237,34 @@ export default function Empresas() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credenciales generadas al crear empresa */}
+      {credencialesNuevas && (
+        <div style={overlayStyle} onClick={() => setCredencialesNuevas(null)}>
+          <div style={{ ...modalStyle, width: 460 }} onClick={e => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 40 }}>✅</div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>Empresa creada</h3>
+              <p style={{ color: '#64748b', fontSize: 13 }}>{credencialesNuevas.nombre}</p>
+            </div>
+            <div style={{ background: '#f9f0f0', border: '2px dashed #8B1A1A', borderRadius: 12, padding: '18px 20px', marginBottom: 16 }}>
+              <div style={{ color: '#8B1A1A', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>🔑 DATOS DE ACCESO AL PORTAL</div>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ color: '#94a3b8', fontSize: 11 }}>ID de empresa</div>
+                <code style={{ color: '#1e293b', fontSize: 18, fontWeight: 800 }}>{credencialesNuevas.id_empresa}</code>
+              </div>
+              <div>
+                <div style={{ color: '#94a3b8', fontSize: 11 }}>Contraseña</div>
+                <code style={{ color: '#1e293b', fontSize: 18, fontWeight: 800 }}>{credencialesNuevas.password}</code>
+              </div>
+            </div>
+            <p style={{ color: '#991b1b', fontSize: 12, marginBottom: 16 }}>⚠️ Guarda estos datos y dáselos a la empresa. Entra en /empresa/acceso.</p>
+            <button onClick={() => { navigator.clipboard?.writeText(`ID: ${credencialesNuevas.id_empresa}  Contraseña: ${credencialesNuevas.password}`); alert('Copiado') }}
+              style={{ ...btnPrimary, width: '100%', marginBottom: 8 }}>📋 Copiar datos de acceso</button>
+            <button onClick={() => setCredencialesNuevas(null)} style={{ ...btnGhost, width: '100%' }}>Cerrar</button>
           </div>
         </div>
       )}
