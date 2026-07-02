@@ -273,21 +273,36 @@ export default function ExamenPublico() {
               <br /><span style={{ fontSize: 13, color: '#94a3b8' }}>(mínimo para aprobar: 70%)</span>
             </p>
 
-            {resultado.aprobado && resultado.cert && (
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
-                  <div style={{ color: '#15803d', fontSize: 13, marginBottom: 4 }}>Tu ID de certificado</div>
-                  <code style={{ color: '#166534', fontSize: 18, fontWeight: 800 }}>{resultado.cert.id_unico}</code>
+            {resultado.aprobado && (() => {
+              // ¿El alumno es de empresa? Entonces NO descarga; lo gestiona RH
+              const esDeEmpresa = alumno && (alumno.empresa_id || alumno.registrado_por_empresa)
+              if (esDeEmpresa) {
+                return (
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '16px 20px' }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
+                      <p style={{ color: '#1e40af', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Tu certificado quedó registrado</p>
+                      <p style={{ color: '#475569', fontSize: 13 }}>
+                        Solicítalo a través de tu área de <strong>Recursos Humanos</strong>. Ellos pueden descargarlo desde el portal de tu empresa.
+                      </p>
+                    </div>
+                  </div>
+                )
+              }
+              // Individual: sí puede descargar el suyo
+              return resultado.cert ? (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
+                    <div style={{ color: '#15803d', fontSize: 13, marginBottom: 4 }}>Tu ID de certificado</div>
+                    <code style={{ color: '#166534', fontSize: 18, fontWeight: 800 }}>{resultado.cert.id_unico}</code>
+                  </div>
+                  <button onClick={() => generarYAbrirCertificado(resultado.cert)}
+                    style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
+                    📜 Descargar mi certificado en PDF
+                  </button>
                 </div>
-                <button onClick={() => generarYAbrirCertificado(resultado.cert)}
-                  style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
-                  📜 Descargar mi certificado en PDF
-                </button>
-                {alumno && (alumno.empresa_id || alumno.registrado_por_empresa) && (
-                  <p style={{ color: '#64748b', fontSize: 12 }}>Tu certificado también quedó disponible para tu empresa.</p>
-                )}
-              </div>
-            )}
+              ) : null
+            })()}
 
             {!resultado.aprobado && (
               <button onClick={repetir}
