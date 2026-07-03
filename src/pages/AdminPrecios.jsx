@@ -88,28 +88,32 @@ export default function AdminPrecios() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Curso', 'Familia', '1 día', '2 días', 'Grupo', 'Descuento', 'En cotizador', ''].map(h => (
+              {['Clave', 'Curso', 'Familia', '1 día', '2 días', '3 días', 'Grupo', 'Descuento', 'En cotizador', ''].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {cursosFiltrados.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos. Créalos primero en la sección Cursos.</td></tr>
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos. Créalos primero en la sección Cursos.</td></tr>
             )}
             {cursosFiltrados.map(c => {
               const fam = familias.find(x => x.id === c.familia_id)
               return (
                 <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '11px 14px' }}>
-                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{c.nombre}</div>
-                    <div style={{ color: '#94a3b8', fontSize: 11 }}>#{c.numero_curso}</div>
+                    <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>{c.clave_interna || '—'}</code>
                   </td>
                   <td style={{ padding: '11px 14px' }}>
-                    {fam ? <span style={{ background: `${fam.color}15`, color: fam.color, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{fam.nombre}</span> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>Sin familia</span>}
+                    <div style={{ color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{c.nombre}</div>
+                    <div style={{ color: '#94a3b8', fontSize: 11 }}>{c.duracion}h · {c.dias || 1} día{(c.dias || 1) > 1 ? 's' : ''}</div>
+                  </td>
+                  <td style={{ padding: '11px 14px' }}>
+                    {fam ? <span style={{ background: `${fam.color}15`, color: fam.color, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{fam.clave ? `${fam.clave} · ` : ''}{fam.nombre}</span> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>Sin familia</span>}
                   </td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_1dia || 2830).toLocaleString('es-MX')}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_2dias || 5660).toLocaleString('es-MX')}</td>
+                  <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_3dias || 8090).toLocaleString('es-MX')}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>{c.precio_grupo ? `$${c.precio_grupo.toLocaleString('es-MX')}` : '—'}</td>
                   <td style={{ padding: '11px 14px' }}>
                     {c.descuento_activo && c.descuento_porcentaje > 0
@@ -136,7 +140,7 @@ export default function AdminPrecios() {
         <div style={overlay} onClick={() => setEditando(null)}>
           <div style={{ ...modalStyle, width: 560, maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Precios: {editando.nombre}</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Curso #{editando.numero_curso}</p>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>{editando.clave_interna || 'Sin clave'} · {editando.duracion}h · {editando.dias || 1} día{(editando.dias || 1) > 1 ? 's' : ''}</p>
 
             <label style={lbl}>Familia (para el cotizador)</label>
             <select value={form.familia_id} onChange={e => f('familia_id')(e.target.value)} style={inp}>
@@ -148,7 +152,7 @@ export default function AdminPrecios() {
             <textarea value={form.descripcion} onChange={e => f('descripcion')(e.target.value)} rows={2} placeholder="Breve descripción del curso" style={{ ...inp, resize: 'none' }} />
 
             <div style={{ background: '#f8f9fb', borderRadius: 10, padding: 16, marginTop: 16 }}>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, marginBottom: 12 }}>Precios por persona</div>
+              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, marginBottom: 12 }}>Precios por persona <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: 11 }}>(+ IVA)</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
                   <label style={lblSm}>1 día</label>
