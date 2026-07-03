@@ -19,7 +19,7 @@ const PREFIJO_FAMILIA = {
 function diasPorHoras(horas) {
   const h = Number(horas) || 0
   if (h <= 8) return 1
-  if (h < 16) return 2
+  if (h <= 16) return 2
   return 3
 }
 

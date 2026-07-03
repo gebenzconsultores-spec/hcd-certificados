@@ -12,7 +12,7 @@ const DESC_GRUPO = 0.20
 function diasPorHoras(horas) {
   const h = Number(horas) || 8
   if (h <= 8) return 1
-  if (h < 16) return 2
+  if (h <= 16) return 2
   return 3
 }
 
