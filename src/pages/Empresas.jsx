@@ -66,6 +66,25 @@ export default function Empresas() {
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
+  // Restablecer / cambiar la contraseña del portal de una empresa (admin)
+  async function restablecerPassword(empresa) {
+    const nueva = window.prompt(
+      `Contraseña del portal para "${empresa.nombre}".\n\nEscribe una nueva contraseña, o deja vacío y da Aceptar para GENERAR una automática:`,
+      ''
+    )
+    if (nueva === null) return // canceló
+    const password = nueva.trim() || Math.random().toString(36).substring(2, 8).toUpperCase()
+    try {
+      const { error } = await supabase.from('empresas').update({ portal_password: password }).eq('id', empresa.id)
+      if (error) { alert('No se pudo actualizar: ' + error.message); return }
+      await cargar()
+      setDetalle(d => d ? { ...d, portal_password: password } : d)
+      alert(`✅ Contraseña actualizada.\n\nEmpresa: ${empresa.nombre}\nID: ${empresa.id_empresa}\nNueva contraseña: ${password}\n\nGuárdala y compártela con la empresa.`)
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    }
+  }
+
   async function guardar() {
     if (!form.nombre) return
     setSaving(true)
@@ -193,6 +212,10 @@ export default function Empresas() {
                 </div>
               </div>
               <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 8 }}>La empresa entra en /empresa/acceso con estos datos.</p>
+              <button onClick={() => restablecerPassword(detalle)}
+                style={{ marginTop: 10, background: '#fff', border: '1px solid #8B1A1A', color: '#8B1A1A', borderRadius: 7, padding: '7px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>
+                🔄 Restablecer / cambiar contraseña
+              </button>
             </div>
 
             {/* Información */}

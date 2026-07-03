@@ -77,6 +77,28 @@ export function EmpresaDashboard() {
     navigate('/empresa/acceso')
   }
 
+  // La empresa cambia su propia contraseña del portal
+  async function cambiarMiPassword() {
+    const actual = window.prompt('Para cambiar tu contraseña, confirma tu contraseña ACTUAL:')
+    if (actual === null) return
+    if ((actual || '').trim() !== (empresa.portal_password || '')) {
+      alert('La contraseña actual no es correcta.')
+      return
+    }
+    const nueva = window.prompt('Escribe tu NUEVA contraseña (mínimo 4 caracteres):')
+    if (nueva === null) return
+    if ((nueva || '').trim().length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return }
+    try {
+      const { error } = await supabase.from('empresas').update({ portal_password: nueva.trim() }).eq('id', empresa.id)
+      if (error) { alert('No se pudo cambiar: ' + error.message); return }
+      const actualizada = { ...empresa, portal_password: nueva.trim() }
+      sessionStorage.setItem('empresa_portal', JSON.stringify(actualizada))
+      alert('✅ Contraseña actualizada correctamente. Úsala la próxima vez que entres.')
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    }
+  }
+
   if (!empresa) return null
 
   // Si la prueba venció y es invitado → solo cotizador
@@ -103,9 +125,14 @@ export function EmpresaDashboard() {
             <span style={{ color: '#1e293b', fontWeight: 600, fontSize: 14 }}>{empresa.nombre}</span>
             {empresa.id_empresa && <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{empresa.id_empresa}</code>}
           </div>
-          <button onClick={salir} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
-            Cerrar sesión
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={cambiarMiPassword} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#8B1A1A', cursor: 'pointer', fontWeight: 600 }}>
+              🔑 Mi contraseña
+            </button>
+            <button onClick={salir} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </div>
 
