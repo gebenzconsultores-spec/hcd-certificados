@@ -197,8 +197,13 @@ export default function Empresas() {
             {filtradas.map(e => {
               const nuevo = (e.estatus || 'cliente_nuevo') === 'cliente_nuevo'
               return (
-                <tr key={e.id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px 18px', color: '#1e293b', fontWeight: 600 }}>{e.nombre}</td>
+                <tr key={e.id} onClick={() => verDetalle(e)} style={{ borderTop: '1px solid #f1f5f9', cursor: 'pointer' }}
+                  onMouseEnter={ev => ev.currentTarget.style.background = '#f8f9fb'}
+                  onMouseLeave={ev => ev.currentTarget.style.background = '#fff'}>
+                  <td style={{ padding: '12px 18px', color: '#1e293b', fontWeight: 600 }}>
+                    {e.nombre}
+                    <div style={{ fontSize: 11, color: '#1d4ed8', fontWeight: 600, marginTop: 2 }}>👁 Ver dashboard</div>
+                  </td>
                   <td style={{ padding: '12px 18px' }}>
                     <span style={{ background: nuevo ? '#f0fdf4' : '#f1f5f9', color: nuevo ? '#059669' : '#64748b', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                       {nuevo ? '🟢 Cliente nuevo' : '📁 En cartera'}
@@ -212,7 +217,7 @@ export default function Empresas() {
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_nombre || '—'}</td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_whatsapp || '—'}</td>
                   <td style={{ padding: '12px 18px' }}>
-                    <button onClick={() => verDetalle(e)} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '5px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>👁 Ver</button>
+                    <button onClick={(ev) => { ev.stopPropagation(); verDetalle(e) }} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>👁 Ver</button>
                   </td>
                 </tr>
               )
