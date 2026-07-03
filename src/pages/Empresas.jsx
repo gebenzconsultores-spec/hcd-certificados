@@ -47,21 +47,64 @@ export default function Empresas() {
     return `EMP-${String(maxNum + 1).padStart(4, '0')}`
   }
 
-  // Al abrir el detalle, cargar los alumnos/empleados de esa empresa
+  const [cotizacionesEmp, setCotizacionesEmp] = useState([])
+  const [cursosEmp, setCursosEmp] = useState([])
+  const [evaluacionEmp, setEvaluacionEmp] = useState(null)
+
+  // Al abrir el detalle, cargar todo el dashboard de la empresa
   async function verDetalle(empresa) {
     setDetalle(empresa)
     setCargandoEmpleados(true)
-    setEmpleadosEmpresa([])
+    setEmpleadosEmpresa([]); setCotizacionesEmp([]); setCursosEmp([]); setEvaluacionEmp(null)
     try {
-      // Empleados por ambos campos (registrado_por_empresa o empresa_id)
+      // Empleados por ambos campos
       let emps = []
       const e1 = await supabase.from('participantes').select('*').eq('registrado_por_empresa', empresa.id)
       emps = e1.data || []
       const e2 = await supabase.from('participantes').select('*').eq('empresa_id', empresa.id)
       ;(e2.data || []).forEach(p => { if (!emps.find(x => x.id === p.id)) emps.push(p) })
       setEmpleadosEmpresa(emps)
+
+      // Cotizaciones de la empresa (para facturación)
+      try {
+        const { data: cots } = await supabase.from('cotizaciones').select('*').eq('empresa_id', empresa.id)
+        setCotizacionesEmp(cots || [])
+      } catch (_) {}
+
+      // Cursos tomados (asignaciones de sus empleados)
+      try {
+        const ids = emps.map(e => e.id)
+        let asigs = []
+        if (ids.length > 0) {
+          const { data: a } = await supabase.from('asignaciones').select('curso_nombre, estado, tipo').in('empleado_id', ids)
+          asigs = a || []
+        }
+        // Por empresa_id también
+        const { data: a2 } = await supabase.from('asignaciones').select('curso_nombre, estado, tipo').eq('empresa_id', empresa.id)
+        ;(a2 || []).forEach(x => asigs.push(x))
+        setCursosEmp(asigs.filter(a => a.tipo !== 'microcurso' && a.curso_nombre))
+      } catch (_) {}
+
+      // Evaluación de la empresa hacia HCD
+      try {
+        const { data: ev } = await supabase.from('evaluaciones_hcd').select('*').eq('empresa_id', empresa.id).order('created_at', { ascending: false }).limit(1)
+        setEvaluacionEmp(ev && ev[0] ? ev[0] : null)
+      } catch (_) {}
     } catch (_) { setEmpleadosEmpresa([]) }
     setCargandoEmpleados(false)
+  }
+
+  // Cálculos de facturación (solo admin)
+  function facturacion() {
+    const aceptadas = cotizacionesEmp.filter(c => c.estado === 'aceptada')
+    const ahora = new Date()
+    const mes = aceptadas.filter(c => { const d = new Date(c.created_at); return d.getMonth() === ahora.getMonth() && d.getFullYear() === ahora.getFullYear() })
+    const anio = aceptadas.filter(c => new Date(c.created_at).getFullYear() === ahora.getFullYear())
+    const suma = arr => arr.reduce((acc, c) => acc + (c.total || 0), 0)
+    return {
+      mensual: suma(mes), anual: suma(anio),
+      generadas: cotizacionesEmp.length, aceptadas: aceptadas.length
+    }
   }
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
@@ -227,6 +270,73 @@ export default function Empresas() {
               <InfoItem label="WhatsApp" value={detalle.contacto_whatsapp || '—'} />
             </div>
 
+            {/* Métricas */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
+              <Metrica label="Empleados" valor={empleadosEmpresa.length} color="#1d4ed8" />
+              <Metrica label="Cursos tomados" valor={cursosEmp.length} color="#059669" />
+              <Metrica label="Completados" valor={cursosEmp.filter(c => c.estado === 'completado').length} color="#8B1A1A" />
+            </div>
+
+            {/* Facturación (SOLO ADMIN) */}
+            {(() => {
+              const fac = facturacion()
+              return (
+                <div style={{ background: '#1e293b', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+                  <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 700, marginBottom: 10 }}>💰 FACTURACIÓN (solo visible para admin)</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <div style={{ color: '#94a3b8', fontSize: 11 }}>Este mes</div>
+                      <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>${fac.mensual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: '#94a3b8', fontSize: 11 }}>Este año</div>
+                      <div style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>${fac.anual.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+                    </div>
+                  </div>
+                  <div style={{ color: '#64748b', fontSize: 11, marginTop: 8, borderTop: '1px solid #334155', paddingTop: 8 }}>
+                    {fac.generadas} cotización(es) generada(s) · {fac.aceptadas} aceptada(s) con orden de compra
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Evaluación de la empresa hacia HCD */}
+            <div style={{ background: '#fefce8', border: '1px solid #fde047', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+              <div style={{ color: '#92400e', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>⭐ EVALUACIÓN DE LA EMPRESA HACIA HCD</div>
+              {evaluacionEmp ? (
+                <div>
+                  <div style={{ fontSize: 22 }}>{'★'.repeat(evaluacionEmp.calificacion || 0)}{'☆'.repeat(5 - (evaluacionEmp.calificacion || 0))}
+                    <span style={{ fontSize: 13, color: '#92400e', marginLeft: 8 }}>{evaluacionEmp.calificacion}/5</span>
+                  </div>
+                  {evaluacionEmp.sugerencias && (
+                    <div style={{ marginTop: 8, background: '#fff', borderRadius: 8, padding: '10px 12px' }}>
+                      <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600 }}>Sugerencias / mejoras solicitadas:</div>
+                      <div style={{ color: '#374151', fontSize: 13, marginTop: 3 }}>{evaluacionEmp.sugerencias}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ color: '#a16207', fontSize: 13 }}>La empresa aún no ha dejado su evaluación.</div>
+              )}
+            </div>
+
+            {/* Cursos tomados */}
+            {cursosEmp.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>📚 Cursos tomados / comprados</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {[...new Set(cursosEmp.map(c => c.curso_nombre))].map((nom, i) => {
+                    const completado = cursosEmp.some(c => c.curso_nombre === nom && c.estado === 'completado')
+                    return (
+                      <span key={i} style={{ background: completado ? '#f0fdf4' : '#f1f5f9', color: completado ? '#059669' : '#475569', padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
+                        {completado ? '✓ ' : ''}{nom}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Alumnos */}
             <div style={{ marginTop: 8 }}>
               <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>👥 Alumnos / empleados ({empleadosEmpresa.length})</div>
@@ -348,6 +458,15 @@ function InfoItem({ label, value }) {
     <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ color: '#94a3b8', fontSize: 11 }}>{label}</div>
       <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 600, wordBreak: 'break-word' }}>{value}</div>
+    </div>
+  )
+}
+
+function Metrica({ label, valor, color }) {
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+      <div style={{ color, fontSize: 24, fontWeight: 800 }}>{valor}</div>
+      <div style={{ color: '#64748b', fontSize: 11, marginTop: 2 }}>{label}</div>
     </div>
   )
 }
