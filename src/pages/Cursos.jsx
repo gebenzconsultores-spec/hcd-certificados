@@ -15,6 +15,14 @@ const PREFIJO_FAMILIA = {
   'Estadística y Software': 'EST',
 }
 
+// Días según duración en horas: ≤8=1, >8 y <16=2, ≥16=3
+function diasPorHoras(horas) {
+  const h = Number(horas) || 0
+  if (h <= 8) return 1
+  if (h < 16) return 2
+  return 3
+}
+
 export default function Cursos() {
   const [cursos, setCursos] = useState([])
   const [familias, setFamilias] = useState([])
@@ -29,6 +37,9 @@ export default function Cursos() {
   const [form, setForm] = useState({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
+  // Crear nueva familia desde el modal de curso
+  const [nuevaFamilia, setNuevaFamilia] = useState(false)
+  const [nombreNuevaFamilia, setNombreNuevaFamilia] = useState('')
 
   useEffect(() => { cargar() }, [])
 
@@ -61,20 +72,52 @@ export default function Cursos() {
     return `${prefijo}-${String(maxNum + 1).padStart(2, '0')}`
   }
 
+  // Genera clave de familia tipo HCD-001, HCD-002...
+  function siguienteClaveFamilia() {
+    let max = 0
+    familias.forEach(fa => {
+      const m = (fa.clave || '').match(/HCD-(\d+)/)
+      if (m) max = Math.max(max, parseInt(m[1], 10))
+    })
+    return `HCD-${String(max + 1).padStart(3, '0')}`
+  }
+
+  // Crea una familia nueva y devuelve su id
+  async function crearFamilia(nombre) {
+    const clave = siguienteClaveFamilia()
+    const { data, error } = await supabase.from('familias')
+      .insert({ nombre, clave, color: '#64748b', orden: familias.length + 1 })
+      .select().single()
+    if (error) { alert('No se pudo crear la familia: ' + error.message); return null }
+    return data
+  }
+
   async function guardarCurso() {
-    if (!form.nombre || !form.duracion || !form.familia_id) { alert('Completa nombre, duración y familia'); return }
+    if (!form.nombre || !form.duracion) { alert('Completa nombre y duración'); return }
+    // Familia: existente o nueva
+    let familiaId = form.familia_id
+    if (nuevaFamilia) {
+      if (!nombreNuevaFamilia.trim()) { alert('Escribe el nombre de la nueva familia'); return }
+      const fam = await crearFamilia(nombreNuevaFamilia.trim())
+      if (!fam) return
+      familiaId = fam.id
+      await cargar()
+    }
+    if (!familiaId) { alert('Selecciona o crea una familia'); return }
     setSaving(true)
     try {
-      const clave_interna = await generarClaveInterna(form.familia_id)
+      const clave_interna = await generarClaveInterna(familiaId)
       await crearCurso({
         nombre: form.nombre, duracion: Number(form.duracion),
-        familia_id: form.familia_id, clave_interna,
+        dias: diasPorHoras(form.duracion),
+        familia_id: familiaId, clave_interna,
         modalidad: form.modalidad, aval_institucion: form.aval_institucion,
         nombre_aval: form.nombre_aval, activo: true, es_publico: true
       })
       await cargar()
       setModal(false)
       setForm({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+      setNuevaFamilia(false); setNombreNuevaFamilia('')
     } catch (e) {
       alert('No se pudo crear: ' + (e.message || ''))
     } finally { setSaving(false) }
@@ -85,7 +128,11 @@ export default function Cursos() {
     try {
       await supabase.from('cursos').update({
         nombre: modalEditar.nombre, duracion: Number(modalEditar.duracion),
-        familia_id: modalEditar.familia_id
+        dias: diasPorHoras(modalEditar.duracion),
+        familia_id: modalEditar.familia_id,
+        modalidad: modalEditar.modalidad || 'online',
+        aval_institucion: !!modalEditar.aval_institucion,
+        nombre_aval: modalEditar.nombre_aval || null
       }).eq('id', modalEditar.id)
       await cargar()
       setModalEditar(null)
@@ -145,7 +192,7 @@ export default function Cursos() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Catálogo de cursos</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Cursos organizados por familia, con clave interna y exámenes</p>
         </div>
-        {vista === 'cursos' && <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo curso</button>}
+        {vista === 'cursos' && <button onClick={() => setModal(true)} style={btnPrimary}>+ Agregar curso</button>}
       </div>
 
       {/* Sub-pestañas: Cursos / Microcredenciales */}
@@ -165,7 +212,7 @@ export default function Cursos() {
               return (
                 <button key={fam.id} onClick={() => setFamiliaAbierta(fam.id)}
                   style={{ background: activa ? color : '#fff', color: activa ? '#fff' : color, border: `2px solid ${color}`, borderRadius: 10, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  {fam.nombre} ({count})
+                  {fam.clave ? `${fam.clave} · ` : ''}{fam.nombre} ({count})
                 </button>
               )
             })}
@@ -185,7 +232,7 @@ export default function Cursos() {
                       <span style={{ background: `${color}15`, color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
                         🔑 {c.clave_interna || 'Sin clave'}
                       </span>
-                      <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h</span>
+                      <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h · {c.dias || diasPorHoras(c.duracion)} día{(c.dias || diasPorHoras(c.duracion)) > 1 ? 's' : ''}</span>
                     </div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12, lineHeight: 1.3 }}>{c.nombre}</h3>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -221,26 +268,64 @@ export default function Cursos() {
         </div>
       )}
 
-      {/* Modal nuevo curso */}
+      {/* Modal agregar curso */}
       {modal && (
-        <div style={overlay} onClick={() => setModal(false)}>
+        <div style={overlay} onClick={() => { setModal(false); setNuevaFamilia(false); setNombreNuevaFamilia('') }}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={modalTitle}>Nuevo curso</h3>
-            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>La clave interna se genera automáticamente según la familia.</p>
+            <h3 style={modalTitle}>Agregar curso</h3>
+            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>La clave interna y los días se calculan automáticamente.</p>
 
             <Field label="Nombre del curso" value={form.nombre} onChange={f('nombre')} placeholder="ej. ISO 9001:2015 Interpretación" />
 
             <label style={lbl}>Familia</label>
-            <select value={form.familia_id} onChange={e => f('familia_id')(e.target.value)} style={inp}>
-              <option value="">— Selecciona la familia —</option>
-              {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.nombre}</option>)}
-            </select>
+            {!nuevaFamilia ? (
+              <>
+                <select value={form.familia_id} onChange={e => f('familia_id')(e.target.value)} style={inp}>
+                  <option value="">— Selecciona la familia —</option>
+                  {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.clave ? `${fa.clave} · ` : ''}{fa.nombre}</option>)}
+                </select>
+                <button type="button" onClick={() => setNuevaFamilia(true)}
+                  style={{ background: 'none', border: 'none', color: '#1d4ed8', fontSize: 12, cursor: 'pointer', marginTop: 6, padding: 0, fontWeight: 600 }}>
+                  + Agregar nueva familia
+                </button>
+              </>
+            ) : (
+              <>
+                <input value={nombreNuevaFamilia} onChange={e => setNombreNuevaFamilia(e.target.value)}
+                  placeholder="Nombre de la nueva familia" style={inp} />
+                <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Se le asignará la clave {siguienteClaveFamilia()} automáticamente.</p>
+                <button type="button" onClick={() => { setNuevaFamilia(false); setNombreNuevaFamilia('') }}
+                  style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 12, cursor: 'pointer', marginTop: 6, padding: 0 }}>
+                  ← Usar una familia existente
+                </button>
+              </>
+            )}
 
             <Field label="Duración (horas)" value={form.duracion} onChange={f('duracion')} placeholder="ej. 8" type="number" />
+            {form.duracion && (
+              <p style={{ color: '#059669', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
+                📅 Este curso será de <strong>{diasPorHoras(form.duracion)} día{diasPorHoras(form.duracion) > 1 ? 's' : ''}</strong>
+              </p>
+            )}
+
+            <label style={lbl}>Modalidad</label>
+            <select value={form.modalidad} onChange={e => f('modalidad')(e.target.value)} style={inp}>
+              <option value="online">En línea</option>
+              <option value="presencial">Presencial</option>
+              <option value="mixta">Mixta</option>
+            </select>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 14 }}>
+              <input type="checkbox" checked={form.aval_institucion} onChange={e => f('aval_institucion')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+              <span style={{ color: '#374151', fontSize: 13 }}>Tiene aval de institución</span>
+            </label>
+            {form.aval_institucion && (
+              <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} placeholder="ej. STPS, Universidad X" />
+            )}
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button onClick={() => setModal(false)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardarCurso} disabled={saving} style={btnPrimary}>{saving ? 'Creando...' : 'Crear curso'}</button>
+              <button onClick={() => { setModal(false); setNuevaFamilia(false); setNombreNuevaFamilia('') }} style={btnGhost}>Cancelar</button>
+              <button onClick={guardarCurso} disabled={saving} style={btnPrimary}>{saving ? 'Creando...' : 'Agregar curso'}</button>
             </div>
           </div>
         </div>
@@ -251,12 +336,36 @@ export default function Cursos() {
         <div style={overlay} onClick={() => setModalEditar(null)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Editar curso · {modalEditar.clave_interna}</h3>
+
             <Field label="Nombre" value={modalEditar.nombre} onChange={v => setModalEditar(p => ({ ...p, nombre: v }))} />
+
             <label style={lbl}>Familia</label>
             <select value={modalEditar.familia_id || ''} onChange={e => setModalEditar(p => ({ ...p, familia_id: e.target.value }))} style={inp}>
-              {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.nombre}</option>)}
+              {familias.map(fa => <option key={fa.id} value={fa.id}>{fa.clave ? `${fa.clave} · ` : ''}{fa.nombre}</option>)}
             </select>
+
             <Field label="Duración (horas)" value={modalEditar.duracion} onChange={v => setModalEditar(p => ({ ...p, duracion: v }))} type="number" />
+            {modalEditar.duracion && (
+              <p style={{ color: '#059669', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
+                📅 Curso de <strong>{diasPorHoras(modalEditar.duracion)} día{diasPorHoras(modalEditar.duracion) > 1 ? 's' : ''}</strong>
+              </p>
+            )}
+
+            <label style={lbl}>Modalidad</label>
+            <select value={modalEditar.modalidad || 'online'} onChange={e => setModalEditar(p => ({ ...p, modalidad: e.target.value }))} style={inp}>
+              <option value="online">En línea</option>
+              <option value="presencial">Presencial</option>
+              <option value="mixta">Mixta</option>
+            </select>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 14 }}>
+              <input type="checkbox" checked={!!modalEditar.aval_institucion} onChange={e => setModalEditar(p => ({ ...p, aval_institucion: e.target.checked }))} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+              <span style={{ color: '#374151', fontSize: 13 }}>Tiene aval de institución</span>
+            </label>
+            {modalEditar.aval_institucion && (
+              <Field label="Nombre del aval" value={modalEditar.nombre_aval || ''} onChange={v => setModalEditar(p => ({ ...p, nombre_aval: v }))} />
+            )}
+
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
               <button onClick={() => setModalEditar(null)} style={btnGhost}>Cancelar</button>
               <button onClick={guardarEdicion} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar'}</button>
