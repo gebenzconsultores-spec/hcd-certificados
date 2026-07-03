@@ -12,8 +12,14 @@ const DESC_GRUPO = 0.20
 function diasPorHoras(horas) {
   const h = Number(horas) || 8
   if (h <= 8) return 1
-  if (h <= 16) return 2
+  if (h < 16) return 2
   return 3
+}
+
+// Días del curso: usa el campo guardado; si no existe, lo calcula por horas
+function diasDelCurso(curso) {
+  if (curso && curso.dias) return curso.dias
+  return diasPorHoras(curso?.duracion)
 }
 
 // Precio por persona según los días equivalentes del curso
@@ -57,7 +63,7 @@ export default function CotizadorPublico() {
     const empresaId = params.get('empresa')
 
     // Cargar cursos y, si viene ?curso=ID, preseleccionarlo
-    supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).eq('es_publico', true).then(({ data }) => {
+    supabase.from('cursos').select('*, familia:familias(nombre,color,icono,clave)').eq('activo', true).eq('es_publico', true).then(({ data }) => {
       setCursos(data || [])
       if (cursoId && data) {
         const curso = data.find(co => co.id === cursoId)
@@ -118,7 +124,7 @@ export default function CotizadorPublico() {
     if (!cursoSel) return { subtotal: 0, iva_monto: 0, total: 0, comision: 0, precio_base: 0, desc: 0, dias_curso: 1 }
 
     // Días automáticos según las horas del curso (Opción B)
-    const dias_curso = cursoSel.id ? diasPorHoras(cursoSel.duracion) : 1
+    const dias_curso = cursoSel.id ? diasDelCurso(cursoSel) : 1
     let precio_base = 0
     let desc_grupo = 0
 
@@ -345,7 +351,7 @@ export default function CotizadorPublico() {
               {familias.map(fa => (
                 <button key={fa.id} onClick={() => setFamiliaActiva(fa.id)}
                   style={{ padding: '7px 16px', borderRadius: 20, border: `2px solid ${familiaActiva === fa.id ? fa.color : '#e2e8f0'}`, background: familiaActiva === fa.id ? `${fa.color}15` : '#fff', color: familiaActiva === fa.id ? fa.color : '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  {fa.icono} {fa.nombre}
+                  {fa.icono} {fa.clave ? `${fa.clave} · ` : ''}{fa.nombre}
                 </button>
               ))}
             </div>
@@ -359,10 +365,11 @@ export default function CotizadorPublico() {
                   style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ background: `${co.familia?.color || '#8B1A1A'}15`, color: co.familia?.color || '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
-                      {co.familia?.icono} {co.familia?.nombre}
+                      {co.familia?.icono} {co.familia?.clave ? `${co.familia.clave} · ` : ''}{co.familia?.nombre}
                     </span>
-                    <span style={{ color: '#64748b', fontSize: 11 }}>{co.duracion} hrs</span>
+                    <span style={{ color: '#64748b', fontSize: 11 }}>{co.duracion} hrs · {diasDelCurso(co)} día{diasDelCurso(co) > 1 ? 's' : ''}</span>
                   </div>
+                  {co.clave_interna && <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, marginBottom: 4 }}>🔑 {co.clave_interna}</div>}
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
                   {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
                   <div style={{ color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>Desde ${(co.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</div>
