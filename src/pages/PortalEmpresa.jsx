@@ -49,7 +49,7 @@ export function EmpresaDashboard() {
     ;(e2.data || []).forEach(p => { if (!emps.find(x => x.id === p.id)) emps.push(p) })
 
     const [{ data: curs }, { data: mc }, { data: certs }] = await Promise.all([
-      supabase.from('cursos').select('*, familia:familias(nombre,color,icono)').eq('activo', true).order('numero_curso', { ascending: false }),
+      supabase.from('cursos').select('*, familia:familias(nombre,color,icono,clave)').eq('activo', true).order('nombre', { ascending: true }),
       supabase.from('microcursos').select('*').eq('activo', true).order('orden'),
       supabase.from('certificados').select('*').eq('empresa_id', emp.id)
     ])
@@ -750,9 +750,10 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
                 return (
                   <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                      {c.familia?.nombre && <span style={{ background: `${color}15`, color, padding: '2px 10px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{c.familia.nombre}</span>}
-                      <span style={{ color: '#64748b', fontSize: 11 }}>{c.duracion} hrs</span>
+                      {c.familia?.nombre && <span style={{ background: `${color}15`, color, padding: '2px 10px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>{c.familia?.clave ? `${c.familia.clave} · ` : ''}{c.familia.nombre}</span>}
+                      <span style={{ color: '#64748b', fontSize: 11 }}>{c.duracion} hrs · {c.dias || 1} día{(c.dias || 1) > 1 ? 's' : ''}</span>
                     </div>
+                    {c.clave_interna && <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, marginBottom: 4 }}>🔑 {c.clave_interna}</div>}
                     <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{c.nombre}</h4>
                     {c.temario && (
                       <details style={{ marginBottom: 12 }}>
