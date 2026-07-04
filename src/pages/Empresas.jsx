@@ -110,6 +110,32 @@ export default function Empresas() {
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
   // Restablecer / cambiar la contraseña del portal de una empresa (admin)
+  // Marcar/desmarcar exento de pago (cliente negociado)
+  async function toggleExento(empresa) {
+    const nuevo = !empresa.exento_pago
+    try {
+      const { error } = await supabase.from('empresas').update({ exento_pago: nuevo }).eq('id', empresa.id)
+      if (error) { alert('No se pudo actualizar: ' + error.message); return }
+      await cargar()
+      setDetalle(d => d ? { ...d, exento_pago: nuevo } : d)
+    } catch (e) { alert('Error: ' + (e.message || '')) }
+  }
+
+  // Dar de baja la empresa: sus empleados quedan "sin empresa" (reasignables)
+  async function darDeBajaEmpresa(empresa) {
+    if (!window.confirm(`¿Dar de baja a "${empresa.nombre}"?\n\nLa empresa se marcará como dada de baja y sus empleados quedarán SIN EMPRESA (podrás reasignarlos a otra empresa después). Los empleados NO se eliminan.`)) return
+    try {
+      // Empleados quedan sin empresa (empresa_id y registrado_por_empresa en NULL)
+      await supabase.from('participantes').update({ empresa_id: null, registrado_por_empresa: null }).eq('registrado_por_empresa', empresa.id)
+      await supabase.from('participantes').update({ empresa_id: null }).eq('empresa_id', empresa.id)
+      // Marcar la empresa como dada de baja
+      await supabase.from('empresas').update({ dada_de_baja: true, activo: false }).eq('id', empresa.id)
+      await cargar()
+      setDetalle(null)
+      alert('✅ Empresa dada de baja. Sus empleados quedaron sin empresa y puedes reasignarlos.')
+    } catch (e) { alert('Error: ' + (e.message || '')) }
+  }
+
   async function restablecerPassword(empresa) {
     const nueva = window.prompt(
       `Contraseña del portal para "${empresa.nombre}".\n\nEscribe una nueva contraseña, o deja vacío y da Aceptar para GENERAR una automática:`,
@@ -208,6 +234,8 @@ export default function Empresas() {
                     <span style={{ background: nuevo ? '#f0fdf4' : '#f1f5f9', color: nuevo ? '#059669' : '#64748b', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                       {nuevo ? '🟢 Cliente nuevo' : '📁 En cartera'}
                     </span>
+                    {e.exento_pago && <div style={{ marginTop: 3 }}><span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>Exento de pago</span></div>}
+                    {e.dada_de_baja && <div style={{ marginTop: 3 }}><span style={{ background: '#fef2f2', color: '#dc2626', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>Dada de baja</span></div>}
                   </td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>
                     <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>{e.clave_vendedor || 'VEND-GERENCIA'}</code>
@@ -304,6 +332,28 @@ export default function Empresas() {
                 </div>
               )
             })()}
+
+            {/* Exento de pago + gestión (solo admin) */}
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+              <div style={{ color: '#1e40af', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>⚙️ GESTIÓN (solo admin)</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 12 }}>
+                <input type="checkbox" checked={!!detalle.exento_pago} onChange={() => toggleExento(detalle)} style={{ accentColor: '#1d4ed8', width: 18, height: 18 }} />
+                <div>
+                  <div style={{ color: '#1e293b', fontSize: 13, fontWeight: 600 }}>Exento de pago</div>
+                  <div style={{ color: '#64748b', fontSize: 11 }}>Cliente negociado: usa la plataforma sin cobro de renta ni bloqueo por prueba.</div>
+                </div>
+              </label>
+              {detalle.exento_pago && (
+                <div style={{ background: '#f0fdf4', color: '#059669', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+                  ✓ Esta empresa está exenta de pago
+                </div>
+              )}
+              <button onClick={() => darDeBajaEmpresa(detalle)}
+                style={{ width: '100%', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                🗑 Dar de baja esta empresa
+              </button>
+              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>Los empleados quedarán sin empresa (reasignables), no se eliminan.</p>
+            </div>
 
             {/* Evaluación de la empresa hacia HCD */}
             <div style={{ background: '#fefce8', border: '1px solid #fde047', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>

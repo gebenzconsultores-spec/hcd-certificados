@@ -115,7 +115,7 @@ export function EmpresaDashboard() {
   }
 
   // Si la prueba venció y es invitado → solo cotizador
-  const soloLectura = pruebaVencida && empresa.tipo_acceso === 'invitado'
+  const soloLectura = pruebaVencida && empresa.tipo_acceso === 'invitado' && !empresa.exento_pago
 
   const TABS = [
     { id: 'resumen', label: '📊 Resumen' },
@@ -155,7 +155,7 @@ export function EmpresaDashboard() {
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px' }}>
 
         {/* Banner de prueba */}
-        {empresa.tipo_acceso === 'invitado' && diasRestantes !== null && (
+        {empresa.tipo_acceso === 'invitado' && diasRestantes !== null && !empresa.exento_pago && (
           <div style={{
             background: pruebaVencida ? '#fef2f2' : diasRestantes <= 7 ? '#fef9c3' : '#eff6ff',
             border: `1px solid ${pruebaVencida ? '#fecaca' : diasRestantes <= 7 ? '#fde047' : '#bfdbfe'}`,
