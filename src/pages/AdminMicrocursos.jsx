@@ -58,7 +58,7 @@ export default function AdminMicrocursos() {
   }
 
   async function eliminar(id) {
-    if (!window.confirm('¿Eliminar este microcurso?')) return
+    if (!window.confirm('¿Eliminar esta microcredencial?')) return
     await supabase.from('microcursos').delete().eq('id', id)
     await cargar()
   }
@@ -78,10 +78,10 @@ export default function AdminMicrocursos() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Microcursos</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Microcredenciales</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Cápsulas de 20 min que las empresas asignan a sus empleados</p>
         </div>
-        <button onClick={abrirNuevo} style={btnPrimary}>+ Nuevo microcurso</button>
+        <button onClick={abrirNuevo} style={btnPrimary}>+ Nueva microcredencial</button>
       </div>
 
       {/* Tabs */}
@@ -136,7 +136,7 @@ export default function AdminMicrocursos() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f8f9fb' }}>
-                {['Empresa', 'Microcurso', 'Empleados asignados', 'Sesión Zoom', 'Estado', 'Fecha', 'Acción'].map(h => (
+                {['Empresa', 'Microcredencial', 'Empleados asignados', 'Sesión Zoom', 'Estado', 'Fecha', 'Acción'].map(h => (
                   <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
                 ))}
               </tr>
@@ -192,11 +192,11 @@ export default function AdminMicrocursos() {
       {modal && (
         <div style={overlay} onClick={() => setModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 20 }}>{editando ? 'Editar' : 'Nuevo'} microcurso</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 20 }}>{editando ? 'Editar' : 'Nueva'} microcredencial</h3>
             <label style={lbl}>Título *</label>
             <input value={form.titulo} onChange={e => f('titulo')(e.target.value)} placeholder="ej. Principios de Calidad" style={inp} />
             <label style={lbl}>Descripción</label>
-            <textarea value={form.descripcion} onChange={e => f('descripcion')(e.target.value)} rows={2} placeholder="Breve descripción del microcurso" style={{ ...inp, resize: 'none' }} />
+            <textarea value={form.descripcion} onChange={e => f('descripcion')(e.target.value)} rows={2} placeholder="Breve descripción de la microcredencial" style={{ ...inp, resize: 'none' }} />
             <label style={lbl}>Duración (minutos)</label>
             <input type="number" value={form.duracion_min} onChange={e => f('duracion_min')(Number(e.target.value))} style={inp} />
             <label style={lbl}>Link del microcampus (donde está el curso)</label>

@@ -8,7 +8,6 @@ const NAV = [
   { to: '/admin', label: 'Dashboard', icon: '◉', end: true },
   { sep: 'Capacitación' },
   { to: '/admin/cursos', label: 'Catálogo de cursos', icon: '📚' },
-  { to: '/admin/proximos', label: 'Próximos cursos', icon: '📆' },
   { to: '/admin/confirmados', label: 'Calendario de cursos', icon: '📅' },
   { to: '/admin/participantes', label: 'Participantes', icon: '👥' },
   { to: '/admin/certificados', label: 'Certificados', icon: '📜' },
