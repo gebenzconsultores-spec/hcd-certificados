@@ -122,6 +122,56 @@ export default function Empresas() {
   }
 
   // Dar de baja la empresa: sus empleados quedan "sin empresa" (reasignables)
+  // Eliminar por completo: borra empresa y TODOS sus registros
+  async function eliminarPorCompleto(empresa) {
+    // Protección: no eliminar si tiene cotizaciones aceptadas (ventas)
+    const aceptadas = cotizacionesEmp.filter(c => c.estado === 'aceptada')
+    if (aceptadas.length > 0) {
+      alert(`⛔ No se puede eliminar "${empresa.nombre}" por completo.\n\nTiene ${aceptadas.length} cotización(es) aceptada(s) con facturación registrada. Para conservar el historial de ventas, primero dale de baja.`)
+      return
+    }
+    // Doble confirmación: escribir el nombre
+    const escrito = window.prompt(`⚠️ ELIMINACIÓN PERMANENTE E IRREVERSIBLE\n\nEsto borrará la empresa "${empresa.nombre}" y TODOS sus registros: empleados, asignaciones, certificados, cotizaciones, compras y evaluación.\n\nPara confirmar, escribe el nombre exacto de la empresa:`)
+    if (escrito === null) return
+    if (escrito.trim() !== empresa.nombre.trim()) {
+      alert('El nombre no coincide. No se eliminó nada.')
+      return
+    }
+    try {
+      // IDs de empleados de la empresa
+      let emps = []
+      const e1 = await supabase.from('participantes').select('id').eq('registrado_por_empresa', empresa.id)
+      emps = (e1.data || []).map(x => x.id)
+      const e2 = await supabase.from('participantes').select('id').eq('empresa_id', empresa.id)
+      ;(e2.data || []).forEach(x => { if (!emps.includes(x.id)) emps.push(x.id) })
+
+      // Borrar registros dependientes de esos empleados
+      if (emps.length > 0) {
+        await supabase.from('certificados').delete().in('participante_id', emps)
+        await supabase.from('resultados_examen').delete().in('participante_id', emps)
+        await supabase.from('asignaciones').delete().in('empleado_id', emps)
+      }
+      // Borrar registros ligados a la empresa
+      await supabase.from('certificados').delete().eq('empresa_id', empresa.id)
+      await supabase.from('asignaciones').delete().eq('empresa_id', empresa.id)
+      await supabase.from('inscripciones').delete().eq('empresa_id', empresa.id)
+      await supabase.from('cotizaciones').delete().eq('empresa_id', empresa.id)
+      await supabase.from('compras').delete().eq('empresa_id', empresa.id)
+      await supabase.from('evaluaciones_hcd').delete().eq('empresa_id', empresa.id)
+      // Borrar empleados
+      await supabase.from('participantes').delete().eq('registrado_por_empresa', empresa.id)
+      await supabase.from('participantes').delete().eq('empresa_id', empresa.id)
+      // Borrar la empresa
+      await supabase.from('empresas').delete().eq('id', empresa.id)
+
+      await cargar()
+      setDetalle(null)
+      alert(`✅ Empresa "${empresa.nombre}" y todos sus registros fueron eliminados permanentemente.`)
+    } catch (e) {
+      alert('Error al eliminar: ' + (e.message || '') + '\n\nAlgunos registros pueden no haberse borrado. Revisa e intenta de nuevo.')
+    }
+  }
+
   async function darDeBajaEmpresa(empresa) {
     if (!window.confirm(`¿Dar de baja a "${empresa.nombre}"?\n\nLa empresa se marcará como dada de baja y sus empleados quedarán SIN EMPRESA (podrás reasignarlos a otra empresa después). Los empleados NO se eliminan.`)) return
     try {
@@ -352,7 +402,13 @@ export default function Empresas() {
                 style={{ width: '100%', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '9px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 🗑 Dar de baja esta empresa
               </button>
-              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>Los empleados quedarán sin empresa (reasignables), no se eliminan.</p>
+              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>Los empleados quedarán sin empresa (reasignables), no se eliminan. El registro de la empresa se conserva.</p>
+
+              <button onClick={() => eliminarPorCompleto(detalle)}
+                style={{ width: '100%', marginTop: 12, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                ⚠️ Eliminar por completo (borra todos los registros)
+              </button>
+              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>Borra la empresa, empleados, asignaciones, certificados, cotizaciones y evaluación. Permanente e irreversible. No disponible si tiene ventas registradas.</p>
             </div>
 
             {/* Evaluación de la empresa hacia HCD */}
