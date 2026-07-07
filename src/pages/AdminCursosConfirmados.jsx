@@ -173,9 +173,15 @@ export default function AdminCursosConfirmados() {
       await supabase.from('dias_curso').delete().eq('curso_confirmado_id', curso.id)
       // 4. Borrar el curso confirmado
       await supabase.from('cursos_confirmados').delete().eq('id', curso.id)
+      // 5. Borrar la convocatoria ligada en proximos_cursos (casa por curso + fecha)
+      let qConv = supabase.from('proximos_cursos').delete()
+        .eq('curso_nombre', curso.curso_nombre)
+        .eq('fecha', curso.fecha_inicio)
+      if (curso.empresa_id) qConv = qConv.eq('empresa_id', curso.empresa_id)
+      await qConv
       setDetalle(null)
       await cargar()
-      alert('✅ Curso eliminado. Ya no aparece en los portales de los empleados.')
+      alert('✅ Curso eliminado del calendario y del cintillo. Ya no aparece en los portales.')
     } catch (e) {
       alert('Error al eliminar: ' + (e.message || ''))
     }
