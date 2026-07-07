@@ -228,6 +228,38 @@ export function EmpresaDashboard() {
           </>
         )}
       </div>
+
+      {/* Modal evaluar HCD */}
+      {modalEval && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={() => setModalEval(false)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxWidth: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>⭐ Evalúa a Hablando con Datos</h3>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Tu opinión nos ayuda a mejorar la plataforma y el servicio.</p>
+
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>¿Cómo calificas nuestro servicio?</label>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} onClick={() => setEvalStars(n)}
+                  style={{ background: 'none', border: 'none', fontSize: 34, cursor: 'pointer', color: n <= evalStars ? '#f59e0b' : '#e2e8f0' }}>
+                  ★
+                </button>
+              ))}
+              <span style={{ alignSelf: 'center', marginLeft: 8, color: '#64748b', fontSize: 14 }}>{evalStars}/5</span>
+            </div>
+
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>¿Qué mejoras o nuevas funcionalidades te gustaría?</label>
+            <textarea value={evalTexto} onChange={e => setEvalTexto(e.target.value)} rows={4}
+              placeholder="Cuéntanos qué podríamos agregar o mejorar..."
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1e293b' }} />
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button onClick={() => setModalEval(false)} style={{ background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={async () => { const ok = await enviarEvaluacion(evalStars, evalTexto); if (ok) { setModalEval(false); setEvalTexto('') } }}
+                style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Enviar evaluación</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -855,38 +887,6 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
       {/* Modales */}
       {modalAsignar && <ModalAsignar empresa={empresa} item={modalAsignar.item} tipo={modalAsignar.tipo} empleados={empleados} onClose={() => setModalAsignar(null)} onDone={() => { setModalAsignar(null); recargar() }} />}
       {modalCompra && <ModalCompra empresa={empresa} curso={modalCompra} empleados={empleados} onClose={() => setModalCompra(null)} onDone={() => { setModalCompra(null); recargar() }} />}
-
-      {/* Modal evaluar HCD */}
-      {modalEval && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={() => setModalEval(false)}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 480, maxWidth: '100%', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>⭐ Evalúa a Hablando con Datos</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Tu opinión nos ayuda a mejorar la plataforma y el servicio.</p>
-
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 8 }}>¿Cómo calificas nuestro servicio?</label>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-              {[1, 2, 3, 4, 5].map(n => (
-                <button key={n} onClick={() => setEvalStars(n)}
-                  style={{ background: 'none', border: 'none', fontSize: 34, cursor: 'pointer', color: n <= evalStars ? '#f59e0b' : '#e2e8f0' }}>
-                  ★
-                </button>
-              ))}
-              <span style={{ alignSelf: 'center', marginLeft: 8, color: '#64748b', fontSize: 14 }}>{evalStars}/5</span>
-            </div>
-
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6 }}>¿Qué mejoras o nuevas funcionalidades te gustaría?</label>
-            <textarea value={evalTexto} onChange={e => setEvalTexto(e.target.value)} rows={4}
-              placeholder="Cuéntanos qué podríamos agregar o mejorar..."
-              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', resize: 'none', boxSizing: 'border-box', color: '#1e293b' }} />
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button onClick={() => setModalEval(false)} style={{ background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-              <button onClick={async () => { const ok = await enviarEvaluacion(evalStars, evalTexto); if (ok) { setModalEval(false); setEvalTexto('') } }}
-                style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Enviar evaluación</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
