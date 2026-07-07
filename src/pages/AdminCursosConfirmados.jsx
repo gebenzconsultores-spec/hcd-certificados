@@ -25,6 +25,7 @@ export default function AdminCursosConfirmados() {
   const [cursos, setCursos] = useState([])
   const [empresas, setEmpresas] = useState([])
   const [participantes, setParticipantes] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const [asistentes, setAsistentes] = useState([])
 
   useEffect(() => {
@@ -33,14 +34,16 @@ export default function AdminCursosConfirmados() {
   }, [])
 
   async function cargarDatos() {
-    const [{ data: cur }, { data: emp }, { data: part }] = await Promise.all([
-      supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true),
-      supabase.from('empresas').select('id, nombre'),
-      supabase.from('participantes').select('id, nombre, id_empleado, correo, empresa_id, registrado_por_empresa, tipo')
+    const [{ data: cur }, { data: emp }, { data: part }, { data: vend }] = await Promise.all([
+      supabase.from('cursos').select('id, nombre, numero_curso, temario, duracion').eq('activo', true),
+      supabase.from('empresas').select('id, nombre, clave_vendedor, estatus'),
+      supabase.from('participantes').select('id, nombre, id_empleado, correo, empresa_id, registrado_por_empresa, tipo'),
+      supabase.from('vendedores').select('clave, nombre, activo').order('nombre')
     ])
     setCursos(cur || [])
     setEmpresas(emp || [])
     setParticipantes(part || [])
+    setVendedores((vend || []).filter(v => v.activo !== false))
   }
 
   async function cargar() {
@@ -417,7 +420,7 @@ export default function AdminCursosConfirmados() {
 
       {modalProgramar && (
         <ModalProgramarCurso
-          cursos={cursos} empresas={empresas} participantes={participantes}
+          cursos={cursos} empresas={empresas} participantes={participantes} vendedores={vendedores}
           onClose={() => setModalProgramar(false)}
           onDone={() => { setModalProgramar(false); cargar() }}
         />
@@ -436,7 +439,7 @@ export default function AdminCursosConfirmados() {
 }
 
 // ─── Modal: programar curso manualmente ───────────────────────
-function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone }) {
+function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onClose, onDone }) {
   const [tipo, setTipo] = useState('empresa') // 'empresa' o 'abierto'
   const [cursoId, setCursoId] = useState('')
   const [empresaId, setEmpresaId] = useState('')
@@ -449,6 +452,52 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
   const [seleccionados, setSeleccionados] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [saving, setSaving] = useState(false)
+  // Campos comerciales (convocatoria en proximos_cursos)
+  const [temario, setTemario] = useState('')
+  const [tipoCosto, setTipoCosto] = useState('sin_costo') // 'sin_costo' | 'con_costo'
+  const [precio, setPrecio] = useState(0)
+  const [cupoMaximo, setCupoMaximo] = useState(20)
+  const [linkZoom, setLinkZoom] = useState('')
+  const [codigoPromo, setCodigoPromo] = useState('')
+  const [mostrarEn, setMostrarEn] = useState('ambos') // cintillo: 'ambos' | 'empresa' | 'estudiante'
+  const [vendedorClave, setVendedorClave] = useState('VEND-GERENCIA')
+  const [tipoVenta, setTipoVenta] = useState(null) // 'primera_compra' | 'recompra' (solo empresa)
+  const [detectandoVenta, setDetectandoVenta] = useState(false)
+
+  // Regla de días según horas del curso: ≤8=1, ≤16=2, >16=3 (editable después)
+  function diasPorHoras(horas) {
+    const h = Number(horas) || 0
+    if (h <= 8) return 1
+    if (h <= 16) return 2
+    return 3
+  }
+
+  // Al elegir curso: autollenar temario y sugerir número de días por sus horas
+  function seleccionarCurso(id) {
+    setCursoId(id)
+    const c = cursos.find(x => x.id === id)
+    if (c) {
+      setTemario(c.temario || '')
+      setNumDias(diasPorHoras(c.duracion))
+    }
+  }
+
+  // Al elegir empresa: autollenar su vendedor y detectar primera compra vs recompra
+  async function seleccionarEmpresa(id) {
+    setEmpresaId(id)
+    setSeleccionados([])
+    const emp = empresas.find(e => e.id === id)
+    setVendedorClave(emp?.clave_vendedor || 'VEND-GERENCIA')
+    setTipoVenta(null)
+    if (id) {
+      setDetectandoVenta(true)
+      try {
+        const { count } = await supabase.from('compras').select('id', { count: 'exact', head: true }).eq('empresa_id', id)
+        setTipoVenta((count || 0) > 0 ? 'recompra' : 'primera_compra')
+      } catch (_) { setTipoVenta('primera_compra') }
+      setDetectandoVenta(false)
+    }
+  }
 
   // Calcular los días del curso según el tipo
   function calcularDias() {
@@ -496,12 +545,15 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
     const dias = calcularDias()
     if (dias.length === 0) { alert('Define al menos un día para el curso'); return }
     if (tipo === 'empresa' && !empresaId) { alert('Selecciona la empresa'); return }
-    if (seleccionados.length === 0) { alert('Selecciona al menos un alumno'); return }
+    if (tipoCosto === 'con_costo' && Number(precio) <= 0) { alert('Escribe el precio del curso o cámbialo a "sin costo"'); return }
     setSaving(true)
     try {
       const empresa = empresas.find(e => e.id === empresaId)
       const fechaInicio = dias[0]
       const fechaFin = dias[dias.length - 1]
+      const vendedorNombre = vendedores.find(v => v.clave === vendedorClave)?.nombre || null
+      // tipo_venta solo aplica a cursos de empresa
+      const tipoVentaFinal = tipo === 'empresa' ? (tipoVenta || 'primera_compra') : null
 
       // Generar ID de compra si es curso de empresa (para que pueda gestionarlo en su portal)
       let idCompra = null
@@ -517,9 +569,38 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
           estado: 'activo',
           fecha_curso: fechaInicio,
           tipo_comprador: 'empresa',
+          clave_vendedor: vendedorClave,
+          vendedor_nombre: vendedorNombre,
+          tipo_venta: tipoVentaFinal,
           monto: 0
         })
       }
+
+      // Crear la CONVOCATORIA en proximos_cursos (para el cintillo de empresas/estudiantes)
+      const numeroCert = await generarNumeroCertificado()
+      await supabase.from('proximos_cursos').insert({
+        curso_id: curso.id,
+        curso_nombre: curso.nombre,
+        temario: temario || null,
+        fecha: fechaInicio,
+        hora,
+        modalidad: 'zoom',
+        numero_certificado: numeroCert,
+        tipo_costo: tipoCosto,
+        precio: tipoCosto === 'con_costo' ? Number(precio) : 0,
+        codigo_promo: codigoPromo || null,
+        mostrar_en: mostrarEn,
+        cupo_maximo: Number(cupoMaximo),
+        cupo_ocupado: seleccionados.length,
+        link_zoom: linkZoom || null,
+        estado: 'abierto',
+        tipo_curso: tipo === 'empresa' ? 'empresa' : 'hcd',
+        empresa_id: tipo === 'empresa' ? empresaId : null,
+        empresa_nombre: tipo === 'empresa' ? empresa?.nombre : null,
+        clave_vendedor: vendedorClave,
+        vendedor_nombre: vendedorNombre,
+        tipo_venta: tipoVentaFinal
+      })
 
       // 1. Crear el curso confirmado (con inicio, fin, tipo y num de días)
       const { data: confirmado } = await supabase.from('cursos_confirmados').insert({
@@ -531,6 +612,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         tipo_fechas: tipoFechas, num_dias: dias.length,
         origen: 'programado_admin', id_compra: idCompra,
         modalidad: 'zoom', estado: 'confirmado',
+        clave_vendedor: vendedorClave, vendedor_nombre: vendedorNombre, tipo_venta: tipoVentaFinal,
         notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
       }).select().single()
 
@@ -566,7 +648,8 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         ? new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')
         : `${dias.length} días (del ${new Date(fechaInicio + 'T00:00:00').toLocaleDateString('es-MX')} al ${new Date(fechaFin + 'T00:00:00').toLocaleDateString('es-MX')})`
       const msgId = idCompra ? `\n\n🎫 ID de compra generado: ${idCompra}\nLa empresa puede usarlo en su portal para gestionar (agregar/quitar) empleados.` : ''
-      alert(`✅ Curso programado: ${textoFechas} con ${seleccionados.length} alumno(s).${msgId}`)
+      const msgAlumnos = seleccionados.length > 0 ? `con ${seleccionados.length} alumno(s)` : 'sin alumnos aún (convocatoria abierta)'
+      alert(`✅ Curso programado: ${textoFechas} ${msgAlumnos}.\n📋 Certificado #${numeroCert} · aparece en el cintillo.${msgId}`)
       onDone()
     } catch (e) {
       alert('Error: ' + (e.message || ''))
@@ -588,17 +671,27 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
     return `COMPRA-${String(maxNum + 1).padStart(4, '0')}`
   }
 
+  // Genera el número de certificado: empieza en 499, siempre máximo + 1 (nunca se reutiliza)
+  async function generarNumeroCertificado() {
+    const { data } = await supabase.from('proximos_cursos').select('numero_certificado').not('numero_certificado', 'is', null)
+    let max = 498 // para que el primero sea 499
+    ;(data || []).forEach(c => {
+      if (c.numero_certificado && c.numero_certificado > max) max = c.numero_certificado
+    })
+    return max + 1
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
       <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 600, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>Programar curso</h3>
-        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Da de alta un curso y selecciona quiénes asistirán</p>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>Se publica en el cintillo (convocatoria) y queda agendado en el calendario</p>
 
         {/* Tipo de curso */}
         <label style={lbl}>¿Qué tipo de curso es?</label>
         <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
           {[['empresa', '🏢 Para una empresa', 'Le impartes a una empresa específica'], ['abierto', '🌐 Curso abierto HCD', 'Inscribes a cualquier alumno']].map(([v, l, d]) => (
-            <button key={v} onClick={() => { setTipo(v); setSeleccionados([]); setEmpresaId('') }}
+            <button key={v} onClick={() => { setTipo(v); setSeleccionados([]); setEmpresaId(''); setVendedorClave('VEND-GERENCIA'); setTipoVenta(null) }}
               style={{ flex: 1, padding: '12px', border: `2px solid ${tipo === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 10, background: tipo === v ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: tipo === v ? '#8B1A1A' : '#475569' }}>{l}</div>
               <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{d}</div>
@@ -608,7 +701,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
 
         {/* Curso */}
         <label style={lbl}>Curso</label>
-        <select value={cursoId} onChange={e => setCursoId(e.target.value)} style={inp}>
+        <select value={cursoId} onChange={e => seleccionarCurso(e.target.value)} style={inp}>
           <option value="">— Selecciona un curso —</option>
           {cursos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
@@ -617,12 +710,32 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
         {tipo === 'empresa' && (
           <>
             <label style={lbl}>Empresa</label>
-            <select value={empresaId} onChange={e => { setEmpresaId(e.target.value); setSeleccionados([]) }} style={inp}>
+            <select value={empresaId} onChange={e => seleccionarEmpresa(e.target.value)} style={inp}>
               <option value="">— Selecciona la empresa —</option>
               {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
+            {empresaId && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap' }}>
+                <span style={{ color: '#64748b' }}>Tipo de venta:</span>
+                {detectandoVenta ? (
+                  <span style={{ color: '#94a3b8' }}>detectando…</span>
+                ) : (
+                  <span style={{ background: tipoVenta === 'recompra' ? '#eff6ff' : '#f0fdf4', color: tipoVenta === 'recompra' ? '#1d4ed8' : '#059669', padding: '2px 10px', borderRadius: 20, fontWeight: 700 }}>
+                    {tipoVenta === 'recompra' ? '🔁 Recompra' : '⭐ Primera compra'}
+                  </span>
+                )}
+                <span style={{ color: '#94a3b8', fontSize: 11 }}>· se detecta automáticamente por sus compras previas</span>
+              </div>
+            )}
           </>
         )}
+
+        {/* Vendedor (auto de la empresa, editable) */}
+        <label style={lbl}>Vendedor {tipo === 'empresa' && <span style={{ color: '#94a3b8', fontWeight: 400 }}>(se autollena de la empresa)</span>}</label>
+        <select value={vendedorClave} onChange={e => setVendedorClave(e.target.value)} style={inp}>
+          {vendedores.length === 0 && <option value="VEND-GERENCIA">VEND-GERENCIA — Gerencia Comercial</option>}
+          {vendedores.map(v => <option key={v.clave} value={v.clave}>{v.clave} — {v.nombre}</option>)}
+        </select>
 
         {/* Tipo de fechas: continuo o escalonado */}
         <label style={lbl}>¿Cómo son las fechas del curso?</label>
@@ -643,7 +756,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
               <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={lbl}>N° de días *</label>
+              <label style={lbl}>N° de días <span style={{ color: '#94a3b8', fontWeight: 400 }}>(auto)</span></label>
               <input type="number" min={1} max={30} value={numDias} onChange={e => setNumDias(Math.max(1, Number(e.target.value)))} style={inp} />
             </div>
             <div style={{ flex: 1 }}>
@@ -678,8 +791,63 @@ function ModalProgramarCurso({ cursos, empresas, participantes, onClose, onDone 
           </div>
         )}
 
+        {/* ── Datos de la convocatoria (cintillo) ── */}
+        <div style={{ borderTop: '1px solid #f1f5f9', margin: '18px 0 4px' }} />
+
+        {/* Temario */}
+        <label style={lbl}>Temario <span style={{ color: '#94a3b8', fontWeight: 400 }}>(se autollena del curso, editable)</span></label>
+        <textarea value={temario} onChange={e => setTemario(e.target.value)} rows={3} placeholder="Puntos que cubre el curso..." style={{ ...inp, resize: 'vertical' }} />
+
+        {/* Costo */}
+        <label style={lbl}>¿El curso tiene costo?</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
+          {[['sin_costo', '🎁 Sin costo', 'Gratuito / de obsequio'], ['con_costo', '💲 Con costo', 'Se cobra a los inscritos']].map(([v, l, d]) => (
+            <button key={v} type="button" onClick={() => { setTipoCosto(v); setCupoMaximo(v === 'sin_costo' ? 10 : 20) }}
+              style={{ flex: 1, padding: '10px', border: `2px solid ${tipoCosto === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 10, background: tipoCosto === v ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: tipoCosto === v ? '#8B1A1A' : '#475569' }}>{l}</div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{d}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          {tipoCosto === 'con_costo' && (
+            <div style={{ flex: 1 }}>
+              <label style={lbl}>Precio (MXN)</label>
+              <input type="number" min={0} value={precio} onChange={e => setPrecio(Math.max(0, Number(e.target.value)))} style={inp} />
+            </div>
+          )}
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Cupo máximo</label>
+            <input type="number" min={1} value={cupoMaximo} onChange={e => setCupoMaximo(Math.max(1, Number(e.target.value)))} style={inp} />
+          </div>
+        </div>
+
+        {/* Link Zoom + código promo */}
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Link de Zoom</label>
+            <input value={linkZoom} onChange={e => setLinkZoom(e.target.value)} placeholder="https://zoom.us/j/..." style={inp} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={lbl}>Código promocional</label>
+            <input value={codigoPromo} onChange={e => setCodigoPromo(e.target.value)} placeholder="ej. HCD10" style={inp} />
+          </div>
+        </div>
+
+        {/* Cintillo: dónde se muestra */}
+        <label style={lbl}>Mostrar en el cintillo</label>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+          {[['ambos', 'Ambos'], ['empresa', 'Solo empresas'], ['estudiante', 'Solo estudiantes']].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => setMostrarEn(v)}
+              style={{ flex: 1, padding: '9px', border: `2px solid ${mostrarEn === v ? '#1d4ed8' : '#e2e8f0'}`, borderRadius: 8, background: mostrarEn === v ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: mostrarEn === v ? '#1d4ed8' : '#475569' }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
         {/* Selección de alumnos */}
-        <label style={lbl}>Inscribir alumnos ({seleccionados.length} seleccionados)</label>
+        <label style={lbl}>Inscribir alumnos <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional · {seleccionados.length} seleccionados)</span></label>
         {tipo === 'empresa' && !empresaId ? (
           <p style={{ color: '#94a3b8', fontSize: 13, padding: '12px 0' }}>Primero selecciona una empresa para ver sus empleados.</p>
         ) : (
