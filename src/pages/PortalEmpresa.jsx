@@ -114,6 +114,14 @@ export function EmpresaDashboard() {
     } catch (e) { alert('Error: ' + (e.message || '')); return false }
   }
 
+  // Guarda de carga: no dibujar el tablero hasta tener la sesión de la empresa
+  // (evita leer empresa.nombre / empresa.tipo_acceso cuando aún es null → pantalla en blanco)
+  if (!empresa) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb', color: '#64748b', fontSize: 14 }}>
+      Cargando tu portal…
+    </div>
+  )
+
   // Si la prueba venció y es invitado → solo cotizador
   const soloLectura = pruebaVencida && empresa.tipo_acceso === 'invitado' && !empresa.exento_pago
 
