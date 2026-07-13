@@ -8,6 +8,12 @@ const COLOR_FAMILIA = {
   'Lean Six Sigma': '#059669',
   'Estadística y Software': '#7c3aed',
 }
+
+const CAT_COLOR = {
+  A: { bg: '#f9f0f0', fg: '#8B1A1A' },
+  B: { bg: '#eff6ff', fg: '#1d4ed8' },
+  C: { bg: '#f0fdf4', fg: '#059669' },
+}
 const PREFIJO_FAMILIA = {
   'Sistemas de Gestión': 'SG',
   'Herramientas Automotrices': 'AUTO',
@@ -34,7 +40,7 @@ export default function Cursos() {
   const [modal, setModal] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
   const [modalExamen, setModalExamen] = useState(null)
-  const [form, setForm] = useState({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+  const [form, setForm] = useState({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
   // Crear nueva familia desde el modal de curso
@@ -110,13 +116,14 @@ export default function Cursos() {
       await crearCurso({
         nombre: form.nombre, duracion: Number(form.duracion),
         dias: diasPorHoras(form.duracion),
+        categoria: form.categoria || 'B',
         familia_id: familiaId, clave_interna,
         modalidad: form.modalidad, aval_institucion: form.aval_institucion,
         nombre_aval: form.nombre_aval, activo: true, es_publico: true
       })
       await cargar()
       setModal(false)
-      setForm({ nombre: '', duracion: '', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+      setForm({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
       setNuevaFamilia(false); setNombreNuevaFamilia('')
     } catch (e) {
       alert('No se pudo crear: ' + (e.message || ''))
@@ -129,6 +136,7 @@ export default function Cursos() {
       await supabase.from('cursos').update({
         nombre: modalEditar.nombre, duracion: Number(modalEditar.duracion),
         dias: diasPorHoras(modalEditar.duracion),
+        categoria: modalEditar.categoria || 'B',
         familia_id: modalEditar.familia_id,
         modalidad: modalEditar.modalidad || 'online',
         aval_institucion: !!modalEditar.aval_institucion,
@@ -229,9 +237,14 @@ export default function Cursos() {
                 return (
                   <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                      <span style={{ background: `${color}15`, color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
-                        🔑 {c.clave_interna || 'Sin clave'}
-                      </span>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ background: `${color}15`, color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 }}>
+                          🔑 {c.clave_interna || 'Sin clave'}
+                        </span>
+                        <span title="Categoría" style={{ background: (CAT_COLOR[c.categoria] || CAT_COLOR.B).bg, color: (CAT_COLOR[c.categoria] || CAT_COLOR.B).fg, padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>
+                          Cat. {c.categoria || 'B'}
+                        </span>
+                      </div>
                       <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h · {c.dias || diasPorHoras(c.duracion)} día{(c.dias || diasPorHoras(c.duracion)) > 1 ? 's' : ''}</span>
                     </div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12, lineHeight: 1.3 }}>{c.nombre}</h3>
@@ -308,6 +321,13 @@ export default function Cursos() {
               </p>
             )}
 
+            <label style={lbl}>Categoría (define el precio)</label>
+            <select value={form.categoria} onChange={e => f('categoria')(e.target.value)} style={inp}>
+              <option value="A">A — Especializado (más caro)</option>
+              <option value="B">B — Regular</option>
+              <option value="C">C — Común (más económico)</option>
+            </select>
+
             <label style={lbl}>Modalidad</label>
             <select value={form.modalidad} onChange={e => f('modalidad')(e.target.value)} style={inp}>
               <option value="online">En línea</option>
@@ -350,6 +370,13 @@ export default function Cursos() {
                 📅 Curso de <strong>{diasPorHoras(modalEditar.duracion)} día{diasPorHoras(modalEditar.duracion) > 1 ? 's' : ''}</strong>
               </p>
             )}
+
+            <label style={lbl}>Categoría (define el precio)</label>
+            <select value={modalEditar.categoria || 'B'} onChange={e => setModalEditar(p => ({ ...p, categoria: e.target.value }))} style={inp}>
+              <option value="A">A — Especializado (más caro)</option>
+              <option value="B">B — Regular</option>
+              <option value="C">C — Común (más económico)</option>
+            </select>
 
             <label style={lbl}>Modalidad</label>
             <select value={modalEditar.modalidad || 'online'} onChange={e => setModalEditar(p => ({ ...p, modalidad: e.target.value }))} style={inp}>
