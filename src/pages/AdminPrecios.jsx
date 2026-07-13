@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase, getCursos } from '../lib/supabase'
 
+// Categorías y bloques del nuevo motor de precios (Paso 2)
+const CATEGORIAS = [
+  { id: 'A', label: 'A — Especializado', color: '#8B1A1A', bg: '#f9f0f0' },
+  { id: 'B', label: 'B — Regular', color: '#1d4ed8', bg: '#eff6ff' },
+  { id: 'C', label: 'C — Común', color: '#059669', bg: '#f0fdf4' },
+]
+const BLOQUES = [
+  { id: '1-4', label: '1 a 4 personas' },
+  { id: '5-10', label: '5 a 10 personas' },
+  { id: '11-15', label: '11 a 15 personas' },
+]
+
 export default function AdminPrecios() {
   const [cursos, setCursos] = useState([])
   const [familias, setFamilias] = useState([])
@@ -76,6 +88,8 @@ export default function AdminPrecios() {
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Precios y catálogo público</h1>
         <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Configura precios, descuentos y visibilidad. Se conectan al cotizador en tiempo real.</p>
       </div>
+
+      <MatrizPreciosHora />
 
       {msg && (
         <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 18px', marginBottom: 20, color: '#15803d' }}>{msg}</div>
@@ -210,6 +224,99 @@ export default function AdminPrecios() {
               <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar precios'}</button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MatrizPreciosHora() {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [ok, setOk] = useState(false)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    try {
+      const { data } = await supabase.from('precios_categoria').select('*')
+      setRows(data || [])
+    } catch (_) { setRows([]) }
+    setLoading(false)
+  }
+
+  function valor(cat, bloque) {
+    const r = rows.find(x => x.categoria === cat && x.bloque === bloque)
+    return r ? r.precio_hora : ''
+  }
+  function setValor(cat, bloque, v) {
+    setRows(prev => {
+      const existe = prev.some(x => x.categoria === cat && x.bloque === bloque)
+      if (existe) return prev.map(r => (r.categoria === cat && r.bloque === bloque ? { ...r, precio_hora: v } : r))
+      return [...prev, { categoria: cat, bloque, precio_hora: v }]
+    })
+  }
+
+  async function guardar() {
+    setSaving(true)
+    try {
+      const payload = []
+      for (const cat of CATEGORIAS) for (const b of BLOQUES) {
+        payload.push({ categoria: cat.id, bloque: b.id, precio_hora: Number(valor(cat.id, b.id)) || 0 })
+      }
+      const { error } = await supabase.from('precios_categoria').upsert(payload, { onConflict: 'categoria,bloque' })
+      if (error) { alert('No se pudo guardar la matriz: ' + error.message); setSaving(false); return }
+      await cargar()
+      setOk(true); setTimeout(() => setOk(false), 3000)
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 22, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Precio por hora (categoría × bloque)</h2>
+          <p style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>El cotizador calcula: <strong>precio por hora × horas del curso</strong>. 16 o más personas → cotización especial.</p>
+        </div>
+        <button onClick={guardar} disabled={saving || loading} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar matriz'}</button>
+      </div>
+
+      {ok && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 14px', margin: '8px 0', color: '#15803d', fontSize: 13 }}>✅ Matriz guardada. El cotizador ya la usa.</div>}
+
+      {loading ? (
+        <div style={{ color: '#94a3b8', padding: 20 }}>Cargando matriz...</div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: '#64748b' }}>Categoría</th>
+                {BLOQUES.map(b => <th key={b.id} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 12, color: '#64748b' }}>{b.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {CATEGORIAS.map(cat => (
+                <tr key={cat.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <td style={{ padding: '8px 10px' }}>
+                    <span style={{ background: cat.bg, color: cat.color, padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{cat.label}</span>
+                  </td>
+                  {BLOQUES.map(b => (
+                    <td key={b.id} style={{ padding: '8px 10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ color: '#94a3b8', fontSize: 13 }}>$</span>
+                        <input type="number" min={0} value={valor(cat.id, b.id)} onChange={e => setValor(cat.id, b.id, e.target.value)}
+                          placeholder="0" style={{ width: 110, border: '1px solid #d1d5db', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', color: '#1e293b' }} />
+                        <span style={{ color: '#94a3b8', fontSize: 11 }}>/h</span>
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 10 }}>Ejemplo: si A · 1-4 = $500/h, un curso categoría A de 8 h para 3 personas costará $4,000 (500 × 8).</p>
         </div>
       )}
     </div>
