@@ -29,9 +29,19 @@ function precioPorDias(curso, dias) {
   return curso.precio_persona_3dias || 8090
 }
 
+// Bloque de participantes (nuevo modelo de precios por categoría × bloque)
+function bloqueDePersonas(n) {
+  const num = Number(n) || 0
+  if (num <= 4) return '1-4'
+  if (num <= 10) return '5-10'
+  if (num <= 15) return '11-15'
+  return 'especial' // 16 o más → cotización especial
+}
+
 export default function CotizadorPublico() {
   const [familias, setFamilias] = useState([])
   const [cursos, setCursos] = useState([])
+  const [matriz, setMatriz] = useState([])
   const [servicios, setServicios] = useState([])
   const [viaticosZonas, setViaticosZonas] = useState([])
   const [familiaActiva, setFamiliaActiva] = useState(null)
@@ -57,6 +67,7 @@ export default function CotizadorPublico() {
     supabase.from('familias').select('*').order('orden').then(({ data }) => setFamilias(data || []))
     supabase.from('servicios').select('*').eq('activo', true).order('orden').then(({ data }) => setServicios(data || []))
     supabase.from('viaticos_zonas').select('*').eq('activo', true).order('monto').then(({ data }) => setViaticosZonas(data || []))
+    supabase.from('precios_categoria').select('*').then(({ data }) => setMatriz(data || []))
 
     const params = new URLSearchParams(window.location.search)
     const cursoId = params.get('curso')
@@ -119,6 +130,12 @@ export default function CotizadorPublico() {
     }
   }
 
+  // Precio por hora de la matriz (categoría del curso × bloque de participantes)
+  function precioHora(categoria, bloque) {
+    const r = matriz.find(x => x.categoria === (categoria || 'B') && x.bloque === bloque)
+    return r ? Number(r.precio_hora) || 0 : 0
+  }
+
   // ── CÁLCULOS ──
   function calcular() {
     if (!cursoSel) return { subtotal: 0, iva_monto: 0, total: 0, comision: 0, precio_base: 0, desc: 0, dias_curso: 1 }
@@ -128,16 +145,11 @@ export default function CotizadorPublico() {
     let precio_base = 0
     let desc_grupo = 0
 
-    if (config.tipo === 'persona') {
-      const p = precioPorDias(cursoSel, dias_curso)
-      precio_base = p * config.num_personas
-    } else {
-      // Grupo cerrado: precio por persona × personas, con 20% desc si >= 10
-      const precioUnit = precioPorDias(cursoSel, dias_curso)
-      precio_base = precioUnit * config.num_personas
-      if (config.num_personas >= MIN_GRUPO) {
-        desc_grupo = precio_base * DESC_GRUPO
-      }
+    // NUEVO MODELO: precio por hora (categoría del curso × bloque de participantes) × horas
+    const bloque = bloqueDePersonas(config.num_personas)
+    const especial = bloque === 'especial'
+    if (!especial) {
+      precio_base = precioHora(cursoSel.categoria, bloque) * (Number(cursoSel.duracion) || 0)
     }
 
     // Descuento configurado en el catálogo (Admin → Precios)
@@ -181,10 +193,11 @@ export default function CotizadorPublico() {
     const total = subtotal + iva_monto
     const comision = total * (config.es_cliente_nuevo ? 0.15 : 0.10)
 
-    return { precio_base, desc_grupo, desc_catalogo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision, dias_curso }
+    return { precio_base, desc_grupo, desc_catalogo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision, dias_curso, especial, bloque }
   }
 
   const nums = calcular()
+  const totalTexto = nums.especial ? 'Cotización especial' : `$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
   async function guardarCotizacion() {
     setSaving(true)
@@ -209,7 +222,7 @@ export default function CotizadorPublico() {
         contacto_whatsapp: contacto.contacto_whatsapp,
         curso_id: cursoSel.id,
         curso_nombre: cursoSel.nombre,
-        tipo_precio: config.tipo,
+        tipo_precio: nums.especial ? 'especial' : config.tipo,
         num_personas: config.num_personas,
         dias: nums.dias_curso,
         precio_base: nums.precio_base,
@@ -229,7 +242,7 @@ export default function CotizadorPublico() {
         descripcion_consultoria: serv?.nombre || config.descripcion_consultoria || null,
         precio_consultoria: nums.cons,
         cupon_codigo: config.cupon_validado?.codigo || null,
-        notas: config.notas || null,
+        notas: ((nums.especial ? '[COTIZACIÓN ESPECIAL 16+ personas] ' : '') + (config.notas || '')) || null,
         fecha_deseada: config.fecha_deseada || null,
         empresa_id: empresaPortal?.id || null,
         empresa_registrada: !!empresaPortal,
@@ -257,8 +270,10 @@ export default function CotizadorPublico() {
       try {
         await supabase.from('notificaciones').insert({
           tipo: 'cotizacion',
-          titulo: 'Nueva cotización generada',
-          mensaje: `${contacto.empresa_nombre} cotizó ${cursoSel.nombre} por $${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+          titulo: nums.especial ? 'Cotización especial (16+ personas)' : 'Nueva cotización generada',
+          mensaje: nums.especial
+            ? `${contacto.empresa_nombre} solicitó cotización especial de ${cursoSel.nombre} para ${config.num_personas} personas`
+            : `${contacto.empresa_nombre} cotizó ${cursoSel.nombre} por $${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
           link: '/admin/cotizaciones'
         })
       } catch (_) {}
@@ -288,7 +303,9 @@ export default function CotizadorPublico() {
   }
 
   function enviarWhatsApp() {
-    const msg = `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Generé una cotización en la plataforma HCD con folio *${folioCot}* por un total de *$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*. ¿Podemos continuar?`
+    const msg = nums.especial
+      ? `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Solicité una cotización especial (16+ personas) en la plataforma HCD con folio *${folioCot}* para el curso ${cursoSel?.nombre}. ¿Podemos continuar?`
+      : `Hola, soy ${contacto.contacto_nombre} de ${contacto.empresa_nombre}. Generé una cotización en la plataforma HCD con folio *${folioCot}* por un total de *$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}*. ¿Podemos continuar?`
     window.open(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
@@ -421,30 +438,20 @@ export default function CotizadorPublico() {
                     <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>
                       {cursoSel.duracion} horas — equivale a {nums.dias_curso} día{nums.dias_curso > 1 ? 's' : ''}
                     </div>
-                    <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-                      ${precioPorDias(cursoSel, nums.dias_curso).toLocaleString('es-MX')} por persona
-                    </div>
+                    {nums.especial ? (
+                      <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 700, marginTop: 6 }}>
+                        16+ personas → Cotización especial. Envía tus datos y HCD te hará llegar el precio.
+                      </div>
+                    ) : (
+                      <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 600, marginTop: 6 }}>
+                        Bloque {nums.bloque} personas · ${precioHora(cursoSel.categoria, nums.bloque).toLocaleString('es-MX')}/h × {cursoSel.duracion} h = <strong>${nums.precio_base.toLocaleString('es-MX')}</strong>
+                      </div>
+                    )}
                   </div>
 
                   <label style={lbl}>📅 Fecha deseada del curso</label>
                   <input type="date" value={config.fecha_deseada} onChange={e => c('fecha_deseada')(e.target.value)} style={inp} />
                   <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Propón una fecha; HCD confirmará disponibilidad.</p>
-
-                  {/* Aviso de grupo cerrado */}
-                  {config.tipo === 'grupo' && (
-                    <div style={{ marginTop: 12, background: config.num_personas >= MIN_GRUPO ? '#f0fdf4' : '#fef9c3', border: `1px solid ${config.num_personas >= MIN_GRUPO ? '#bbf7d0' : '#fde047'}`, borderRadius: 8, padding: '12px 14px' }}>
-                      {config.num_personas >= MIN_GRUPO ? (
-                        <div>
-                          <div style={{ color: '#15803d', fontWeight: 700, fontSize: 13 }}>✓ ¡Precio especial activado!</div>
-                          <div style={{ color: '#15803d', fontSize: 12, marginTop: 2 }}>Grupo de {config.num_personas} personas: 20% de descuento aplicado</div>
-                        </div>
-                      ) : (
-                        <div style={{ color: '#92400e', fontSize: 12 }}>
-                          💡 Con <strong>{MIN_GRUPO} o más participantes</strong> obtienes <strong>20% de descuento</strong> (precio especial de grupo cerrado). Te faltan {MIN_GRUPO - config.num_personas}.
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -541,12 +548,12 @@ export default function CotizadorPublico() {
             {/* Preview precio */}
             <div style={{ background: '#1e293b', borderRadius: 14, padding: '20px 28px', marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 4 }}>TOTAL ESTIMADO</div>
-                <div style={{ color: '#fff', fontSize: 28, fontWeight: 800 }}>
-                  ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                  <span style={{ color: '#64748b', fontSize: 13, fontWeight: 400 }}> {config.aplica_iva ? '(IVA incl.)' : '(sin IVA)'}</span>
+                <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 4 }}>{nums.especial ? 'COTIZACIÓN' : 'TOTAL ESTIMADO'}</div>
+                <div style={{ color: '#fff', fontSize: nums.especial ? 20 : 28, fontWeight: 800 }}>
+                  {nums.especial ? 'Especial (16+ personas)' : <>${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}<span style={{ color: '#64748b', fontSize: 13, fontWeight: 400 }}> {config.aplica_iva ? '(IVA incl.)' : '(sin IVA)'}</span></>}
                 </div>
-                {nums.desc_catalogo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🏷️ Promoción {cursoSel.descuento_porcentaje}%: -${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
+                {nums.especial && <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>HCD te enviará el precio con las condiciones.</div>}
+                {!nums.especial && nums.desc_catalogo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🏷️ Promoción {cursoSel.descuento_porcentaje}%: -${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
                 {nums.desc_grupo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>👥 Grupo cerrado 20%: -${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
                 {nums.desc_cupon > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🎟️ Cupón: -${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
               </div>
@@ -600,15 +607,16 @@ export default function CotizadorPublico() {
               <Row label="Empresa" value={contacto.empresa_nombre} />
               <Row label="Contacto" value={contacto.contacto_nombre} />
               <Row label="Curso" value={cursoSel?.nombre} bold />
-              <Row label="Tipo" value={config.tipo === 'persona' ? `Por persona (${config.num_personas} pers., ${nums.dias_curso} día${nums.dias_curso > 1 ? 's' : ''})` : `Grupo cerrado (${config.num_personas} pers.)`} />
+              <Row label="Participantes" value={`${config.num_personas} persona${config.num_personas > 1 ? 's' : ''}${nums.especial ? ' — Cotización especial (16+)' : ` · Bloque ${nums.bloque}`}`} />
               {config.requiere_viaticos && <Row label="Viáticos" value={viaticosZonas.find(z => z.id === config.zona_viaticos_id)?.estado || '—'} />}
               {config.incluye_consultoria && <Row label="Consultoría" value={servicios.find(s => s.id === config.servicio_id)?.nombre} />}
               <div style={{ borderTop: '2px solid #e2e8f0', marginTop: 16, paddingTop: 16 }}>
                 <Row label="Subtotal" value={`$${nums.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} />
                 {nums.desc > 0 && <Row label="Descuento" value={`-$${nums.desc.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} color="#059669" />}
                 {config.aplica_iva && <Row label="IVA (16%)" value={`$${nums.iva_monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} />}
-                <Row label="TOTAL" value={`$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`} bold big />
+                <Row label="TOTAL" value={totalTexto} bold big />
               </div>
+              {nums.especial && <div style={{ marginTop: 12, color: '#8B1A1A', fontSize: 12, fontWeight: 600 }}>Al ser 16+ personas, HCD te enviará el precio con las fechas y condiciones.</div>}
             </div>
             <button onClick={guardarCotizacion} disabled={saving} style={{ ...btnPrimary, marginTop: 20 }}>{saving ? 'Generando...' : '✅ Generar cotización oficial'}</button>
           </div>
@@ -622,7 +630,7 @@ export default function CotizadorPublico() {
             <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 12, padding: '16px 24px', marginBottom: 24 }}>
               <div style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>Folio de cotización</div>
               <div style={{ color: '#8B1A1A', fontSize: 22, fontWeight: 800 }}>{folioCot}</div>
-              <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700, marginTop: 8 }}>Total: ${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>
+              <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700, marginTop: 8 }}>Total: {totalTexto}</div>
             </div>
             <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
               <button onClick={imprimirCotizacion} style={btnPrimary}>📄 Descargar cotización PDF</button>
@@ -731,7 +739,7 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
   <table>
     <thead><tr><th>Concepto</th><th>Detalle</th><th style="text-align:right">Importe</th></tr></thead>
     <tbody>
-      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.tipo === 'persona' ? `${config.num_personas} persona(s) · ${nums.dias_curso} día(s)` : `Grupo cerrado (${config.num_personas} pers.)`}</td><td style="text-align:right">$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.num_personas} persona(s)${nums.especial ? ' — Cotización especial (16+)' : ` · Bloque ${nums.bloque} · ${cursoSel?.duracion}h`}</td><td style="text-align:right">${nums.especial ? 'A cotizar' : `$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}</td></tr>
       ${nums.desc_grupo > 0 ? `<tr><td>Descuento grupo cerrado (20%)</td><td>Mínimo ${MIN_GRUPO} participantes</td><td style="text-align:right;color:#059669">-$${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${nums.desc_catalogo > 0 ? `<tr><td>Descuento promocional (${cursoSel.descuento_porcentaje}%)</td><td>Precio especial</td><td style="text-align:right;color:#059669">-$${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${nums.desc_cupon > 0 ? `<tr><td>Cupón ${config.cupon_validado?.codigo}</td><td>${config.cupon_validado?.tipo === '2x1' ? '2x1' : config.cupon_validado?.valor + '%'}</td><td style="text-align:right;color:#059669">-$${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
@@ -739,7 +747,7 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       ${config.requiere_viaticos && nums.viat > 0 ? `<tr><td>Viáticos / Traslado</td><td>${zona?.estado || ''}</td><td style="text-align:right">$${nums.viat.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       <tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">Subtotal</td><td style="text-align:right">$${nums.subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
       ${config.aplica_iva ? `<tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">IVA (16%)</td><td style="text-align:right">$${nums.iva_monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
-      <tr class="total-row"><td colspan="2" style="text-align:right">TOTAL</td><td style="text-align:right">$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${config.aplica_iva ? 'MXN (IVA incl.)' : 'MXN (sin IVA)'}</td></tr>
+      <tr class="total-row"><td colspan="2" style="text-align:right">TOTAL</td><td style="text-align:right">${nums.especial ? 'Cotización especial — HCD te enviará el precio' : `$${nums.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${config.aplica_iva ? 'MXN (IVA incl.)' : 'MXN (sin IVA)'}`}</td></tr>
     </tbody>
   </table>
 </div>
