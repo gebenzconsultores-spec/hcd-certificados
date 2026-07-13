@@ -21,6 +21,10 @@
         --hcd-text: #1e293b;
         --hcd-text-light: #64748b;
       }
+      /* Ocultar flechas de los campos numéricos (se llenan a mano) */
+      input[type=number]::-webkit-inner-spin-button,
+      input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type=number] { -moz-appearance: textfield; appearance: textfield; }
     </style>
   </head>
   <body>
