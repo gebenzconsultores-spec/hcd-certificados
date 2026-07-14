@@ -149,7 +149,7 @@ export default function ExamenPublico() {
       } catch (_) {}
     }
 
-    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData })
+    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert })
     setFase('resultado')
     setLoading(false)
   }
@@ -274,8 +274,8 @@ export default function ExamenPublico() {
             </p>
 
             {resultado.aprobado && (() => {
-              // ¿El alumno es de empresa? Entonces NO descarga; lo gestiona RH
-              const esDeEmpresa = alumno && (alumno.empresa_id || alumno.registrado_por_empresa)
+              // ¿El certificado quedó ligado a una empresa? Entonces NO descarga; lo gestiona RH
+              const esDeEmpresa = resultado.esDeEmpresa
               if (esDeEmpresa) {
                 return (
                   <div style={{ marginBottom: 24 }}>
