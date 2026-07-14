@@ -41,7 +41,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
 .linea-dec.l2{width:70mm;}
 .logo-wrap{position:absolute;top:12mm;left:22mm;}
 .logo-img{height:20mm;width:auto;object-fit:contain;}
-.cuerpo{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-top:4mm;}
+.cuerpo{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-top:16mm;}
 .empresa-nombre{font-size:17pt;font-weight:700;color:#8B1A1A;margin-bottom:2mm;}
 .otorga{font-size:11pt;color:#555;margin-bottom:5mm;}
 .nombre{font-family:'Tangerine',cursive;font-weight:700;font-size:54pt;color:#1a1a1a;line-height:1;margin-bottom:9mm;padding:0 10mm;}
@@ -49,7 +49,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
 .participar{font-size:13pt;font-weight:700;color:#1a1a1a;margin-bottom:1.5mm;}
 .el-curso{font-size:10pt;color:#555;margin-bottom:3mm;}
 .curso-nombre{font-family:'Cinzel',serif;font-weight:600;font-size:19pt;color:#1a1a1a;letter-spacing:1.5px;}
-.qr-wrap{position:absolute;right:24mm;top:96mm;text-align:center;}
+.qr-wrap{position:absolute;left:22mm;bottom:16mm;text-align:center;}
 .qr-img{width:24mm;height:24mm;}
 .qr-label{font-size:6pt;color:#999;margin-top:1mm;}
 .inferior{display:flex;flex-direction:column;align-items:center;margin-top:auto;padding-bottom:2mm;}
@@ -61,10 +61,10 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
 .firma-nombre{font-size:9.5pt;font-weight:700;color:#1a1a1a;text-align:center;margin-top:1mm;}
 .firma-cargo{font-size:8pt;color:#555;margin-top:.5mm;}
 .firma-rfc{font-size:7pt;color:#999;margin-top:.5mm;}
-.datos{display:flex;flex-direction:column;gap:1.5mm;align-items:center;margin-top:6mm;}
-.dato-row{display:flex;justify-content:center;align-items:baseline;gap:4mm;}
+.datos{position:absolute;right:22mm;bottom:8mm;display:flex;flex-direction:column;gap:1.5mm;align-items:flex-end;}
+.dato-row{display:flex;justify-content:flex-end;align-items:baseline;gap:4mm;}
 .dato-label{font-size:8.5pt;color:#666;}
-.dato-valor{font-size:9pt;font-weight:700;color:#1a1a1a;text-align:left;}
+.dato-valor{font-size:9pt;font-weight:700;color:#1a1a1a;text-align:right;}
 .pie{position:absolute;bottom:8mm;left:22mm;font-size:7pt;color:#bbb;}
 @media print{html,body{width:297mm;height:210mm;}.cert{page-break-after:avoid;page-break-inside:avoid;}}
 </style>
@@ -104,7 +104,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
       <div class="dato-row"><span class="dato-label">Fecha:</span><span class="dato-valor">${fechaFormateada}</span></div>
     </div>
   </div>
-  <div class="pie">HCD-F-16 Rev2024</div>
+  <div class="pie">HCD-F-16 Rev2026</div>
 </div>
 <script>
   function fitTexto(sel, maxPt, minPt){
