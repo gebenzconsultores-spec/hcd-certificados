@@ -223,7 +223,7 @@ export default function CotizadorPublico() {
         curso_id: cursoSel.id,
         curso_nombre: cursoSel.nombre,
         tipo_precio: nums.especial ? 'especial' : config.tipo,
-        num_personas: config.num_personas,
+        num_personas: Number(config.num_personas) || 1,
         dias: nums.dias_curso,
         precio_base: nums.precio_base,
         descuento_tipo: config.cupon_validado ? config.cupon_validado.tipo : (nums.desc_grupo > 0 ? 'grupo' : null),
@@ -430,7 +430,7 @@ export default function CotizadorPublico() {
                   </div>
 
                   <label style={lbl}>Número de personas</label>
-                  <input type="number" min={1} value={config.num_personas} onChange={e => c('num_personas')(Number(e.target.value))} style={inp} />
+                  <input type="number" min={1} value={config.num_personas} onChange={e => c('num_personas')(e.target.value)} style={inp} />
 
                   {/* Duración automática según horas del curso */}
                   <div style={{ marginTop: 12, background: '#f8f9fb', borderRadius: 8, padding: '12px 14px' }}>
@@ -438,13 +438,9 @@ export default function CotizadorPublico() {
                     <div style={{ color: '#1e293b', fontSize: 14, fontWeight: 700 }}>
                       {cursoSel.duracion} horas — equivale a {nums.dias_curso} día{nums.dias_curso > 1 ? 's' : ''}
                     </div>
-                    {nums.especial ? (
+                    {nums.especial && (
                       <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 700, marginTop: 6 }}>
                         16+ personas → Cotización especial. Envía tus datos y HCD te hará llegar el precio.
-                      </div>
-                    ) : (
-                      <div style={{ color: '#8B1A1A', fontSize: 13, fontWeight: 600, marginTop: 6 }}>
-                        Bloque {nums.bloque} personas · ${precioHora(cursoSel.categoria, nums.bloque).toLocaleString('es-MX')}/h × {cursoSel.duracion} h = <strong>${nums.precio_base.toLocaleString('es-MX')}</strong>
                       </div>
                     )}
                   </div>
@@ -479,7 +475,7 @@ export default function CotizadorPublico() {
                         return (
                           <>
                             <label style={lbl}>Número de horas</label>
-                            <input type="number" min={1} value={config.horas_consultoria} onChange={e => c('horas_consultoria')(Number(e.target.value))} style={inp} />
+                            <input type="number" min={1} value={config.horas_consultoria} onChange={e => c('horas_consultoria')(e.target.value)} style={inp} />
                           </>
                         )
                       }
