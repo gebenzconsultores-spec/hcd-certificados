@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getCursos, crearCurso, getExamenPorCurso, guardarPreguntas } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
 const COLOR_FAMILIA = {
   'Sistemas de Gestión': '#1d4ed8',
@@ -26,7 +27,17 @@ function diasPorHoras(horas) {
   const h = Number(horas) || 0
   if (h <= 8) return 1
   if (h <= 16) return 2
-  return 3
+  if (h <= 24) return 3
+  return 4
+}
+
+// Texto de duración para mostrar (más de 24 h = "más de 3 días")
+function labelDuracion(horas) {
+  const h = Number(horas) || 0
+  if (h <= 8) return '1 día'
+  if (h <= 16) return '2 días'
+  if (h <= 24) return '3 días'
+  return 'más de 3 días'
 }
 
 export default function Cursos() {
@@ -189,6 +200,56 @@ export default function Cursos() {
     } finally { setSaving(false) }
   }
 
+  // ── Examen por Excel ──
+  function normKey(k) {
+    return String(k).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '')
+  }
+  async function cargarExcelExamen(file) {
+    if (!file) return
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const filas = XLSX.utils.sheet_to_json(ws, { defval: '' })
+      if (!filas.length) { alert('El Excel no tiene filas con datos.'); return }
+      const mapaResp = { A: 0, B: 1, C: 2, D: 3, '1': 0, '2': 1, '3': 2, '4': 3 }
+      const nuevas = []
+      for (const fila of filas) {
+        const m = {}
+        for (const k of Object.keys(fila)) m[normKey(k)] = fila[k]
+        const pregunta = m['pregunta'] ?? ''
+        if (!String(pregunta).trim()) continue
+        const opA = m['opciona'] ?? m['a'] ?? m['opcion1'] ?? ''
+        const opB = m['opcionb'] ?? m['b'] ?? m['opcion2'] ?? ''
+        const opC = m['opcionc'] ?? m['c'] ?? m['opcion3'] ?? ''
+        const opD = m['opciond'] ?? m['d'] ?? m['opcion4'] ?? ''
+        const rawResp = String(m['respuestacorrecta'] ?? m['respuesta'] ?? m['correcta'] ?? 'A').trim().toUpperCase()
+        const idx = mapaResp[rawResp] ?? 0
+        nuevas.push({
+          pregunta: String(pregunta), tipo: 'opcion_multiple',
+          opciones: [String(opA), String(opB), String(opC), String(opD)],
+          respuesta_correcta: idx
+        })
+      }
+      if (!nuevas.length) { alert('No se encontraron preguntas. Revisa que la columna "Pregunta" tenga texto.'); return }
+      if (preguntas.some(p => (p.pregunta || '').trim()) && !window.confirm(`Se cargarán ${nuevas.length} pregunta(s) del Excel y reemplazarán las que están en pantalla. ¿Continuar?`)) return
+      setPreguntas(nuevas)
+      alert(`✅ Se cargaron ${nuevas.length} pregunta(s). Revísalas y da "Guardar examen".`)
+    } catch (e) {
+      alert('No se pudo leer el Excel: ' + (e.message || ''))
+    }
+  }
+  function descargarPlantillaExamen() {
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Pregunta', 'Opcion A', 'Opcion B', 'Opcion C', 'Opcion D', 'Respuesta correcta (A/B/C/D)'],
+      ['Ejemplo: ¿Cuanto es 2 + 2?', '3', '4', '5', '6', 'B'],
+    ])
+    ws['!cols'] = [{ wch: 45 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 26 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Examen')
+    XLSX.writeFile(wb, 'plantilla_examen.xlsx')
+  }
+
   if (loading) return <div style={{ color: '#64748b', padding: 40 }}>Cargando catálogo...</div>
 
   const cursosDeFamilia = familiaAbierta ? cursos.filter(c => c.familia_id === familiaAbierta) : []
@@ -245,7 +306,7 @@ export default function Cursos() {
                           Cat. {c.categoria || 'B'}
                         </span>
                       </div>
-                      <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h · {c.dias || diasPorHoras(c.duracion)} día{(c.dias || diasPorHoras(c.duracion)) > 1 ? 's' : ''}</span>
+                      <span style={{ color: '#94a3b8', fontSize: 12 }}>⏱ {c.duracion}h · {labelDuracion(c.duracion)}</span>
                     </div>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12, lineHeight: 1.3 }}>{c.nombre}</h3>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -317,7 +378,7 @@ export default function Cursos() {
             <Field label="Duración (horas)" value={form.duracion} onChange={f('duracion')} placeholder="ej. 8" type="number" />
             {form.duracion && (
               <p style={{ color: '#059669', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
-                📅 Este curso será de <strong>{diasPorHoras(form.duracion)} día{diasPorHoras(form.duracion) > 1 ? 's' : ''}</strong>
+                📅 Este curso será de <strong>{labelDuracion(form.duracion)}</strong>
               </p>
             )}
 
@@ -367,7 +428,7 @@ export default function Cursos() {
             <Field label="Duración (horas)" value={modalEditar.duracion} onChange={v => setModalEditar(p => ({ ...p, duracion: v }))} type="number" />
             {modalEditar.duracion && (
               <p style={{ color: '#059669', fontSize: 12, marginTop: -6, marginBottom: 4 }}>
-                📅 Curso de <strong>{diasPorHoras(modalEditar.duracion)} día{diasPorHoras(modalEditar.duracion) > 1 ? 's' : ''}</strong>
+                📅 Curso de <strong>{labelDuracion(modalEditar.duracion)}</strong>
               </p>
             )}
 
@@ -406,6 +467,19 @@ export default function Cursos() {
         <div style={overlay} onClick={() => setModalExamen(null)}>
           <div style={{ ...modalStyle, width: 640, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Examen · {modalExamen.nombre || modalExamen.titulo}</h3>
+
+            <div style={{ background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>📤 Cargar preguntas desde Excel</div>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                <label style={{ ...btnSecondary, cursor: 'pointer', display: 'inline-block' }}>
+                  Elegir archivo Excel
+                  <input type="file" accept=".xlsx,.xls" onChange={e => { cargarExcelExamen(e.target.files[0]); e.target.value = '' }} style={{ display: 'none' }} />
+                </label>
+                <button onClick={descargarPlantillaExamen} style={btnGhost}>📄 Descargar plantilla</button>
+              </div>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8 }}>Columnas: Pregunta · Opcion A · Opcion B · Opcion C · Opcion D · Respuesta correcta (A/B/C/D). Al cargar, reemplaza las preguntas de pantalla; luego revisa y da "Guardar examen".</p>
+            </div>
+
             {preguntas.map((q, idx) => (
               <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
