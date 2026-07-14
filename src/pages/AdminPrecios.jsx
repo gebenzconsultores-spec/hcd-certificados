@@ -8,8 +8,8 @@ const CATEGORIAS = [
   { id: 'C', label: 'C — Común', color: '#059669', bg: '#f0fdf4' },
 ]
 const BLOQUES = [
-  { id: '1-4', label: '1 a 4 personas' },
-  { id: '5-10', label: '5 a 10 personas' },
+  { id: '1-5', label: '1 a 5 personas' },
+  { id: '6-10', label: '6 a 10 personas' },
   { id: '11-15', label: '11 a 15 personas' },
 ]
 const DURACIONES = [

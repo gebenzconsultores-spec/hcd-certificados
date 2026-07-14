@@ -32,8 +32,8 @@ function precioPorDias(curso, dias) {
 // Bloque de participantes (nuevo modelo de precios por categoría × bloque)
 function bloqueDePersonas(n) {
   const num = Number(n) || 0
-  if (num <= 4) return '1-4'
-  if (num <= 10) return '5-10'
+  if (num <= 5) return '1-5'
+  if (num <= 10) return '6-10'
   if (num <= 15) return '11-15'
   return 'especial' // 16 o más → cotización especial
 }
