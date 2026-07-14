@@ -5,6 +5,8 @@ import { generarYAbrirCertificado } from '../lib/certificado'
 export default function Certificados() {
   const [certificados, setCertificados] = useState([])
   const [cursos, setCursos] = useState([])
+  const [cursosConfirmados, setCursosConfirmados] = useState([])
+  const [cursoConfirmadoSel, setCursoConfirmadoSel] = useState('')
   const [empresas, setEmpresas] = useState([])
   const [participantes, setParticipantes] = useState([])
   const [modal, setModal] = useState(false)
@@ -21,8 +23,20 @@ export default function Certificados() {
     cargar()
     getCursos().then(setCursos).catch(() => setCursos([]))
     getEmpresas().then(setEmpresas).catch(() => setEmpresas([]))
+    cargarConfirmados()
     cargarParticipantes()
   }, [])
+
+  async function cargarConfirmados() {
+    try {
+      const { data } = await supabase.from('cursos_confirmados')
+        .select('id, curso_id, curso_nombre, empresa_id, empresa_nombre, fecha_inicio, modalidad')
+        .order('fecha_inicio', { ascending: false })
+      setCursosConfirmados(data || [])
+    } catch (_) {
+      setCursosConfirmados([])
+    }
+  }
 
   async function cargarParticipantes() {
     // Cargar TODOS sin join (el join puede fallar y dejar la lista vacía)
@@ -54,6 +68,22 @@ export default function Certificados() {
     setForm(p => ({
       ...p, empresa_id,
       lugar: p.modalidad === 'presencial' ? (emp?.ciudad || emp?.nombre || '') : p.lugar
+    }))
+  }
+
+  // Al elegir un curso del calendario: resolver curso del catálogo y autollenar
+  function seleccionarCursoConfirmado(id) {
+    setCursoConfirmadoSel(id)
+    const cc = cursosConfirmados.find(x => x.id === id)
+    if (!cc) { setForm(p => ({ ...p, curso_id: '' })); return }
+    const emp = empresas.find(e => e.id === cc.empresa_id)
+    const modalidad = cc.modalidad || 'presencial'
+    setForm(p => ({
+      ...p,
+      curso_id: cc.curso_id || '',
+      empresa_id: cc.empresa_id || '',
+      modalidad,
+      lugar: modalidad === 'online' ? 'Puebla, Pue.' : (emp?.ciudad || cc.empresa_nombre || emp?.nombre || p.lugar)
     }))
   }
 
@@ -94,6 +124,7 @@ export default function Certificados() {
       await cargar()
       setModal(false)
       setForm({ participante_id: '', curso_id: '', empresa_id: '', lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz', instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado', modalidad: 'presencial' })
+      setCursoConfirmadoSel('')
     } catch (e) {
       alert('Error al emitir: ' + (e.message || ''))
     } finally { setSaving(false) }
@@ -192,11 +223,16 @@ export default function Certificados() {
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Curso *</label>
-              <select value={form.curso_id} onChange={e => f('curso_id')(e.target.value)} style={inputStyle}>
-                <option value="">— Selecciona curso —</option>
-                {cursos.map(c => <option key={c.id} value={c.id}>#{c.numero_curso} — {c.nombre}</option>)}
+              <label style={labelStyle}>Curso * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(del calendario)</span></label>
+              <select value={cursoConfirmadoSel} onChange={e => seleccionarCursoConfirmado(e.target.value)} style={inputStyle}>
+                <option value="">— Selecciona curso del calendario —</option>
+                {cursosConfirmados.map(cc => (
+                  <option key={cc.id} value={cc.id}>
+                    {cc.curso_nombre}{cc.fecha_inicio ? ` · ${new Date(cc.fecha_inicio + 'T00:00:00').toLocaleDateString('es-MX')}` : ''}{cc.empresa_nombre ? ` · ${cc.empresa_nombre}` : ''}
+                  </option>
+                ))}
               </select>
+              {cursosConfirmados.length === 0 && <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>No hay cursos en el calendario todavía. Prográmalos en "Calendario de cursos".</p>}
             </div>
 
             <div style={{ marginBottom: 14 }}>
