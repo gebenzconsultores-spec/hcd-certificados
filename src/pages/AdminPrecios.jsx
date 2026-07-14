@@ -12,6 +12,17 @@ const BLOQUES = [
   { id: '5-10', label: '5 a 10 personas' },
   { id: '11-15', label: '11 a 15 personas' },
 ]
+const DURACIONES = [
+  { id: '1', label: '1 día', sub: '8 h o menos' },
+  { id: '2', label: '2 días', sub: 'más de 8 y hasta 16 h' },
+  { id: '3', label: '3 días', sub: 'más de 16 y hasta 24 h' },
+  { id: '4', label: '4+ días', sub: 'más de 24 h' },
+]
+const CAT_COLOR = {
+  A: { bg: '#f9f0f0', fg: '#8B1A1A' },
+  B: { bg: '#eff6ff', fg: '#1d4ed8' },
+  C: { bg: '#f0fdf4', fg: '#059669' },
+}
 
 export default function AdminPrecios() {
   const [cursos, setCursos] = useState([])
@@ -35,47 +46,9 @@ export default function AdminPrecios() {
     setLoading(false)
   }
 
-  function abrirEditar(curso) {
-    setForm({
-      precio_persona_1dia: curso.precio_persona_1dia || 2830,
-      precio_persona_2dias: curso.precio_persona_2dias || 5660,
-      precio_persona_3dias: curso.precio_persona_3dias || 8090,
-      precio_grupo: curso.precio_grupo || '',
-      dias_grupo: curso.dias_grupo || 1,
-      personas_max: curso.personas_max || 15,
-      descuento_porcentaje: curso.descuento_porcentaje || 0,
-      descuento_activo: curso.descuento_activo || false,
-      familia_id: curso.familia_id || '',
-      descripcion: curso.descripcion || '',
-      es_publico: curso.es_publico !== false,
-    })
-    setEditando(curso)
-  }
-
-  const f = k => v => setForm(p => ({ ...p, [k]: v }))
-
-  async function guardar() {
-    if (!editando) return
-    setSaving(true)
-    try {
-      await supabase.from('cursos').update({
-        precio_persona_1dia: Number(form.precio_persona_1dia),
-        precio_persona_2dias: Number(form.precio_persona_2dias),
-        precio_persona_3dias: Number(form.precio_persona_3dias),
-        precio_grupo: form.precio_grupo ? Number(form.precio_grupo) : null,
-        dias_grupo: Number(form.dias_grupo),
-        personas_max: Number(form.personas_max),
-        descuento_porcentaje: Number(form.descuento_porcentaje),
-        descuento_activo: form.descuento_activo,
-        familia_id: form.familia_id || null,
-        descripcion: form.descripcion,
-        es_publico: form.es_publico,
-      }).eq('id', editando.id)
-      await cargar()
-      setEditando(null)
-      setMsg('✅ Precios actualizados. Ya están disponibles en el cotizador.')
-      setTimeout(() => setMsg(null), 3000)
-    } finally { setSaving(false) }
+  async function toggleVisible(curso) {
+    await supabase.from('cursos').update({ es_publico: !(curso.es_publico !== false) }).eq('id', curso.id)
+    await cargar()
   }
 
   const cursosFiltrados = cursos.filter(c => c.nombre.toLowerCase().includes(busqueda.toLowerCase()))
@@ -86,7 +59,7 @@ export default function AdminPrecios() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Precios y catálogo público</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Configura precios, descuentos y visibilidad. Se conectan al cotizador en tiempo real.</p>
+        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Los precios salen de la matriz por hora (categoría × bloque × duración). Aquí solo defines la categoría del curso y su visibilidad en el cotizador.</p>
       </div>
 
       <MatrizPreciosHora />
@@ -102,14 +75,14 @@ export default function AdminPrecios() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Clave', 'Curso', 'Familia', '1 día', '2 días', '3 días', 'Grupo', 'Descuento', 'En cotizador', ''].map(h => (
+              {['Clave', 'Curso', 'Familia', 'Categoría', 'En cotizador'].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {cursosFiltrados.length === 0 && (
-              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos. Créalos primero en la sección Cursos.</td></tr>
+              <tr><td colSpan={5} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos. Créalos primero en la sección Cursos.</td></tr>
             )}
             {cursosFiltrados.map(c => {
               const fam = familias.find(x => x.id === c.familia_id)
@@ -125,22 +98,14 @@ export default function AdminPrecios() {
                   <td style={{ padding: '11px 14px' }}>
                     {fam ? <span style={{ background: `${fam.color}15`, color: fam.color, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{fam.clave ? `${fam.clave} · ` : ''}{fam.nombre}</span> : <span style={{ color: '#cbd5e1', fontSize: 11 }}>Sin familia</span>}
                   </td>
-                  <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_1dia || 2830).toLocaleString('es-MX')}</td>
-                  <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_2dias || 5660).toLocaleString('es-MX')}</td>
-                  <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>${(c.precio_persona_3dias || 8090).toLocaleString('es-MX')}</td>
-                  <td style={{ padding: '11px 14px', color: '#1e293b', fontSize: 13 }}>{c.precio_grupo ? `$${c.precio_grupo.toLocaleString('es-MX')}` : '—'}</td>
                   <td style={{ padding: '11px 14px' }}>
-                    {c.descuento_activo && c.descuento_porcentaje > 0
-                      ? <span style={{ background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>-{c.descuento_porcentaje}%</span>
-                      : <span style={{ color: '#cbd5e1', fontSize: 11 }}>—</span>}
+                    <span style={{ background: (CAT_COLOR[c.categoria] || CAT_COLOR.B).bg, color: (CAT_COLOR[c.categoria] || CAT_COLOR.B).fg, padding: '3px 9px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>Cat. {c.categoria || 'B'}</span>
                   </td>
                   <td style={{ padding: '11px 14px' }}>
-                    <span style={{ background: c.es_publico !== false ? '#f0fdf4' : '#f1f5f9', color: c.es_publico !== false ? '#059669' : '#94a3b8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
-                      {c.es_publico !== false ? 'Visible' : 'Oculto'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '11px 14px' }}>
-                    <button onClick={() => abrirEditar(c)} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Editar</button>
+                    <button onClick={() => toggleVisible(c)}
+                      style={{ cursor: 'pointer', border: 'none', background: c.es_publico !== false ? '#f0fdf4' : '#f1f5f9', color: c.es_publico !== false ? '#059669' : '#94a3b8', padding: '4px 12px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
+                      {c.es_publico !== false ? '✓ Visible' : 'Oculto'}
+                    </button>
                   </td>
                 </tr>
               )
@@ -149,89 +114,14 @@ export default function AdminPrecios() {
         </table>
       </div>
 
-      {/* Modal editar precios */}
-      {editando && (
-        <div style={overlay} onClick={() => setEditando(null)}>
-          <div style={{ ...modalStyle, width: 560, maxHeight: '88vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Precios: {editando.nombre}</h3>
-            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 20 }}>{editando.clave_interna || 'Sin clave'} · {editando.duracion}h · {editando.dias || 1} día{(editando.dias || 1) > 1 ? 's' : ''}</p>
-
-            <label style={lbl}>Familia (para el cotizador)</label>
-            <select value={form.familia_id} onChange={e => f('familia_id')(e.target.value)} style={inp}>
-              <option value="">— Sin familia —</option>
-              {familias.map(fam => <option key={fam.id} value={fam.id}>{fam.icono} {fam.nombre}</option>)}
-            </select>
-
-            <label style={lbl}>Descripción (aparece en el cotizador)</label>
-            <textarea value={form.descripcion} onChange={e => f('descripcion')(e.target.value)} rows={2} placeholder="Breve descripción del curso" style={{ ...inp, resize: 'none' }} />
-
-            <div style={{ background: '#f8f9fb', borderRadius: 10, padding: 16, marginTop: 16 }}>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, marginBottom: 12 }}>Precios por persona <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: 11 }}>(+ IVA)</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={lblSm}>1 día</label>
-                  <input type="number" value={form.precio_persona_1dia} onChange={e => f('precio_persona_1dia')(e.target.value)} style={inp} />
-                </div>
-                <div>
-                  <label style={lblSm}>2 días</label>
-                  <input type="number" value={form.precio_persona_2dias} onChange={e => f('precio_persona_2dias')(e.target.value)} style={inp} />
-                </div>
-                <div>
-                  <label style={lblSm}>3 días</label>
-                  <input type="number" value={form.precio_persona_3dias} onChange={e => f('precio_persona_3dias')(e.target.value)} style={inp} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: '#f8f9fb', borderRadius: 10, padding: 16, marginTop: 12 }}>
-              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 13, marginBottom: 12 }}>Precio grupo cerrado</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                <div>
-                  <label style={lblSm}>Precio grupo</label>
-                  <input type="number" value={form.precio_grupo} onChange={e => f('precio_grupo')(e.target.value)} placeholder="ej. 38000" style={inp} />
-                </div>
-                <div>
-                  <label style={lblSm}>Días</label>
-                  <input type="number" value={form.dias_grupo} onChange={e => f('dias_grupo')(e.target.value)} style={inp} />
-                </div>
-                <div>
-                  <label style={lblSm}>Máx. personas</label>
-                  <input type="number" value={form.personas_max} onChange={e => f('personas_max')(e.target.value)} style={inp} />
-                </div>
-              </div>
-            </div>
-
-            <div style={{ background: '#fef9e7', borderRadius: 10, padding: 16, marginTop: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 10 }}>
-                <input type="checkbox" checked={form.descuento_activo} onChange={e => f('descuento_activo')(e.target.checked)} style={{ accentColor: '#d97706', width: 16, height: 16 }} />
-                <span style={{ fontSize: 13, color: '#92400e', fontWeight: 600 }}>Activar descuento promocional</span>
-              </label>
-              {form.descuento_activo && (
-                <div>
-                  <label style={lblSm}>Porcentaje de descuento (%)</label>
-                  <input type="number" value={form.descuento_porcentaje} onChange={e => f('descuento_porcentaje')(e.target.value)} placeholder="ej. 20" style={inp} />
-                </div>
-              )}
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 16 }}>
-              <input type="checkbox" checked={form.es_publico} onChange={e => f('es_publico')(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
-              <span style={{ fontSize: 13, color: '#374151' }}>Mostrar en el cotizador público</span>
-            </label>
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button onClick={() => setEditando(null)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar precios'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
+
 function MatrizPreciosHora() {
   const [rows, setRows] = useState([])
+  const [tier, setTier] = useState('1')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [ok, setOk] = useState(false)
@@ -247,40 +137,59 @@ function MatrizPreciosHora() {
     setLoading(false)
   }
 
-  function valor(cat, bloque) {
-    const r = rows.find(x => x.categoria === cat && x.bloque === bloque)
+  function valor(cat, bloque, t) {
+    const r = rows.find(x => x.categoria === cat && x.bloque === bloque && (x.duracion_tier || '1') === t)
     return r ? r.precio_hora : ''
   }
-  function setValor(cat, bloque, v) {
+  function setValor(cat, bloque, t, v) {
     setRows(prev => {
-      const existe = prev.some(x => x.categoria === cat && x.bloque === bloque)
-      if (existe) return prev.map(r => (r.categoria === cat && r.bloque === bloque ? { ...r, precio_hora: v } : r))
-      return [...prev, { categoria: cat, bloque, precio_hora: v }]
+      const existe = prev.some(x => x.categoria === cat && x.bloque === bloque && (x.duracion_tier || '1') === t)
+      if (existe) return prev.map(r => (r.categoria === cat && r.bloque === bloque && (r.duracion_tier || '1') === t ? { ...r, precio_hora: v } : r))
+      return [...prev, { categoria: cat, bloque, duracion_tier: t, precio_hora: v }]
     })
   }
 
   async function guardar() {
     setSaving(true)
     try {
-      const payload = []
-      for (const cat of CATEGORIAS) for (const b of BLOQUES) {
-        payload.push({ categoria: cat.id, bloque: b.id, precio_hora: Number(valor(cat.id, b.id)) || 0 })
+      // Actualiza por id las filas existentes; inserta las que falten
+      for (const cat of CATEGORIAS) for (const b of BLOQUES) for (const d of DURACIONES) {
+        const r = rows.find(x => x.categoria === cat.id && x.bloque === b.id && (x.duracion_tier || '1') === d.id)
+        const precio = Number(valor(cat.id, b.id, d.id)) || 0
+        if (r && r.id) {
+          await supabase.from('precios_categoria').update({ precio_hora: precio }).eq('id', r.id)
+        } else {
+          await supabase.from('precios_categoria').insert({ categoria: cat.id, bloque: b.id, duracion_tier: d.id, precio_hora: precio })
+        }
       }
-      const { error } = await supabase.from('precios_categoria').upsert(payload, { onConflict: 'categoria,bloque' })
-      if (error) { alert('No se pudo guardar la matriz: ' + error.message); setSaving(false); return }
       await cargar()
       setOk(true); setTimeout(() => setOk(false), 3000)
+    } catch (e) {
+      alert('No se pudo guardar la matriz: ' + (e.message || ''))
     } finally { setSaving(false) }
   }
 
+  const durActiva = DURACIONES.find(d => d.id === tier)
+
   return (
     <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 22, marginBottom: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexWrap: 'wrap', gap: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Precio por hora (categoría × bloque)</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>Precio por hora (categoría × bloque × duración)</h2>
           <p style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>El cotizador calcula: <strong>precio por hora × horas del curso</strong>. 16 o más personas → cotización especial.</p>
         </div>
         <button onClick={guardar} disabled={saving || loading} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar matriz'}</button>
+      </div>
+
+      {/* Pestañas de duración */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {DURACIONES.map(d => (
+          <button key={d.id} onClick={() => setTier(d.id)}
+            style={{ padding: '8px 14px', borderRadius: 10, border: `2px solid ${tier === d.id ? '#8B1A1A' : '#e2e8f0'}`, background: tier === d.id ? '#f9f0f0' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: tier === d.id ? '#8B1A1A' : '#475569' }}>{d.label}</div>
+            <div style={{ fontSize: 10, color: '#94a3b8' }}>{d.sub}</div>
+          </button>
+        ))}
       </div>
 
       {ok && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 14px', margin: '8px 0', color: '#15803d', fontSize: 13 }}>✅ Matriz guardada. El cotizador ya la usa.</div>}
@@ -289,6 +198,7 @@ function MatrizPreciosHora() {
         <div style={{ color: '#94a3b8', padding: 20 }}>Cargando matriz...</div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>Mostrando precios por hora para cursos de <strong>{durActiva?.label}</strong> ({durActiva?.sub})</div>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
             <thead>
               <tr>
@@ -306,7 +216,7 @@ function MatrizPreciosHora() {
                     <td key={b.id} style={{ padding: '8px 10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <span style={{ color: '#94a3b8', fontSize: 13 }}>$</span>
-                        <input type="number" min={0} value={valor(cat.id, b.id)} onChange={e => setValor(cat.id, b.id, e.target.value)}
+                        <input type="number" min={0} value={valor(cat.id, b.id, tier)} onChange={e => setValor(cat.id, b.id, tier, e.target.value)}
                           placeholder="0" style={{ width: 110, border: '1px solid #d1d5db', borderRadius: 8, padding: '8px 10px', fontSize: 14, outline: 'none', color: '#1e293b' }} />
                         <span style={{ color: '#94a3b8', fontSize: 11 }}>/h</span>
                       </div>
@@ -316,7 +226,7 @@ function MatrizPreciosHora() {
               ))}
             </tbody>
           </table>
-          <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 10 }}>Ejemplo: si A · 1-4 = $500/h, un curso categoría A de 8 h para 3 personas costará $4,000 (500 × 8).</p>
+          <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 10 }}>Ejemplo: si A · 1-4 (duración {durActiva?.label}) = $500/h, un curso categoría A de esa duración con 8 h para 3 personas costará $4,000 (500 × 8). El botón "Guardar matriz" guarda las 4 duraciones.</p>
         </div>
       )}
     </div>

@@ -38,6 +38,15 @@ function bloqueDePersonas(n) {
   return 'especial' // 16 o más → cotización especial
 }
 
+// Nivel de duración según horas del curso (para la matriz de precios)
+function tierDuracion(horas) {
+  const h = Number(horas) || 0
+  if (h <= 8) return '1'   // 1 día
+  if (h <= 16) return '2'  // 2 días
+  if (h <= 24) return '3'  // 3 días
+  return '4'               // 4+ días
+}
+
 export default function CotizadorPublico() {
   const [familias, setFamilias] = useState([])
   const [cursos, setCursos] = useState([])
@@ -48,7 +57,7 @@ export default function CotizadorPublico() {
   const [paso, setPaso] = useState(1)
   const [cursoSel, setCursoSel] = useState(null)
   const [config, setConfig] = useState({
-    tipo: 'persona', num_personas: 1, dias: 1,
+    tipo: 'persona', num_personas: 1, dias: 1, modalidad: 'online',
     cupon_codigo: '', cupon_validado: null, cupon_error: '',
     requiere_viaticos: false, zona_viaticos_id: '', monto_viaticos: 0,
     aplica_iva: true, es_cliente_nuevo: true,
@@ -131,8 +140,8 @@ export default function CotizadorPublico() {
   }
 
   // Precio por hora de la matriz (categoría del curso × bloque de participantes)
-  function precioHora(categoria, bloque) {
-    const r = matriz.find(x => x.categoria === (categoria || 'B') && x.bloque === bloque)
+  function precioHora(categoria, bloque, tier) {
+    const r = matriz.find(x => x.categoria === (categoria || 'B') && x.bloque === bloque && (x.duracion_tier || '1') === tier)
     return r ? Number(r.precio_hora) || 0 : 0
   }
 
@@ -149,7 +158,7 @@ export default function CotizadorPublico() {
     const bloque = bloqueDePersonas(config.num_personas)
     const especial = bloque === 'especial'
     if (!especial) {
-      precio_base = precioHora(cursoSel.categoria, bloque) * (Number(cursoSel.duracion) || 0)
+      precio_base = precioHora(cursoSel.categoria, bloque, tierDuracion(cursoSel.duracion)) * (Number(cursoSel.duracion) || 0)
     }
 
     // Descuento configurado en el catálogo (Admin → Precios)
@@ -223,6 +232,7 @@ export default function CotizadorPublico() {
         curso_id: cursoSel.id,
         curso_nombre: cursoSel.nombre,
         tipo_precio: nums.especial ? 'especial' : config.tipo,
+        modalidad: config.modalidad,
         num_personas: Number(config.num_personas) || 1,
         dias: nums.dias_curso,
         precio_base: nums.precio_base,
@@ -419,11 +429,11 @@ export default function CotizadorPublico() {
               {/* Tipo */}
               {cursoSel.id && (
                 <div style={card}>
-                  <h3 style={cardTitle}>Tipo de cotización</h3>
+                  <h3 style={cardTitle}>Modalidad</h3>
                   <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
-                    {[['persona', 'Por persona'], ['grupo', 'Grupo cerrado']].map(([v, l]) => (
-                      <button key={v} onClick={() => c('tipo')(v)}
-                        style={{ flex: 1, padding: '10px', border: `2px solid ${config.tipo === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: config.tipo === v ? '#f9f0f0' : '#fff', color: config.tipo === v ? '#8B1A1A' : '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
+                    {[['online', 'Online'], ['presencial', 'Presencial']].map(([v, l]) => (
+                      <button key={v} onClick={() => c('modalidad')(v)}
+                        style={{ flex: 1, padding: '10px', border: `2px solid ${config.modalidad === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: config.modalidad === v ? '#f9f0f0' : '#fff', color: config.modalidad === v ? '#8B1A1A' : '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>
                         {l}
                       </button>
                     ))}
