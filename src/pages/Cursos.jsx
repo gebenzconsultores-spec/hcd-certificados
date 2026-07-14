@@ -51,6 +51,8 @@ export default function Cursos() {
   const [modal, setModal] = useState(false)
   const [modalEditar, setModalEditar] = useState(null)
   const [modalExamen, setModalExamen] = useState(null)
+  const [modalVer, setModalVer] = useState(null)
+  const [preguntasVer, setPreguntasVer] = useState([])
   const [form, setForm] = useState({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
@@ -171,6 +173,11 @@ export default function Cursos() {
     const pregs = await getExamenPorCurso(curso.id)
     setPreguntas(pregs.length > 0 ? pregs.map(p => ({ ...p, opciones: p.opciones || ['', '', '', ''] })) : [preguntaVacia()])
     setModalExamen(curso)
+  }
+  async function abrirVerExamen(curso) {
+    const pregs = await getExamenPorCurso(curso.id)
+    setPreguntasVer(pregs.map(p => ({ ...p, opciones: p.opciones || [] })))
+    setModalVer(curso)
   }
   function preguntaVacia() {
     return { pregunta: '', tipo: 'opcion_multiple', opciones: ['', '', '', ''], respuesta_correcta: 0 }
@@ -311,7 +318,7 @@ export default function Cursos() {
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 12, lineHeight: 1.3 }}>{c.nombre}</h3>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button onClick={() => abrirExamen(c)} style={btnSecondary}>📝 Editar examen</button>
-                      <a href={`/examen/${c.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
+                      <button onClick={() => abrirVerExamen(c)} style={btnSecondary}>👁 Ver examen</button>
                       <button onClick={() => setModalEditar({ ...c })} style={{ ...btnSecondary, padding: '7px 12px' }}>✏️</button>
                       <button onClick={() => borrarCurso(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
                     </div>
@@ -334,7 +341,7 @@ export default function Cursos() {
                 {m.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>{m.descripcion}</p>}
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button onClick={() => abrirExamen(m)} style={btnSecondary}>📝 Editar examen</button>
-                  <a href={`/examen/${m.id}`} target="_blank" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>🔗 Ver examen</a>
+                  <button onClick={() => abrirVerExamen(m)} style={btnSecondary}>👁 Ver examen</button>
                 </div>
               </div>
             ))
@@ -500,6 +507,38 @@ export default function Cursos() {
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => setModalExamen(null)} style={btnGhost}>Cancelar</button>
               <button onClick={guardarExamen} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar examen'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vista de solo lectura del examen (respuestas correctas en verde) */}
+      {modalVer && (
+        <div style={overlay} onClick={() => setModalVer(null)}>
+          <div style={{ ...modalStyle, width: 640, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <h3 style={modalTitle}>Vista del examen · {modalVer.nombre || modalVer.titulo}</h3>
+            <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Solo lectura. La respuesta correcta está marcada en verde.</p>
+            {preguntasVer.length === 0 && (
+              <div style={{ color: '#94a3b8', padding: 20, textAlign: 'center' }}>Este examen aún no tiene preguntas. Usa "Editar examen" para agregarlas.</div>
+            )}
+            {preguntasVer.map((q, idx) => (
+              <div key={idx} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', marginBottom: 8 }}>Pregunta {idx + 1}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 10 }}>{q.pregunta}</div>
+                {(q.opciones || []).map((op, oidx) => {
+                  const correcta = q.respuesta_correcta === oidx
+                  return (
+                    <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '8px 10px', borderRadius: 8, background: correcta ? '#f0fdf4' : '#f8f9fb', border: `1px solid ${correcta ? '#bbf7d0' : '#e2e8f0'}` }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: correcta ? '#059669' : '#94a3b8' }}>{correcta ? '✓' : String.fromCharCode(65 + oidx)}</span>
+                      <span style={{ fontSize: 13, color: correcta ? '#15803d' : '#475569', fontWeight: correcta ? 600 : 400 }}>{op}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 8 }}>
+              <button onClick={() => { setModalVer(null); abrirExamen(modalVer) }} style={btnSecondary}>✏️ Editar este examen</button>
+              <button onClick={() => setModalVer(null)} style={btnPrimary}>Cerrar</button>
             </div>
           </div>
         </div>
