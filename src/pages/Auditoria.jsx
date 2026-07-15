@@ -13,6 +13,18 @@ export default function Auditoria() {
   const [datos, setDatos] = useState(null)
   const [loading, setLoading] = useState(false)
   const [generando, setGenerando] = useState(false)
+  const [modalResp, setModalResp] = useState(null)
+  const [cargandoResp, setCargandoResp] = useState(false)
+
+  async function verRespuestas(r) {
+    setCargandoResp(true)
+    try {
+      const { data: pregs } = await supabase.from('preguntas').select('*').eq('curso_id', r.curso_id).order('orden')
+      setModalResp({ r, preguntas: pregs || [] })
+    } catch (e) {
+      alert('No se pudieron cargar las preguntas: ' + (e.message || ''))
+    } finally { setCargandoResp(false) }
+  }
 
   useEffect(() => {
     getEmpresas().then(setEmpresas)
@@ -68,6 +80,21 @@ export default function Auditoria() {
       const csvResultados = [headerRes.join(','), ...rowsRes].join('\n')
       carpeta.file('resultados_examenes.csv', '\uFEFF' + csvResultados)
 
+      // ── Respuestas detalladas de cada examen (una por alumno) ──
+      const respFolder = carpeta.folder('respuestas_examenes')
+      const cursoIds = [...new Set(datos.resultados.map(r => r.curso_id).filter(Boolean))]
+      const preguntasPorCurso = {}
+      for (const cid of cursoIds) {
+        const { data: pregs } = await supabase.from('preguntas').select('*').eq('curso_id', cid).order('orden')
+        preguntasPorCurso[cid] = pregs || []
+      }
+      for (const r of datos.resultados) {
+        const pregs = preguntasPorCurso[r.curso_id] || []
+        const html = htmlRespuestasExamen(r, pregs)
+        const nombreArch = `${(r.participante?.nombre || 'alumno').replace(/\s+/g, '_')}_${(r.curso?.nombre || 'curso').replace(/\s+/g, '_')}_intento${r.intento || 1}.html`
+        respFolder.file(nombreArch, html)
+      }
+
       // ── CSV de certificados ──
       const headerCert = ['ID Único', 'Participante', 'Correo', 'Curso', 'Modalidad', 'Lugar', 'Duración (hrs)', 'Fecha emisión', 'URL Verificación']
       const rowsCert = datos.certs.map(c => [
@@ -101,6 +128,7 @@ Generado: ${new Date().toLocaleDateString('es-MX')}
 
 CONTENIDO:
 - resultados_examenes.csv → Resultados detallados de todos los exámenes
+- respuestas_examenes/ → Respuestas de cada alumno (qué contestó y cuál era la correcta)
 - certificados_emitidos.csv → Lista de certificados con links de verificación
 - certificados_pdf/ → Archivos HTML individuales por participante
   (Abre cada archivo en el navegador y usa Ctrl+P para guardar como PDF)
@@ -211,14 +239,14 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8f9fb' }}>
-                  {['Participante', 'Curso', 'Calificación', 'Resultado', 'Intento', 'Fecha'].map(h => (
+                  {['Participante', 'Curso', 'Calificación', 'Resultado', 'Intento', 'Fecha', 'Respuestas'].map(h => (
                     <th key={h} style={{ padding: '10px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {datos.resultados.length === 0 && (
-                  <tr><td colSpan={6} style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Sin resultados para esta selección</td></tr>
+                  <tr><td colSpan={7} style={{ padding: 30, textAlign: 'center', color: '#94a3b8' }}>Sin resultados para esta selección</td></tr>
                 )}
                 {datos.resultados.map(r => (
                   <tr key={r.id} style={{ borderTop: '1px solid #f1f5f9' }}>
@@ -232,6 +260,9 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
                     </td>
                     <td style={{ padding: '10px 16px', color: '#64748b', fontSize: 13 }}>#{r.intento || 1}</td>
                     <td style={{ padding: '10px 16px', color: '#94a3b8', fontSize: 12 }}>{new Date(r.created_at).toLocaleDateString('es-MX')}</td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <button onClick={() => verRespuestas(r)} disabled={cargandoResp} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁 Ver respuestas</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -253,8 +284,81 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
           </div>
         </>
       )}
+
+      {/* Modal: respuestas del alumno */}
+      {modalResp && (() => {
+        const r = modalResp.r
+        const resp = typeof r.respuestas_json === 'string' ? (() => { try { return JSON.parse(r.respuestas_json) } catch { return {} } })() : (r.respuestas_json || {})
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={() => setModalResp(null)}>
+            <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 680, maxWidth: '100%', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Respuestas · {r.participante?.nombre}</h3>
+              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>{r.curso?.nombre} · Calificación <strong style={{ color: r.aprobado ? '#059669' : '#dc2626' }}>{r.calificacion}%</strong> · {r.aprobado ? 'Aprobado' : 'No aprobado'} · Intento #{r.intento || 1}</p>
+              {modalResp.preguntas.length === 0 && <div style={{ color: '#94a3b8', padding: 20, textAlign: 'center' }}>No se encontraron las preguntas de este examen.</div>}
+              {modalResp.preguntas.map((q, i) => {
+                const elegida = resp[q.id]
+                return (
+                  <div key={q.id || i} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', marginBottom: 6 }}>Pregunta {i + 1}</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 8 }}>{q.pregunta}</div>
+                    {(q.opciones || []).map((op, oidx) => {
+                      const esCorrecta = q.respuesta_correcta === oidx
+                      const esElegida = Number(elegida) === oidx
+                      const bg = esCorrecta ? '#f0fdf4' : (esElegida ? '#fef2f2' : '#f8f9fb')
+                      const bd = esCorrecta ? '#bbf7d0' : (esElegida ? '#fecaca' : '#e2e8f0')
+                      const col = esCorrecta ? '#15803d' : (esElegida ? '#dc2626' : '#475569')
+                      return (
+                        <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, marginBottom: 5, background: bg, border: `1px solid ${bd}` }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: col, minWidth: 16 }}>{esCorrecta ? '✓' : (esElegida ? '✗' : String.fromCharCode(65 + oidx))}</span>
+                          <span style={{ fontSize: 13, color: col, fontWeight: (esCorrecta || esElegida) ? 600 : 400 }}>{op}</span>
+                          {esElegida && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 700 }}>ELIGIÓ</span>}
+                        </div>
+                      )
+                    })}
+                    {elegida === undefined && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>⚠️ No respondió esta pregunta</div>}
+                  </div>
+                )
+              })}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button onClick={() => setModalResp(null)} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cerrar</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function htmlRespuestasExamen(r, preguntas) {
+  const resp = typeof r.respuestas_json === 'string'
+    ? (() => { try { return JSON.parse(r.respuestas_json) } catch { return {} } })()
+    : (r.respuestas_json || {})
+  const filas = (preguntas || []).map((q, i) => {
+    const elegida = resp[q.id]
+    const ops = (q.opciones || []).map((op, oidx) => {
+      const esCorrecta = q.respuesta_correcta === oidx
+      const esElegida = Number(elegida) === oidx
+      const bg = esCorrecta ? '#e8f7ee' : (esElegida ? '#fdecec' : '#f7f7f9')
+      const mark = esCorrecta ? '&#10003;' : (esElegida ? '&#10007;' : String.fromCharCode(65 + oidx))
+      const eligio = esElegida ? ' <b>(eligi&oacute;)</b>' : ''
+      return `<div style="padding:6px 10px;border-radius:6px;margin-bottom:4px;background:${bg};">${mark} ${escapeHtml(op)}${eligio}</div>`
+    }).join('')
+    const noResp = elegida === undefined ? '<div style="color:#b8860b;font-size:12px;">No respondi&oacute; esta pregunta</div>' : ''
+    return `<div style="border:1px solid #e2e2e2;border-radius:8px;padding:12px;margin-bottom:10px;"><div style="font-weight:700;margin-bottom:6px;">${i + 1}. ${escapeHtml(q.pregunta)}</div>${ops}${noResp}</div>`
+  }).join('')
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/><title>Respuestas ${escapeHtml(r.participante?.nombre || '')}</title></head>
+<body style="font-family:Arial,sans-serif;max-width:820px;margin:24px auto;color:#1e293b;padding:0 16px;">
+<h2>Respuestas del examen</h2>
+<p><b>Participante:</b> ${escapeHtml(r.participante?.nombre || '')} — ${escapeHtml(r.participante?.correo || '')}<br>
+<b>Curso:</b> ${escapeHtml(r.curso?.nombre || '')}<br>
+<b>Calificaci&oacute;n:</b> ${r.calificacion}% — ${r.aprobado ? 'APROBADO' : 'NO APROBADO'} — Intento #${r.intento || 1}<br>
+<b>Fecha:</b> ${new Date(r.created_at).toLocaleDateString('es-MX')}</p>
+<hr style="margin:14px 0;">${filas}</body></html>`
 }
 
 function generarHTMLCertificado(cert, qrBase64, fecha) {
