@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, siguienteNumeroCurso } from '../lib/supabase'
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -583,7 +583,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
       }
 
       // Crear la CONVOCATORIA en proximos_cursos (para el cintillo de empresas/estudiantes)
-      const numeroCert = await generarNumeroCertificado()
+      const numeroCert = await siguienteNumeroCurso()
       await supabase.from('proximos_cursos').insert({
         curso_id: curso.id,
         curso_nombre: curso.nombre,
@@ -617,7 +617,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         num_participantes: seleccionados.length,
         tipo_fechas: tipoFechas, num_dias: dias.length,
         origen: 'programado_admin', id_compra: idCompra,
-        modalidad: 'zoom', estado: 'confirmado',
+        modalidad: 'zoom', estado: 'confirmado', numero_curso: numeroCert,
         clave_vendedor: vendedorClave, vendedor_nombre: vendedorNombre, tipo_venta: tipoVentaFinal,
         notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
       }).select().single()

@@ -7,6 +7,7 @@ export default function Certificados() {
   const [cursos, setCursos] = useState([])
   const [cursosConfirmados, setCursosConfirmados] = useState([])
   const [cursoConfirmadoSel, setCursoConfirmadoSel] = useState('')
+  const [idManual, setIdManual] = useState('')
   const [empresas, setEmpresas] = useState([])
   const [participantes, setParticipantes] = useState([])
   const [modal, setModal] = useState(false)
@@ -30,7 +31,7 @@ export default function Certificados() {
   async function cargarConfirmados() {
     try {
       const { data } = await supabase.from('cursos_confirmados')
-        .select('id, curso_id, curso_nombre, empresa_id, empresa_nombre, fecha_inicio, modalidad')
+        .select('id, curso_id, curso_nombre, empresa_id, empresa_nombre, fecha_inicio, modalidad, numero_curso')
         .order('fecha_inicio', { ascending: false })
       setCursosConfirmados(data || [])
     } catch (_) {
@@ -74,6 +75,7 @@ export default function Certificados() {
   // Al elegir un curso del calendario: resolver curso del catálogo y autollenar
   function seleccionarCursoConfirmado(id) {
     setCursoConfirmadoSel(id)
+    setIdManual('')
     const cc = cursosConfirmados.find(x => x.id === id)
     if (!cc) { setForm(p => ({ ...p, curso_id: '' })); return }
     const emp = empresas.find(e => e.id === cc.empresa_id)
@@ -91,12 +93,18 @@ export default function Certificados() {
     if (!form.participante_id || !form.curso_id || !form.lugar) { alert('Completa participante, curso y lugar'); return }
     setSaving(true)
     try {
-      const consec = await siguienteConsecutivo()
       const curso = cursos.find(c => c.id === form.curso_id)
       const participante = participantes.find(p => p.id === form.participante_id)
-      // Número del curso: usa numero_certificado (499+) si existe, si no numero_curso
-      const numCurso = curso.numero_certificado || curso.numero_curso || consec
-      const id_unico = `HCD-${numCurso}-${consec}`
+      const cc = cursosConfirmados.find(x => x.id === cursoConfirmadoSel)
+      // ID: si lo escribiste a mano, se usa tal cual; si no, se genera solo (número de curso del calendario + consecutivo global a 4 dígitos)
+      let id_unico
+      if (idManual.trim()) {
+        id_unico = idManual.trim()
+      } else {
+        const numCurso = cc?.numero_curso || curso?.numero_curso || 'SN'
+        const consec = await siguienteConsecutivo()
+        id_unico = `HCD-${numCurso}-${String(consec).padStart(4, '0')}`
+      }
 
       const { data: cert, error } = await supabase.from('certificados').insert({
         id_unico,
@@ -125,6 +133,7 @@ export default function Certificados() {
       setModal(false)
       setForm({ participante_id: '', curso_id: '', empresa_id: '', lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz', instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado', modalidad: 'presencial' })
       setCursoConfirmadoSel('')
+      setIdManual('')
     } catch (e) {
       alert('Error al emitir: ' + (e.message || ''))
     } finally { setSaving(false) }
@@ -256,14 +265,15 @@ export default function Certificados() {
             <Field label="RFC del instructor" value={form.instructor_rfc} onChange={f('instructor_rfc')} />
             <Field label="Dirección" value={form.director_nombre} onChange={f('director_nombre')} />
 
-            {form.curso_id && form.participante_id && (
-              <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
-                <div style={{ color: '#991b1b', fontSize: 11, marginBottom: 3 }}>VISTA PREVIA DEL ID ÚNICO</div>
-                <code style={{ color: '#8B1A1A', fontSize: 14, fontWeight: 700 }}>
-                  HCD-{cursos.find(c => c.id === form.curso_id)?.numero_curso}-{/* consecutivo se asigna al guardar */}????
-                </code>
-              </div>
-            )}
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>ID del diploma <span style={{ color: '#94a3b8', fontWeight: 400 }}>(se genera solo; puedes escribirlo a mano)</span></label>
+              <input value={idManual} onChange={e => setIdManual(e.target.value)}
+                placeholder={`Automático: HCD-${cursosConfirmados.find(x => x.id === cursoConfirmadoSel)?.numero_curso || (cursos.find(c => c.id === form.curso_id)?.numero_curso || 'SN')}-XXXX`}
+                style={{ ...inputStyle, fontFamily: 'monospace' }} />
+              <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>
+                Si lo dejas vacío: número de curso <strong>{cursosConfirmados.find(x => x.id === cursoConfirmadoSel)?.numero_curso || cursos.find(c => c.id === form.curso_id)?.numero_curso || '—'}</strong> + el siguiente consecutivo global a 4 dígitos. Para el curso de ayer, escríbelo a mano (ej. HCD-498-3030).
+              </p>
+            </div>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
               <button onClick={() => setModal(false)} style={btnGhost}>Cancelar</button>
