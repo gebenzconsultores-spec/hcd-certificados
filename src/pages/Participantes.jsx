@@ -23,7 +23,7 @@ export default function Participantes() {
     cargar()
     getEmpresas().then(setEmpresas)
     // Cargar SOLO los cursos de Próximos cursos (convocatorias abiertas con su número 499+)
-    supabase.from('proximos_cursos').select('*').gte('fecha', new Date().toISOString().split('T')[0]).order('fecha', { ascending: true }).then(({ data }) => setCursosDisponibles(data || []))
+    supabase.from('proximos_cursos').select('*').order('fecha', { ascending: false }).then(({ data }) => setCursosDisponibles(data || []))
   }, [])
 
   async function cargar() {
@@ -315,9 +315,8 @@ export default function Participantes() {
             <Field label="Nombre completo *" value={form.nombre} onChange={f('nombre')} placeholder="Nombre completo" />
             <Field label="Correo electrónico *" type="email" value={form.correo} onChange={f('correo')} placeholder="correo@ejemplo.com" />
             <Field label="WhatsApp" value={form.whatsapp} onChange={f('whatsapp')} placeholder="222 123 4567" />
-            <Field label="Puesto" value={form.puesto} onChange={f('puesto')} placeholder="ej. Supervisor de Calidad" />
 
-            {form.tipo === 'empresa' ? (
+            {form.tipo === 'empresa' && (
               <div style={{ marginBottom: 14 }}>
                 <label style={labelStyle}>Empresa</label>
                 <select value={form.empresa_id} onChange={e => f('empresa_id')(e.target.value)} style={inputStyle}>
@@ -325,20 +324,9 @@ export default function Participantes() {
                   {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                 </select>
               </div>
-            ) : (
-              <>
-                <Field label="Empresa donde trabaja (opcional)" value={form.empresa_manual} onChange={f('empresa_manual')} placeholder="Para estadísticas" />
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12 }}>
-                  <input type="checkbox" checked={form.es_universitario} onChange={e => f('es_universitario')(e.target.checked)} />
-                  <span style={{ color: '#374151', fontSize: 13 }}>¿Es estudiante universitario?</span>
-                </label>
-                {form.es_universitario && (
-                  <>
-                    <Field label="Universidad" value={form.universidad} onChange={f('universidad')} placeholder="ej. BUAP" />
-                    <Field label="Carrera" value={form.carrera} onChange={f('carrera')} placeholder="ej. Ing. Industrial" />
-                  </>
-                )}
-              </>
+            )}
+            {form.tipo === 'individual' && (
+              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>Se le generará un ID de acceso (ALU-XXXX) para el portal de estudiante.</p>
             )}
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
