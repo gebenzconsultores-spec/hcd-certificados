@@ -13,6 +13,7 @@ export default function ExamenPublico() {
   const [participante, setParticipante] = useState({ nombre: '', correo: '', whatsapp: '', empresa: '', es_universitario: false, universidad: '', carrera: '' })
   const [respuestas, setRespuestas] = useState({})
   const [resultado, setResultado] = useState(null)
+  const [verRepaso, setVerRepaso] = useState(false)
   const [loading, setLoading] = useState(false)
   const [intento, setIntento] = useState(1)
   // Alumno reconocido (viene de su portal con sesión activa)
@@ -149,7 +150,7 @@ export default function ExamenPublico() {
       } catch (_) {}
     }
 
-    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert })
+    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert, respuestas: { ...respuestas } })
     setFase('resultado')
     setLoading(false)
   }
@@ -310,6 +311,42 @@ export default function ExamenPublico() {
                 🔄 Intentar de nuevo
               </button>
             )}
+
+            {/* Repaso: mis respuestas y cuáles tuve mal */}
+            <div style={{ marginTop: 22, paddingTop: 20, borderTop: '1px solid #f1f5f9', textAlign: 'left' }}>
+              <button onClick={() => setVerRepaso(v => !v)} style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                {verRepaso ? 'Ocultar mis respuestas' : '👁 Ver mis respuestas'}
+              </button>
+              {verRepaso && (
+                <div style={{ marginTop: 16 }}>
+                  {preguntas.map((p, i) => {
+                    const elegida = resultado.respuestas?.[p.id]
+                    const acerto = elegida !== undefined && Number(elegida) === Number(p.respuesta_correcta)
+                    return (
+                      <div key={p.id || i} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: acerto ? '#059669' : '#dc2626', marginBottom: 6 }}>Pregunta {i + 1} · {acerto ? 'Correcta ✓' : 'Incorrecta ✗'}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginBottom: 8 }}>{p.pregunta}</div>
+                        {(p.opciones || []).map((op, oidx) => {
+                          const esCorrecta = Number(p.respuesta_correcta) === oidx
+                          const esElegida = Number(elegida) === oidx
+                          const bg = esCorrecta ? '#f0fdf4' : (esElegida ? '#fef2f2' : '#f8f9fb')
+                          const bd = esCorrecta ? '#bbf7d0' : (esElegida ? '#fecaca' : '#e2e8f0')
+                          const col = esCorrecta ? '#15803d' : (esElegida ? '#dc2626' : '#475569')
+                          return (
+                            <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, marginBottom: 5, background: bg, border: `1px solid ${bd}` }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: col, minWidth: 16 }}>{esCorrecta ? '✓' : (esElegida ? '✗' : String.fromCharCode(65 + oidx))}</span>
+                              <span style={{ fontSize: 13, color: col, fontWeight: (esCorrecta || esElegida) ? 600 : 400 }}>{op}</span>
+                              {esElegida && <span style={{ marginLeft: 'auto', fontSize: 10, color: '#64748b', fontWeight: 700 }}>TU RESPUESTA</span>}
+                            </div>
+                          )
+                        })}
+                        {elegida === undefined && <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>No respondiste esta pregunta</div>}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
