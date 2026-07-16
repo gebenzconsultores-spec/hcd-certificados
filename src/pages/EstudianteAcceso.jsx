@@ -2,21 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+// WhatsApp de HCD para "¿No recuerdas tu ID?"
+const WHATSAPP_HCD = '522223549353'
+
 export default function EstudianteAcceso() {
   const navigate = useNavigate()
-  const [modo, setModo] = useState('elegir') // elegir | login | registro
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
-  // Login con ID empleado
   const [idEmpleado, setIdEmpleado] = useState('')
-
-  // Registro invitado
-  const [reg, setReg] = useState({
-    nombre: '', correo: '', whatsapp: '', empresa: '',
-    es_universitario: false, universidad: '', carrera: ''
-  })
-  const r = k => v => setReg(p => ({ ...p, [k]: v }))
+  const [password, setPassword] = useState('')
 
   async function loginConID() {
     if (!idEmpleado) return
@@ -29,13 +23,18 @@ export default function EstudianteAcceso() {
         .maybeSingle()
 
       if (!part) {
-        setError('ID de empleado no encontrado. Verifica con tu empresa o regístrate como individual.')
+        setError('ID no encontrado. Si no recuerdas tu ID, solicítalo a Hablando con Datos.')
         setLoading(false)
         return
       }
-      // Verificar acceso al examen (control por selección de la empresa)
+      // Si tiene contraseña asignada, verificarla
+      if (part.portal_password) {
+        if (!password) { setError('Escribe tu contraseña.'); setLoading(false); return }
+        if (password !== part.portal_password) { setError('Contraseña incorrecta.'); setLoading(false); return }
+      }
+      // Verificar acceso al examen (control por selección de la empresa/HCD)
       if (part.acceso_examen === false) {
-        setError('Tu empresa aún no te ha habilitado el acceso. Pídele que te active para el curso.')
+        setError('Aún no tienes el acceso habilitado. Solicítalo a Hablando con Datos o a tu empresa.')
         setLoading(false)
         return
       }
@@ -43,56 +42,6 @@ export default function EstudianteAcceso() {
       navigate('/estudiante/dashboard')
     } catch (e) {
       setError('Error al entrar: ' + (e.message || 'intenta de nuevo'))
-    } finally { setLoading(false) }
-  }
-
-  async function registrarInvitado() {
-    if (!reg.nombre || !reg.correo) return
-    setLoading(true); setError('')
-    try {
-      // Verificar si ya existe
-      const { data: existe } = await supabase.from('participantes').select('*').eq('correo', reg.correo).maybeSingle()
-      if (existe) {
-        sessionStorage.setItem('estudiante_portal', JSON.stringify(existe))
-        navigate('/estudiante/dashboard')
-        return
-      }
-
-      // Generar ID de empleado automático basado en conteo
-      let id_empleado
-      try {
-        const { data: idData } = await supabase.rpc('siguiente_id', { p_prefijo: 'ALU', p_tabla: 'participantes', p_columna: 'id_empleado' })
-        id_empleado = idData
-      } catch (_) {}
-      if (!id_empleado) {
-        const { data: existentes } = await supabase.from('participantes').select('id_empleado').not('id_empleado', 'is', null)
-        let maxNum = 0
-        ;(existentes || []).forEach(e => {
-          const m = (e.id_empleado || '').match(/ALU-(\d+)/)
-          if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
-        })
-        id_empleado = `ALU-${String(maxNum + 1).padStart(4, '0')}`
-      }
-
-      const { data: part, error: errIns } = await supabase.from('participantes').insert({
-        nombre: reg.nombre,
-        correo: reg.correo,
-        whatsapp: reg.whatsapp,
-        empresa_manual: reg.empresa,
-        id_empleado,
-        tipo: 'individual',
-        acceso_examen: true,
-        es_universitario: reg.es_universitario,
-        universidad: reg.es_universitario ? reg.universidad : null,
-        carrera: reg.es_universitario ? reg.carrera : null,
-      }).select('*').single()
-
-      if (errIns) throw errIns
-
-      sessionStorage.setItem('estudiante_portal', JSON.stringify(part))
-      navigate('/estudiante/dashboard')
-    } catch (e) {
-      setError('No se pudo completar el registro: ' + (e.message || 'error desconocido'))
     } finally { setLoading(false) }
   }
 
@@ -107,105 +56,42 @@ export default function EstudianteAcceso() {
       </header>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px 24px' }}>
-        <div style={{ width: 460, maxWidth: '100%' }}>
-
-          {/* ELEGIR */}
-          {modo === 'elegir' && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '36px 40px' }}>
-              <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                <div style={{ fontSize: 40, marginBottom: 12 }}>🎓</div>
-                <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Portal de Estudiante</h1>
-                <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>¿Cómo deseas acceder?</p>
-              </div>
-
-              <button onClick={() => setModo('login')}
-                style={{ width: '100%', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 12, padding: '16px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12, textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div>Mi empresa me inscribió</div>
-                  <div style={{ fontSize: 12, fontWeight: 400, opacity: .85, marginTop: 2 }}>Tengo un ID de empleado</div>
-                </div>
-                <span style={{ fontSize: 20 }}>→</span>
-              </button>
-
-              <button onClick={() => setModo('registro')}
-                style={{ width: '100%', background: '#fff', color: '#1d4ed8', border: '2px solid #1d4ed8', borderRadius: 12, padding: '16px', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div>Tomo el curso por mi cuenta</div>
-                  <div style={{ fontSize: 12, fontWeight: 400, opacity: .85, marginTop: 2 }}>Registro individual</div>
-                </div>
-                <span style={{ fontSize: 20 }}>→</span>
-              </button>
+        <div style={{ width: 440, maxWidth: '100%' }}>
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '36px 40px' }}>
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>🎓</div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Portal de Estudiante</h1>
+              <p style={{ color: '#64748b', fontSize: 14, marginTop: 6 }}>Ingresa con tu ID de acceso</p>
             </div>
-          )}
 
-          {/* LOGIN CON ID */}
-          {modo === 'login' && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '36px 40px' }}>
-              <button onClick={() => { setModo('elegir'); setError('') }} style={backBtn}>← Volver</button>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Acceso de empleado</h1>
-              <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Ingresa el ID que te dio tu empresa</p>
+            {error && <div style={errBox}>{error}</div>}
 
-              {error && <div style={errBox}>{error}</div>}
+            <label style={lbl}>Tu ID</label>
+            <input value={idEmpleado} onChange={e => setIdEmpleado(e.target.value)} placeholder="ALU-0001" style={inp}
+              onKeyDown={e => e.key === 'Enter' && loginConID()} />
 
-              <label style={lbl}>ID de empleado</label>
-              <input value={idEmpleado} onChange={e => setIdEmpleado(e.target.value)} placeholder="ALU-0001" style={inp}
-                onKeyDown={e => e.key === 'Enter' && loginConID()} />
+            <label style={lbl}>Contraseña</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Tu contraseña" style={inp}
+              onKeyDown={e => e.key === 'Enter' && loginConID()} />
 
-              <button onClick={loginConID} disabled={loading} style={{ ...btnPrimary, background: '#1d4ed8' }}>
-                {loading ? 'Entrando...' : 'Entrar a mi examen'}
-              </button>
+            <button onClick={loginConID} disabled={loading} style={btnPrimary}>
+              {loading ? 'Entrando...' : 'Entrar'}
+            </button>
+
+            <div style={{ textAlign: 'center', marginTop: 20, paddingTop: 18, borderTop: '1px solid #f1f5f9' }}>
+              <p style={{ color: '#64748b', fontSize: 13, marginBottom: 8 }}>¿No recuerdas tu ID?</p>
+              <a href={`https://wa.me/${WHATSAPP_HCD}?text=${encodeURIComponent('Hola, no recuerdo mi ID de acceso al portal de estudiante de Hablando con Datos. Me lo pueden compartir?')}`}
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: '#25D366', color: '#fff', textDecoration: 'none', borderRadius: 10, padding: '10px 18px', fontSize: 14, fontWeight: 700 }}>
+                💬 Solicítalo a HCD por WhatsApp
+              </a>
             </div>
-          )}
-
-          {/* REGISTRO INVITADO */}
-          {modo === 'registro' && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '32px 36px', maxHeight: '85vh', overflowY: 'auto' }}>
-              <button onClick={() => { setModo('elegir'); setError('') }} style={backBtn}>← Volver</button>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Registro individual</h1>
-              <p style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>Para quienes toman el curso por su cuenta</p>
-
-              {error && <div style={errBox}>{error}</div>}
-
-              <label style={lbl}>Nombre completo *</label>
-              <input value={reg.nombre} onChange={e => r('nombre')(e.target.value)} placeholder="Como aparecerá en tu certificado" style={inp} />
-
-              <label style={lbl}>Correo electrónico *</label>
-              <input type="email" value={reg.correo} onChange={e => r('correo')(e.target.value)} placeholder="correo@ejemplo.com" style={inp} />
-
-              <label style={lbl}>WhatsApp</label>
-              <input value={reg.whatsapp} onChange={e => r('whatsapp')(e.target.value)} placeholder="222 123 4567" style={inp} />
-
-              <label style={lbl}>Empresa donde trabajas (opcional)</label>
-              <input value={reg.empresa} onChange={e => r('empresa')(e.target.value)} placeholder="Para estadísticas" style={inp} />
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 14, marginBottom: 4 }}>
-                <input type="checkbox" checked={reg.es_universitario} onChange={e => r('es_universitario')(e.target.checked)} style={{ accentColor: '#1d4ed8', width: 16, height: 16 }} />
-                <span style={{ color: '#374151', fontSize: 13 }}>Soy estudiante universitario</span>
-              </label>
-              {reg.es_universitario && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div>
-                    <label style={lbl}>Universidad</label>
-                    <input value={reg.universidad} onChange={e => r('universidad')(e.target.value)} placeholder="BUAP" style={inp} />
-                  </div>
-                  <div>
-                    <label style={lbl}>Carrera</label>
-                    <input value={reg.carrera} onChange={e => r('carrera')(e.target.value)} placeholder="Ing. Industrial" style={inp} />
-                  </div>
-                </div>
-              )}
-
-              <button onClick={registrarInvitado} disabled={loading || !reg.nombre || !reg.correo}
-                style={{ ...btnPrimary, background: '#1d4ed8', marginTop: 16 }}>
-                {loading ? 'Registrando...' : 'Registrarme y continuar →'}
-              </button>
-            </div>
-          )}
-
+          </div>
         </div>
       </div>
     </div>
   )
+
 }
 
 const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5, marginTop: 12 }

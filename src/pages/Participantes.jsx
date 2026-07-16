@@ -82,6 +82,18 @@ export default function Participantes() {
 
   const f = k => v => setForm(p => ({ ...p, [k]: v }))
 
+  async function verOGenerarPassword(p) {
+    if (p.portal_password) {
+      const nueva = window.confirm(`${p.nombre}\nID: ${p.id_empleado || '—'}\nContraseña actual: ${p.portal_password}\n\n¿Generar una NUEVA contraseña? (la anterior dejará de servir)`)
+      if (!nueva) return
+    }
+    const pass = `HCD-${Math.floor(1000 + Math.random() * 9000)}`
+    const { error } = await supabase.from('participantes').update({ portal_password: pass }).eq('id', p.id)
+    if (error) { alert('No se pudo generar la contraseña: ' + error.message); return }
+    await cargar()
+    window.prompt(`Comparte estos datos con ${p.nombre} para entrar al portal de estudiante:\n\nID: ${p.id_empleado || ''}\nContraseña (cópiala):`, pass)
+  }
+
   async function guardar() {
     if (!form.nombre || !form.correo) return
     setSaving(true)
@@ -224,6 +236,7 @@ export default function Participantes() {
                   <td style={{ padding: '11px 16px' }}>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button onClick={() => setModalAsignar(p)} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>➕ Asignar curso</button>
+                      <button onClick={() => verOGenerarPassword(p)} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>🔑 {p.portal_password ? 'Contraseña' : 'Generar clave'}</button>
                       <button onClick={() => setModalEditar({ ...p })} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>✏️ Editar</button>
                       <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
                     </div>
