@@ -8,6 +8,7 @@ const APP_URL = import.meta.env.VITE_APP_URL || 'https://hcd-certificados.vercel
 export default function Auditoria() {
   const [empresas, setEmpresas] = useState([])
   const [cursos, setCursos] = useState([])
+  const [cursosDados, setCursosDados] = useState([])
   const [empresaId, setEmpresaId] = useState('')
   const [cursoId, setCursoId] = useState('')
   const [datos, setDatos] = useState(null)
@@ -29,26 +30,42 @@ export default function Auditoria() {
   useEffect(() => {
     getEmpresas().then(setEmpresas)
     getCursos().then(setCursos)
+    cargarCursosDados()
   }, [])
 
+  async function cargarCursosDados() {
+    try {
+      const { data } = await supabase.from('cursos_confirmados')
+        .select('id, curso_id, curso_nombre, numero_curso, fecha_inicio, empresa_nombre')
+        .order('fecha_inicio', { ascending: false })
+      // Dejar uno por curso_id (evita duplicados si el mismo curso se dio varias veces)
+      const vistos = new Set()
+      const unicos = []
+      ;(data || []).forEach(cc => {
+        if (cc.curso_id && !vistos.has(cc.curso_id)) { vistos.add(cc.curso_id); unicos.push(cc) }
+      })
+      setCursosDados(unicos)
+    } catch (_) { setCursosDados([]) }
+  }
+
   async function buscar() {
-    if (!empresaId) return
+    if (!empresaId && !cursoId) return
     setLoading(true)
     setDatos(null)
     try {
       let q = supabase
         .from('certificados')
         .select(`*, participante:participantes(nombre, correo, whatsapp), curso:cursos(nombre, numero_curso, duracion)`)
-        .eq('empresa_id', empresaId)
         .order('created_at', { ascending: false })
+      if (empresaId) q = q.eq('empresa_id', empresaId)
       if (cursoId) q = q.eq('curso_id', cursoId)
       const { data: certs } = await q
 
       let q2 = supabase
         .from('resultados_examen')
         .select(`*, participante:participantes(nombre, correo), curso:cursos(nombre, numero_curso)`)
-        .eq('empresa_id', empresaId)
         .order('created_at', { ascending: false })
+      if (empresaId) q2 = q2.eq('empresa_id', empresaId)
       if (cursoId) q2 = q2.eq('curso_id', cursoId)
       const { data: resultados } = await q2
 
@@ -61,8 +78,9 @@ export default function Auditoria() {
     setGenerando(true)
     try {
       const empresa = empresas.find(e => e.id === empresaId)
+      const cursoSel = cursosDados.find(c => c.curso_id === cursoId)
       const zip = new JSZip()
-      const nombreEmpresa = empresa?.nombre?.replace(/\s+/g, '_') || 'Empresa'
+      const nombreEmpresa = (empresa?.nombre || cursoSel?.curso_nombre || 'Auditoria').replace(/\s+/g, '_')
       const carpeta = zip.folder(`Auditoría_${nombreEmpresa}`)
 
       // ── CSV de resultados de exámenes ──
@@ -123,7 +141,7 @@ export default function Auditoria() {
 
       // ── README de instrucciones ──
       const readme = `ENTREGABLE DE AUDITORÍA — HABLANDO CON DATOS
-Empresa: ${empresa?.nombre || ''}
+Empresa: ${empresa?.nombre || (cursoSel ? 'Curso: ' + cursoSel.curso_nombre : 'Todos / individuales')}
 Generado: ${new Date().toLocaleDateString('es-MX')}
 
 CONTENIDO:
@@ -150,27 +168,31 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
     <div>
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Auditoría y entregables</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Genera el paquete ZIP con certificados y resultados de examen por empresa</p>
+        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Genera el ZIP con certificados y resultados de examen. Filtra por curso dado (incluye individuales) y/o por empresa.</p>
       </div>
 
       {/* Filtros */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '24px 28px', marginBottom: 24 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 16, alignItems: 'flex-end' }}>
           <div>
-            <label style={labelStyle}>Empresa *</label>
+            <label style={labelStyle}>Empresa (opcional)</label>
             <select value={empresaId} onChange={e => setEmpresaId(e.target.value)} style={inputStyle}>
-              <option value="">— Selecciona empresa —</option>
+              <option value="">— Todas / individuales —</option>
               {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
             </select>
           </div>
           <div>
-            <label style={labelStyle}>Curso (opcional — todos si no seleccionas)</label>
+            <label style={labelStyle}>Curso dado</label>
             <select value={cursoId} onChange={e => setCursoId(e.target.value)} style={inputStyle}>
               <option value="">— Todos los cursos —</option>
-              {cursos.map(c => <option key={c.id} value={c.id}>#{c.numero_curso} — {c.nombre}</option>)}
+              {cursosDados.map(cc => (
+                <option key={cc.id} value={cc.curso_id}>
+                  {cc.numero_curso ? `#${cc.numero_curso} — ` : ''}{cc.curso_nombre}{cc.fecha_inicio ? ` · ${new Date(cc.fecha_inicio + 'T00:00:00').toLocaleDateString('es-MX')}` : ''}
+                </option>
+              ))}
             </select>
           </div>
-          <button onClick={buscar} disabled={!empresaId || loading}
+          <button onClick={buscar} disabled={(!empresaId && !cursoId) || loading}
             style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             {loading ? 'Buscando...' : '🔍 Buscar'}
           </button>
