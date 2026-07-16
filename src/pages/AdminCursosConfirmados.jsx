@@ -596,7 +596,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         precio: tipoCosto === 'con_costo' ? Number(precio) : 0,
         codigo_promo: codigoPromo || null,
         mostrar_en: mostrarEn,
-        cupo_maximo: Number(cupoMaximo),
+        cupo_maximo: Number(cupoMaximo) || 20,
         cupo_ocupado: seleccionados.length,
         link_zoom: linkZoom || null,
         estado: 'abierto',
@@ -820,12 +820,12 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
           {tipoCosto === 'con_costo' && (
             <div style={{ flex: 1 }}>
               <label style={lbl}>Precio (MXN)</label>
-              <input type="number" min={0} value={precio} onChange={e => setPrecio(Math.max(0, Number(e.target.value)))} style={inp} />
+              <input type="number" min={0} value={precio} onChange={e => setPrecio(e.target.value)} style={inp} />
             </div>
           )}
           <div style={{ flex: 1 }}>
             <label style={lbl}>Cupo máximo</label>
-            <input type="number" min={1} value={cupoMaximo} onChange={e => setCupoMaximo(Math.max(1, Number(e.target.value)))} style={inp} />
+            <input type="number" min={1} value={cupoMaximo} onChange={e => setCupoMaximo(e.target.value)} style={inp} />
           </div>
         </div>
 
