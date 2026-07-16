@@ -11,18 +11,17 @@ export async function generarQRBase64(idUnico) {
   return await QRCode.toDataURL(url, { width: 120, margin: 1, color: { dark: '#000000', light: '#ffffff' } })
 }
 
-export function abrirCertificadoParaImprimir({ cert, qrBase64 }) {
+export function construirHTMLCertificado({ cert, qrBase64 }) {
   const {
     id_unico, nombre_participante, nombre_curso, lugar, duracion,
-    fecha_emision, instructor_nombre, instructor_rfc, director_nombre,
+    fecha_emision, fecha_curso, instructor_nombre, instructor_rfc, director_nombre,
   } = cert
 
-  const fechaFormateada = new Date(fecha_emision).toLocaleDateString('es-MX', {
+  const fechaFormateada = new Date(fecha_curso || fecha_emision).toLocaleDateString('es-MX', {
     day: '2-digit', month: 'long', year: 'numeric'
   })
 
-  const ventana = window.open('', '_blank', 'width=1122,height=794')
-  const html = `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8"/>
@@ -128,6 +127,11 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
 </script>
 </body>
 </html>`
+}
+
+export function abrirCertificadoParaImprimir({ cert, qrBase64 }) {
+  const html = construirHTMLCertificado({ cert, qrBase64 })
+  const ventana = window.open('', '_blank', 'width=1122,height=794')
   ventana.document.write(html)
   ventana.document.close()
 }

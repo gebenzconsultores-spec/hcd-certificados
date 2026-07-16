@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getEmpresas, getCursos, supabase } from '../lib/supabase'
-import { generarQRBase64 } from '../lib/certificado'
+import { generarQRBase64, construirHTMLCertificado } from '../lib/certificado'
 import JSZip from 'jszip'
 
 const APP_URL = import.meta.env.VITE_APP_URL || 'https://hcd-certificados.vercel.app'
@@ -133,8 +133,7 @@ export default function Auditoria() {
       const certFolder = carpeta.folder('certificados_pdf')
       for (const cert of datos.certs) {
         const qr = await generarQRBase64(cert.id_unico)
-        const fecha = new Date(cert.fecha_emision).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
-        const html = generarHTMLCertificado(cert, qr, fecha)
+        const html = construirHTMLCertificado({ cert, qrBase64: qr })
         const nombre = `${cert.id_unico}_${cert.nombre_participante.replace(/\s+/g, '_')}.html`
         certFolder.file(nombre, html)
       }
@@ -383,84 +382,6 @@ function htmlRespuestasExamen(r, preguntas) {
 <hr style="margin:14px 0;">${filas}</body></html>`
 }
 
-function generarHTMLCertificado(cert, qrBase64, fecha) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8"/>
-<title>Certificado ${cert.id_unico}</title>
-<link href="https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,600;1,400&family=Special+Elite&family=Inter:wght@400;600;700&display=swap" rel="stylesheet"/>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-@page{size:landscape;margin:0;}
-body{width:279mm;height:216mm;overflow:hidden;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:'Inter',sans-serif;}
-.cert{width:279mm;height:216mm;position:relative;background:#fff;padding:14mm 18mm 10mm 18mm;display:flex;flex-direction:column;}
-.lineas-top{position:absolute;top:8mm;right:18mm;display:flex;flex-direction:column;gap:2mm;}
-.linea-dec{height:2.5px;background:#8B1A1A;width:100mm;}
-.header{display:flex;align-items:center;margin-bottom:8mm;}
-.cuerpo{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;}
-.empresa{font-size:15pt;font-weight:700;color:#8B1A1A;margin-bottom:1.5mm;}
-.subtitulo{font-size:10pt;color:#444;margin-bottom:5mm;}
-.nombre{font-family:'Crimson Text',serif;font-style:italic;font-size:28pt;color:#1a1a1a;margin-bottom:6mm;}
-.por{font-size:9pt;color:#555;margin-bottom:1mm;}
-.participar{font-size:11pt;font-weight:700;margin-bottom:1mm;}
-.el-curso{font-size:9pt;color:#555;margin-bottom:2mm;}
-.curso{font-family:'Special Elite',monospace;font-size:18pt;}
-.qr{position:absolute;right:18mm;top:55mm;width:22mm;height:22mm;}
-.firmas{display:flex;gap:20mm;margin-top:8mm;}
-.firma{display:flex;flex-direction:column;align-items:center;min-width:50mm;}
-.linea-firma{width:50mm;height:1px;background:#1a1a1a;margin-bottom:1.5mm;}
-.fnombre{font-size:8.5pt;font-weight:700;}
-.fcargo{font-size:7.5pt;color:#555;}
-.frfc{font-size:7pt;color:#888;}
-.datos{position:absolute;right:18mm;bottom:30mm;text-align:right;}
-.dato{display:flex;justify-content:flex-end;align-items:baseline;gap:3mm;margin-bottom:1.5mm;}
-.dlabel{font-size:8pt;color:#666;}
-.dval{font-size:8.5pt;font-weight:700;}
-.pie{position:absolute;bottom:6mm;left:18mm;font-size:7pt;color:#aaa;}
-</style>
-</head>
-<body>
-<div class="cert">
-  <div class="lineas-top"><div class="linea-dec"></div><div class="linea-dec"></div></div>
-  <div class="header">
-    <span style="font-weight:800;color:#8B1A1A;font-size:16pt;">Hablando con Datos</span>
-  </div>
-  <div class="cuerpo">
-    <div class="empresa">Hablando con Datos</div>
-    <div class="subtitulo">Otorga el presente reconocimiento a:</div>
-    <div class="nombre">${cert.nombre_participante}</div>
-    <div class="por">Por</div>
-    <div class="participar">Participar y Aprobar</div>
-    <div class="el-curso">el curso:</div>
-    <div class="curso">${cert.nombre_curso}</div>
-  </div>
-  ${qrBase64 ? `<img src="${qrBase64}" class="qr"/>` : ''}
-  <div class="firmas">
-    <div class="firma">
-      <div class="linea-firma"></div>
-      <div class="fnombre">${cert.instructor_nombre || 'Néstor Daniel Reyes Díaz'}</div>
-      <div class="fcargo">Instructor</div>
-      <div class="frfc">${cert.instructor_rfc || 'REDN-770428-433-0005'}</div>
-    </div>
-    <div class="firma">
-      <div class="linea-firma"></div>
-      <div class="fnombre">${cert.director_nombre || 'Mirna Rosas Delgado'}</div>
-      <div class="fcargo">Dirección</div>
-    </div>
-  </div>
-  <div class="datos">
-    <div class="dato"><span class="dlabel">IDúnico*:</span><span class="dval">${cert.id_unico}</span></div>
-    <div class="dato"><span class="dlabel">Impartido en:</span><span class="dval">${cert.lugar}</span></div>
-    <div class="dato"><span class="dlabel">Duración (equivalente):</span><span class="dval">${cert.duracion} Hrs</span></div>
-    <div class="dato"><span class="dlabel">Fecha:</span><span class="dval">${fecha}</span></div>
-  </div>
-  <div class="pie">HCD-F-16 Rev2024</div>
-</div>
-<script>window.onload=()=>{window.print();}</script>
-</body>
-</html>`
-}
 
 const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }
 const inputStyle = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', color: '#1e293b', background: '#fff' }

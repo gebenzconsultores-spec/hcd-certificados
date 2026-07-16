@@ -7,7 +7,7 @@ const MINIMO = 0.7 // 70% mínimo aprobatorio
 
 export default function ExamenPublico() {
   const { cursoId } = useParams()
-  const [fase, setFase] = useState('registro') // registro | examen | resultado | bloqueado
+  const [fase, setFase] = useState('cargando') // cargando | examen | resultado | bloqueado
   const [curso, setCurso] = useState(null)
   const [preguntas, setPreguntas] = useState([])
   const [participante, setParticipante] = useState({ nombre: '', correo: '', whatsapp: '', empresa: '', es_universitario: false, universidad: '', carrera: '' })
@@ -64,6 +64,9 @@ export default function ExamenPublico() {
           universidad: registro.universidad || '', carrera: registro.carrera || ''
         })
         setFase('examen')
+      } else {
+        setMensajeBloqueo('Para presentar el examen, entra desde el Portal de Estudiante con tu ID.')
+        setFase('bloqueado')
       }
     }
     cargar()
@@ -116,6 +119,7 @@ export default function ExamenPublico() {
     // Guardar resultado
     await guardarResultadoExamen({
       participante_id: partId,
+      empresa_id: empresaIdCert,
       curso_id: cursoId,
       calificacion: Math.round(calificacion * 100),
       aprobado,
@@ -179,42 +183,15 @@ export default function ExamenPublico() {
           <div style={{ background: '#fff', border: '2px solid #f59e0b', borderRadius: 16, padding: '36px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#92400e', marginBottom: 8 }}>Acceso no habilitado</h2>
-            <p style={{ color: '#64748b', fontSize: 15 }}>{mensajeBloqueo}</p>
+            <p style={{ color: '#64748b', fontSize: 15, marginBottom: 20 }}>{mensajeBloqueo}</p>
+            <a href="/estudiante/acceso" style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700 }}>Ir al Portal de Estudiante</a>
           </div>
         )}
 
-        {/* FASE REGISTRO (solo para individuales sin sesión) */}
-        {fase === 'registro' && (
-          <div>
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px', marginBottom: 24 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>{curso.nombre}</h1>
-              <p style={{ color: '#64748b', fontSize: 14 }}>Duración: {curso.duracion} horas · Mínimo aprobatorio: 70%</p>
-            </div>
-
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '28px 32px' }}>
-              <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1e293b', marginBottom: 20 }}>Tus datos para el certificado</h2>
-              <Field label="Nombre completo *" value={participante.nombre} onChange={p('nombre')} placeholder="Como aparecerá en tu certificado" />
-              <Field label="Correo electrónico *" type="email" value={participante.correo} onChange={p('correo')} placeholder="correo@ejemplo.com" />
-              <Field label="WhatsApp *" value={participante.whatsapp} onChange={p('whatsapp')} placeholder="222 123 4567" />
-              <Field label="Empresa donde trabajas (opcional)" value={participante.empresa} onChange={p('empresa')} placeholder="Para estadísticas" />
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14 }}>
-                <input type="checkbox" checked={participante.es_universitario} onChange={e => p('es_universitario')(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#8B1A1A' }} />
-                <span style={{ color: '#374151', fontSize: 13 }}>Soy estudiante universitario</span>
-              </label>
-              {participante.es_universitario && (
-                <>
-                  <Field label="Universidad" value={participante.universidad} onChange={p('universidad')} placeholder="ej. BUAP, UDLAP" />
-                  <Field label="Carrera" value={participante.carrera} onChange={p('carrera')} placeholder="ej. Ingeniería Industrial" />
-                </>
-              )}
-
-              <button onClick={iniciarExamen}
-                disabled={!participante.nombre || !participante.correo || !participante.whatsapp}
-                style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
-                Comenzar examen →
-              </button>
-            </div>
+        {/* FASE CARGANDO */}
+        {fase === 'cargando' && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '40px 32px', textAlign: 'center', color: '#64748b' }}>
+            Cargando…
           </div>
         )}
 
@@ -274,36 +251,23 @@ export default function ExamenPublico() {
               <br /><span style={{ fontSize: 13, color: '#94a3b8' }}>(mínimo para aprobar: 70%)</span>
             </p>
 
-            {resultado.aprobado && (() => {
-              // ¿El certificado quedó ligado a una empresa? Entonces NO descarga; lo gestiona RH
-              const esDeEmpresa = resultado.esDeEmpresa
-              if (esDeEmpresa) {
-                return (
-                  <div style={{ marginBottom: 24 }}>
-                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '16px 20px' }}>
-                      <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
-                      <p style={{ color: '#1e40af', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Tu certificado quedó registrado</p>
-                      <p style={{ color: '#475569', fontSize: 13 }}>
-                        Solicítalo a través de tu área de <strong>Recursos Humanos</strong>. Ellos pueden descargarlo desde el portal de tu empresa.
-                      </p>
-                    </div>
-                  </div>
-                )
-              }
-              // Individual: sí puede descargar el suyo
-              return resultado.cert ? (
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 20px', marginBottom: 16 }}>
-                    <div style={{ color: '#15803d', fontSize: 13, marginBottom: 4 }}>Tu ID de certificado</div>
-                    <code style={{ color: '#166534', fontSize: 18, fontWeight: 800 }}>{resultado.cert.id_unico}</code>
-                  </div>
-                  <button onClick={() => generarYAbrirCertificado(resultado.cert)}
-                    style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}>
-                    📜 Descargar mi certificado en PDF
-                  </button>
+            {resultado.aprobado && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 20px', marginBottom: 12 }}>
+                  <div style={{ color: '#15803d', fontSize: 13, marginBottom: 4 }}>Tu ID de certificado</div>
+                  <code style={{ color: '#166534', fontSize: 18, fontWeight: 800 }}>{resultado.cert?.id_unico || '—'}</code>
                 </div>
-              ) : null
-            })()}
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '16px 20px' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>
+                  <p style={{ color: '#1e40af', fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Tu certificado quedó registrado</p>
+                  {resultado.esDeEmpresa ? (
+                    <p style={{ color: '#475569', fontSize: 13 }}>Solicítalo a través de tu área de <strong>Recursos Humanos</strong>. Ellos lo descargan desde el portal de tu empresa.</p>
+                  ) : (
+                    <p style={{ color: '#475569', fontSize: 13 }}>Solicítalo a <strong>Hablando con Datos</strong> con tu ID de certificado; te lo harán llegar. Por seguridad, el certificado no se descarga directamente aquí.</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {!resultado.aprobado && (
               <button onClick={repetir}
