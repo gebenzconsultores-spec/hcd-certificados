@@ -16,7 +16,7 @@ export default function Certificados() {
     participante_id: '', curso_id: '', empresa_id: '',
     lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz',
     instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado',
-    modalidad: 'presencial'
+    modalidad: 'presencial', fecha_curso: ''
   })
   const [saving, setSaving] = useState(false)
 
@@ -85,6 +85,7 @@ export default function Certificados() {
       curso_id: cc.curso_id || '',
       empresa_id: cc.empresa_id || '',
       modalidad,
+      fecha_curso: cc.fecha_inicio || '',
       lugar: modalidad === 'online' ? 'Puebla, Pue.' : (emp?.ciudad || cc.empresa_nombre || emp?.nombre || p.lugar)
     }))
   }
@@ -119,6 +120,7 @@ export default function Certificados() {
         instructor_nombre: form.instructor_nombre,
         instructor_rfc: form.instructor_rfc,
         director_nombre: form.director_nombre,
+        fecha_curso: form.fecha_curso || null,
         fecha_emision: new Date().toISOString(),
       }).select().single()
 
@@ -131,7 +133,7 @@ export default function Certificados() {
       try { await generarYAbrirCertificado(cert) } catch (e) { alert('El certificado se guardó, pero hubo un problema al generar el PDF: ' + (e.message || '')) }
       await cargar()
       setModal(false)
-      setForm({ participante_id: '', curso_id: '', empresa_id: '', lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz', instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado', modalidad: 'presencial' })
+      setForm({ participante_id: '', curso_id: '', empresa_id: '', lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz', instructor_rfc: 'REDN-770428-433-0005', director_nombre: 'Mirna Rosas Delgado', modalidad: 'presencial', fecha_curso: '' })
       setCursoConfirmadoSel('')
       setIdManual('')
     } catch (e) {
@@ -258,6 +260,11 @@ export default function Certificados() {
                 <option value="">— Sin empresa —</option>
                 {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
               </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Fecha del curso <span style={{ color: '#94a3b8', fontWeight: 400 }}>(la del calendario; aparece en el certificado)</span></label>
+              <input type="date" value={form.fecha_curso} onChange={e => f('fecha_curso')(e.target.value)} style={inputStyle} />
             </div>
 
             <Field label="Lugar impartido *" value={form.lugar} onChange={f('lugar')} placeholder="ej. Puebla, Pue. o nombre de empresa" />

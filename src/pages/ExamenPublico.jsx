@@ -130,8 +130,18 @@ export default function ExamenPublico() {
     let certData = null
     if (aprobado) {
       const consec = await siguienteConsecutivo()
-      const numCurso = curso.numero_certificado || curso.numero_curso || consec
-      const id_unico = `HCD-${numCurso}-${consec}`
+      // Número de evento y fecha del curso programado (cursos_confirmados)
+      let numEvento = null, fechaCurso = null
+      try {
+        const { data: ccList } = await supabase.from('cursos_confirmados')
+          .select('numero_curso, fecha_inicio').eq('curso_id', cursoId).not('numero_curso', 'is', null)
+          .order('fecha_inicio', { ascending: false }).limit(1)
+        const cc = ccList && ccList[0]
+        numEvento = cc?.numero_curso
+        fechaCurso = cc?.fecha_inicio || null
+      } catch (_) {}
+      const numCurso = numEvento || curso.numero_curso || consec
+      const id_unico = `HCD-${numCurso}-${String(consec).padStart(4, '0')}`
       certData = await crearCertificado({
         id_unico,
         participante_id: partId,
@@ -145,6 +155,7 @@ export default function ExamenPublico() {
         instructor_nombre: 'Néstor Daniel Reyes Díaz',
         instructor_rfc: 'REDN-770428-433-0005',
         director_nombre: 'Mirna Rosas Delgado',
+        fecha_curso: fechaCurso,
         fecha_emision: new Date().toISOString(),
       })
       // Marcar la asignación como completada (si existe)
