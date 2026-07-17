@@ -11,6 +11,7 @@ export default function EstudianteAcceso() {
   const [loading, setLoading] = useState(false)
   const [idEmpleado, setIdEmpleado] = useState('')
   const [password, setPassword] = useState('')
+  const [verPass, setVerPass] = useState(false)
 
   async function loginConID() {
     if (!idEmpleado) return
@@ -32,12 +33,7 @@ export default function EstudianteAcceso() {
         if (!password) { setError('Escribe tu contraseña.'); setLoading(false); return }
         if (password !== part.portal_password) { setError('Contraseña incorrecta.'); setLoading(false); return }
       }
-      // Verificar acceso al examen (control por selección de la empresa/HCD)
-      if (part.acceso_examen === false) {
-        setError('Aún no tienes el acceso habilitado. Solicítalo a Hablando con Datos o a tu empresa.')
-        setLoading(false)
-        return
-      }
+      // Entrar al portal siempre. (Presentar un examen sí requiere estar asignado a un curso.)
       sessionStorage.setItem('estudiante_portal', JSON.stringify(part))
       navigate('/estudiante/dashboard')
     } catch (e) {
@@ -71,8 +67,13 @@ export default function EstudianteAcceso() {
               onKeyDown={e => e.key === 'Enter' && loginConID()} />
 
             <label style={lbl}>Contraseña</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Tu contraseña" style={inp}
-              onKeyDown={e => e.key === 'Enter' && loginConID()} />
+            <div style={{ position: 'relative' }}>
+              <input type={verPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Tu contraseña" style={{ ...inp, paddingRight: 44 }}
+                onKeyDown={e => e.key === 'Enter' && loginConID()} />
+              <button type="button" onClick={() => setVerPass(v => !v)}
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 4 }}
+                title={verPass ? 'Ocultar' : 'Mostrar'}>{verPass ? '🙈' : '👁'}</button>
+            </div>
 
             <button onClick={loginConID} disabled={loading} style={btnPrimary}>
               {loading ? 'Entrando...' : 'Entrar'}

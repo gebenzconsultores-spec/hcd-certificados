@@ -415,7 +415,7 @@ function CursosAsignados({ estudiante, certificados }) {
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{a.curso_nombre}</h3>
             {a.fecha_programada && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(a.fecha_programada + 'T00:00:00').toLocaleDateString('es-MX')} {a.hora_programada || ''}</p>}
             {!yaHecho && a.curso_id && (
-              <a href={`/examen/${a.curso_id}`} target="_blank"
+              <a href={`/examen/${a.curso_id}`}
                 style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
                 Presentar examen →
               </a>
@@ -465,7 +465,7 @@ function MisCursosIndividual({ estudiante, certificados }) {
             <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', margin: '8px 0 4px' }}>{c.curso_nombre}</h3>
             {c.fecha && <p style={{ color: '#1d4ed8', fontSize: 12, marginBottom: 12 }}>📅 {new Date(c.fecha).toLocaleDateString('es-MX')}</p>}
             {!yaHecho && c.curso_id && (
-              <a href={`/examen/${c.curso_id}`} target="_blank"
+              <a href={`/examen/${c.curso_id}`}
                 style={{ display: 'inline-block', background: '#1d4ed8', color: '#fff', textDecoration: 'none', borderRadius: 7, padding: '7px 16px', fontSize: 12, fontWeight: 700, marginTop: 8 }}>
                 Presentar examen →
               </a>
