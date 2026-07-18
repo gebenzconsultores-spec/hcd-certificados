@@ -35,7 +35,7 @@ export default function AdminCursosConfirmados() {
 
   async function cargarDatos() {
     const [{ data: cur }, { data: emp }, { data: part }, { data: vend }] = await Promise.all([
-      supabase.from('cursos').select('id, nombre, numero_curso, temario, duracion').eq('activo', true),
+      supabase.from('cursos').select('id, nombre, numero_curso, temario, duracion, categoria, descuento_activo, descuento_porcentaje').eq('activo', true),
       supabase.from('empresas').select('id, nombre, clave_vendedor, estatus'),
       supabase.from('participantes').select('id, nombre, id_empleado, correo, empresa_id, registrado_por_empresa, tipo'),
       supabase.from('vendedores').select('clave, nombre, activo').order('nombre')
@@ -469,6 +469,11 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
   const [vendedorClave, setVendedorClave] = useState('VEND-GERENCIA')
   const [tipoVenta, setTipoVenta] = useState(null) // 'primera_compra' | 'recompra' (solo empresa)
   const [detectandoVenta, setDetectandoVenta] = useState(false)
+  // Matriz Precios y Catálogo (mismo modelo que el cotizador público)
+  const [matriz, setMatriz] = useState([])
+  useEffect(() => {
+    supabase.from('precios_categoria').select('*').then(({ data }) => setMatriz(data || []))
+  }, [])
 
   // Regla de días según horas del curso: ≤8=1, ≤16=2, >16=3 (editable después)
   function diasPorHoras(horas) {
@@ -476,6 +481,29 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
     if (h <= 8) return 1
     if (h <= 16) return 2
     return 3
+  }
+
+  // ── Precio automático (mismo modelo que el cotizador) ──
+  // Bloque de participantes: base 1-5, recalcula al inscribir; 16+ = especial
+  function bloqueDePersonas(n) {
+    const num = Number(n) || 0
+    if (num <= 5) return '1-5'
+    if (num <= 10) return '6-10'
+    if (num <= 15) return '11-15'
+    return 'especial'
+  }
+  // Nivel de duración según horas (para la matriz)
+  function tierDuracion(horas) {
+    const h = Number(horas) || 0
+    if (h <= 8) return '1'
+    if (h <= 16) return '2'
+    if (h <= 24) return '3'
+    return '4'
+  }
+  // Precio por hora de la matriz (categoría del curso × bloque × tier)
+  function precioHora(categoria, bloque, tier) {
+    const r = matriz.find(x => x.categoria === (categoria || 'B') && x.bloque === bloque && (x.duracion_tier || '1') === tier)
+    return r ? Number(r.precio_hora) || 0 : 0
   }
 
   // Al elegir curso: autollenar temario y sugerir número de días por sus horas
@@ -541,6 +569,19 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
     `${p.nombre} ${p.id_empleado || ''} ${p.correo || ''}`.toLowerCase().includes(busqueda.toLowerCase())
   )
 
+  // Curso seleccionado y precio automático desde la matriz (recalcula al inscribir)
+  const cursoSel = cursos.find(c => c.id === cursoId) || null
+  const bloqueActual = bloqueDePersonas(seleccionados.length)
+  const esEspecial = bloqueActual === 'especial'
+  const precioAuto = (cursoSel && !esEspecial)
+    ? precioHora(cursoSel.categoria, bloqueActual, tierDuracion(cursoSel.duracion)) * (Number(cursoSel.duracion) || 0)
+    : 0
+
+  // Sincroniza el precio con la matriz cuando es "con costo" y no es cotización especial (16+)
+  useEffect(() => {
+    if (tipoCosto === 'con_costo' && !esEspecial) setPrecio(precioAuto)
+  }, [tipoCosto, precioAuto, esEspecial])
+
   function toggle(id) {
     setSeleccionados(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id])
   }
@@ -551,7 +592,15 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
     const dias = calcularDias()
     if (dias.length === 0) { alert('Define al menos un día para el curso'); return }
     if (tipo === 'empresa' && !empresaId) { alert('Selecciona la empresa'); return }
-    if (tipoCosto === 'con_costo' && Number(precio) <= 0) { alert('Escribe el precio del curso o cámbialo a "sin costo"'); return }
+    if (tipoCosto === 'con_costo') {
+      const precioFinal = esEspecial ? Number(precio) : precioAuto
+      if (precioFinal <= 0) {
+        alert(esEspecial
+          ? 'Define el precio especial (16+ participantes) o cámbialo a "sin costo".'
+          : 'No se encontró precio en Precios y Catálogo para la categoría/duración de este curso. Revisa la matriz de precios o cámbialo a "sin costo".')
+        return
+      }
+    }
     setSaving(true)
     try {
       const empresa = empresas.find(e => e.id === empresaId)
@@ -593,7 +642,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         modalidad: 'zoom',
         numero_certificado: numeroCert,
         tipo_costo: tipoCosto,
-        precio: tipoCosto === 'con_costo' ? Number(precio) : 0,
+        precio: tipoCosto === 'con_costo' ? (esEspecial ? Number(precio) : precioAuto) : 0,
         codigo_promo: codigoPromo || null,
         mostrar_en: mostrarEn,
         cupo_maximo: Number(cupoMaximo) || 20,
@@ -819,8 +868,21 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         <div style={{ display: 'flex', gap: 10 }}>
           {tipoCosto === 'con_costo' && (
             <div style={{ flex: 1 }}>
-              <label style={lbl}>Precio (MXN)</label>
-              <input type="number" min={0} value={precio} onChange={e => setPrecio(e.target.value)} style={inp} />
+              <label style={lbl}>Precio (MXN) <span style={{ color: '#94a3b8', fontWeight: 400 }}>· Bloque {esEspecial ? '16+' : bloqueActual} {seleccionados.length > 0 ? `(${seleccionados.length} inscritos)` : ''}</span></label>
+              {esEspecial ? (
+                <>
+                  <input type="number" min={0} value={precio} onChange={e => setPrecio(e.target.value)} style={inp} />
+                  <p style={{ fontSize: 11, color: '#b45309', marginTop: 4 }}>16+ participantes: cotización especial, define el precio manualmente.</p>
+                </>
+              ) : (
+                <>
+                  <input type="number" value={precioAuto} readOnly disabled style={{ ...inp, background: '#f8f9fb', color: '#475569', cursor: 'not-allowed' }} />
+                  <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    {cursoSel ? `Automático de Precios y Catálogo (Categoría ${cursoSel.categoria || 'B'} · ${cursoSel.duracion}h). ` : 'Elige un curso para ver el precio. '}
+                    Para cambiarlo, ajústalo en Precios y Catálogo o genera un cupón.
+                  </p>
+                </>
+              )}
             </div>
           )}
           <div style={{ flex: 1 }}>
