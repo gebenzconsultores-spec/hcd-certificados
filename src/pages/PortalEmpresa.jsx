@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import AuditoriaEmpresa from './AuditoriaEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -132,6 +133,7 @@ export function EmpresaDashboard() {
     { id: 'asignaciones', label: '📋 Asignaciones' },
     { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
+    { id: 'auditoria', label: '📦 Constancias y auditoría' },
   ]
 
   return (
@@ -225,6 +227,7 @@ export function EmpresaDashboard() {
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} empresa={empresa} recargar={() => cargar(empresa)} />}
             {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} irACotizaciones={() => setTab('cotizaciones')} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
+            {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
           </>
         )}
       </div>
