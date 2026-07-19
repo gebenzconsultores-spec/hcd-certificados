@@ -223,7 +223,7 @@ export function EmpresaDashboard() {
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} empresa={empresa} recargar={() => cargar(empresa)} />}
-            {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
+            {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} irACotizaciones={() => setTab('cotizaciones')} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
           </>
         )}
@@ -1760,7 +1760,7 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
 }
 
 // ─── TAB PRÓXIMOS CURSOS (empresa) ────────────────────────────
-function TabProximos({ empresa, empleados, recargar }) {
+function TabProximos({ empresa, empleados, recargar, irACotizaciones }) {
   const [proximos, setProximos] = useState([])
   const [inscripciones, setInscripciones] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1807,7 +1807,7 @@ function TabProximos({ empresa, empleados, recargar }) {
               <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px', borderTop: `4px solid ${p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A'}` }}>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
                   <span style={{ background: p.tipo_costo === 'sin_costo' ? '#f0fdf4' : '#f9f0f0', color: p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                    {p.tipo_costo === 'sin_costo' ? '🎁 Gratis' : `$${Number(p.precio).toLocaleString('es-MX')} p/persona`}
+                    {p.tipo_costo === 'sin_costo' ? '🎁 Gratis' : '💰 Con costo'}
                   </span>
                 </div>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>{p.curso_nombre}</h3>
@@ -1828,15 +1828,10 @@ function TabProximos({ empresa, empleados, recargar }) {
                   <button disabled style={{ width: '100%', background: '#f1f5f9', color: '#94a3b8', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 600, cursor: 'not-allowed' }}>
                     Cupo lleno
                   </button>
-                ) : p.tipo_costo === 'sin_costo' ? (
-                  <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    Inscribir empleados (gratis)
-                  </button>
                 ) : (
-                  <a href={`/cotizar?curso=${p.curso_id || ''}&empresa=${empresa.id}&convocatoria=${p.id}`} target="_blank"
-                    style={{ display: 'block', textAlign: 'center', textDecoration: 'none', width: '100%', background: '#8B1A1A', color: '#fff', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, boxSizing: 'border-box' }}>
-                    Cotizar e inscribir empleados →
-                  </a>
+                  <button onClick={() => setModalInscribir(p)} style={{ width: '100%', background: p.tipo_costo === 'sin_costo' ? '#059669' : '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                    Inscribir alumnos
+                  </button>
                 )}
               </div>
             )
@@ -1850,20 +1845,30 @@ function TabProximos({ empresa, empleados, recargar }) {
           cuposDisponibles={cuposDisponibles(modalInscribir)}
           onClose={() => setModalInscribir(null)}
           onDone={() => { setModalInscribir(null); cargar(); recargar() }}
+          irACotizaciones={irACotizaciones}
         />
       )}
     </div>
   )
 }
 
-function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, onClose, onDone }) {
+function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, onClose, onDone, irACotizaciones }) {
   const [seleccionados, setSeleccionados] = useState([])
-  const [idCompra, setIdCompra] = useState('')
-  const [compraValidada, setCompraValidada] = useState(false)
-  const [errorCompra, setErrorCompra] = useState('')
   const [saving, setSaving] = useState(false)
+  const [matriz, setMatriz] = useState([])
+  const [cursoInfo, setCursoInfo] = useState(null)
 
   const esConCosto = proximo.tipo_costo === 'con_costo'
+
+  // Para "con costo": cargar matriz de precios y datos del curso (categoría/duración)
+  useEffect(() => {
+    if (!esConCosto) return
+    supabase.from('precios_categoria').select('*').then(({ data }) => setMatriz(data || []))
+    if (proximo.curso_id) {
+      supabase.from('cursos').select('id, nombre, categoria, duracion').eq('id', proximo.curso_id).maybeSingle()
+        .then(({ data }) => setCursoInfo(data || null))
+    }
+  }, [])
 
   function toggle(id) {
     setSeleccionados(s => {
@@ -1873,21 +1878,20 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
     })
   }
 
-  async function validarCompra() {
-    if (!idCompra) return
-    setErrorCompra('')
-    try {
-      const { data: compra } = await supabase.from('compras').select('*').eq('id_compra', idCompra.toUpperCase().trim()).eq('estado', 'activo').single()
-      if (!compra) throw new Error('no')
-      setCompraValidada(true)
-    } catch {
-      setErrorCompra('ID de compra no válido o ya usado.')
-    }
-  }
+  // ── Precio por bloque según los alumnos seleccionados (mismo modelo que el cotizador) ──
+  const horas = Number(cursoInfo?.duracion) || 0
+  const bloque = bloqueDePersonasCot(seleccionados.length)
+  const esEspecial = bloque === 'especial'
+  const precioBase = (esConCosto && cursoInfo && !esEspecial && seleccionados.length > 0)
+    ? precioHoraCot(matriz, cursoInfo.categoria, bloque, tierDuracionCot(horas)) * horas
+    : 0
+  const subtotal = precioBase
+  const ivaMonto = subtotal * IVA_COT
+  const total = subtotal + ivaMonto
 
-  async function inscribir() {
+  // ── SIN COSTO: inscripción directa (comportamiento actual) ──
+  async function inscribirGratis() {
     if (seleccionados.length === 0) return
-    if (esConCosto && !compraValidada) { setErrorCompra('Valida tu ID de compra primero'); return }
     setSaving(true)
     try {
       const rows = seleccionados.map(empId => {
@@ -1902,22 +1906,15 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
           empresa_id: empresa.id,
           empresa_nombre: empresa.nombre,
           origen: 'empresa',
-          id_compra: esConCosto ? idCompra.toUpperCase().trim() : null,
+          id_compra: null,
           estado: 'inscrito'
         }
       })
       await supabase.from('inscripciones').insert(rows)
-      // Actualizar cupo ocupado
       await supabase.from('proximos_cursos').update({ cupo_ocupado: (proximo.cupo_ocupado || 0) + seleccionados.length }).eq('id', proximo.id)
-      // Si con costo, marcar compra usada
-      if (esConCosto) await supabase.from('compras').update({ estado: 'usado' }).eq('id_compra', idCompra.toUpperCase().trim())
-
-      // Dar acceso al examen a los inscritos
       for (const empId of seleccionados) {
         await supabase.from('participantes').update({ acceso_examen: true }).eq('id', empId)
       }
-
-      // Registrar/actualizar en CURSOS CONFIRMADOS (calendario admin)
       try {
         const { data: existe } = await supabase.from('cursos_confirmados')
           .select('id, num_participantes').eq('curso_nombre', proximo.curso_nombre).eq('fecha_inicio', proximo.fecha).maybeSingle()
@@ -1933,10 +1930,9 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
           })
         }
       } catch (_) {}
-      // Notificar admin
       try {
         await supabase.from('notificaciones').insert({
-          tipo: 'programacion', titulo: 'Inscripción a próximo curso',
+          tipo: 'programacion', titulo: 'Inscripción a convocatoria (gratis)',
           mensaje: `${empresa.nombre} inscribió ${seleccionados.length} empleado(s) a ${proximo.curso_nombre}`,
           link: '/admin/proximos'
         })
@@ -1947,60 +1943,154 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
     } finally { setSaving(false) }
   }
 
+  // ── CON COSTO: generar cotización + descargar PDF + guardar en Mis cotizaciones (SIN inscribir aún) ──
+  async function generarCotizacion() {
+    if (seleccionados.length === 0) return
+    if (esEspecial) { alert('16+ participantes: se maneja como cotización especial. Contacta a HCD por WhatsApp.'); return }
+    if (!cursoInfo) { alert('Espera a que carguen los datos del curso.'); return }
+    if (precioBase <= 0) { alert('No se encontró precio en Precios y Catálogo para la categoría/duración de este curso. Contacta a HCD.'); return }
+    setSaving(true)
+    try {
+      // Folio único
+      const year = new Date().getFullYear()
+      const { data: foliosExist } = await supabase.from('cotizaciones').select('folio').like('folio', `HCD-COT-${year}-%`)
+      let maxNum = 0
+      ;(foliosExist || []).forEach(c => {
+        const m = (c.folio || '').match(/HCD-COT-\d+-(\d+)/)
+        if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10))
+      })
+      const folio = `HCD-COT-${year}-${String(maxNum + 1).padStart(4, '0')}`
+
+      const nombresAlumnos = seleccionados.map(id => (empleados.find(e => e.id === id)?.nombre || '')).filter(Boolean)
+      const esClienteNuevo = empresa.tipo_acceso !== 'cliente'
+
+      const payload = {
+        folio,
+        empresa_nombre: empresa.nombre,
+        contacto_nombre: empresa.contacto_nombre || '',
+        contacto_email: empresa.contacto_email || '',
+        contacto_whatsapp: empresa.contacto_whatsapp || '',
+        curso_id: proximo.curso_id,
+        curso_nombre: proximo.curso_nombre,
+        tipo_precio: 'persona',
+        modalidad: 'online',
+        num_personas: seleccionados.length,
+        dias: horas <= 8 ? 1 : horas <= 16 ? 2 : 3,
+        precio_base: precioBase,
+        descuento_tipo: null,
+        descuento_valor: 0,
+        requiere_viaticos: false,
+        monto_viaticos: 0,
+        aplica_iva: true,
+        subtotal,
+        iva: ivaMonto,
+        total,
+        es_cliente_nuevo: esClienteNuevo,
+        comision_porcentaje: esClienteNuevo ? 15 : 10,
+        comision_monto: total * (esClienteNuevo ? 0.15 : 0.10),
+        incluye_consultoria: false,
+        cupon_codigo: null,
+        notas: `[Convocatoria HCD ${proximo.fecha}] Alumnos a inscribir (${nombresAlumnos.length}): ${nombresAlumnos.join(', ')}`,
+        fecha_deseada: proximo.fecha || null,
+        empresa_id: empresa.id,
+        empresa_registrada: true,
+        estado: 'enviada'
+      }
+
+      const { error: errCot } = await supabase.from('cotizaciones').insert(payload)
+      if (errCot) {
+        alert('No se pudo guardar la cotización: ' + (errCot.message || 'error'))
+        setSaving(false); return
+      }
+
+      // Notificar al admin
+      try {
+        await supabase.from('notificaciones').insert({
+          tipo: 'cotizacion', titulo: 'Nueva cotización (convocatoria)',
+          mensaje: `${empresa.nombre} cotizó ${proximo.curso_nombre} por $${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+          link: '/admin/cotizaciones'
+        })
+      } catch (_) {}
+
+      // Descargar el PDF de la cotización
+      const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+      const ventana = window.open('', '_blank', 'width=900,height=700')
+      if (ventana) {
+        ventana.document.write(htmlCotizacionConvocatoria({
+          empresa, curso_nombre: proximo.curso_nombre, num_personas: seleccionados.length,
+          bloque, horas, subtotal, iva_monto: ivaMonto, total, folio, fecha, alumnos: nombresAlumnos
+        }))
+        ventana.document.close()
+      }
+
+      alert(`✅ Cotización ${folio} generada.\n\nLa encuentras en "Mis cotizaciones". Adjunta ahí tu orden de compra para confirmar la inscripción de los alumnos.`)
+      onClose()
+      irACotizaciones && irACotizaciones()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally { setSaving(false) }
+  }
+
   return (
     <div style={overlay} onClick={onClose}>
       <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir a: {proximo.curso_nombre}</h3>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir alumnos: {proximo.curso_nombre}</h3>
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
           {new Date(proximo.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })} · {proximo.hora} · {cuposDisponibles} lugares disponibles
         </p>
 
-        {esConCosto && !compraValidada && (
-          <div style={{ background: '#fef9e7', borderRadius: 10, padding: '16px', marginBottom: 16 }}>
-            <p style={{ color: '#92400e', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Este curso tiene costo (${Number(proximo.precio).toLocaleString('es-MX')} p/persona)</p>
-            {errorCompra && <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>✗ {errorCompra}</div>}
-            <label style={lbl}>ID de compra</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input value={idCompra} onChange={e => setIdCompra(e.target.value)} placeholder="COMPRA-0001" style={{ ...inp, flex: 1 }} />
-              <button onClick={validarCompra} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Validar</button>
-            </div>
-            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 6 }}>¿No tienes ID? Cotiza este curso o contacta a HCD para tu orden de compra.</p>
+        <label style={lbl}>Alumnos ({seleccionados.length} de {cuposDisponibles})</label>
+        {empleados.length === 0 ? (
+          <div style={{ background: '#fef9c3', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#713f12' }}>
+            Primero registra empleados en la pestaña "Empleados"
+          </div>
+        ) : (
+          <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+            {empleados.map(e => (
+              <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
+                <input type="checkbox" checked={seleccionados.includes(e.id)} onChange={() => toggle(e.id)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
+                <div>
+                  <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 600 }}>{e.nombre}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.puesto || 'Sin puesto'} · {e.id_empleado}</div>
+                </div>
+              </label>
+            ))}
           </div>
         )}
 
-        {esConCosto && compraValidada && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#15803d', fontSize: 13 }}>
-            ✅ ID de compra válido. Selecciona los empleados.
-          </div>
-        )}
-
-        {(!esConCosto || compraValidada) && (
-          <>
-            <label style={lbl}>Empleados ({seleccionados.length} de {cuposDisponibles})</label>
-            {empleados.length === 0 ? (
-              <div style={{ background: '#fef9c3', borderRadius: 8, padding: '12px 14px', fontSize: 13, color: '#713f12' }}>
-                Primero registra empleados en la pestaña "Empleados"
-              </div>
+        {/* Resumen de precio (solo cursos con costo) */}
+        {esConCosto && (
+          <div style={{ background: '#f9f0f0', border: '1px solid #f3d9d9', borderRadius: 10, padding: '14px 16px', marginTop: 16 }}>
+            {esEspecial ? (
+              <p style={{ color: '#92400e', fontSize: 13 }}>16+ participantes: cotización especial. Contacta a HCD por WhatsApp para tu precio.</p>
+            ) : seleccionados.length === 0 ? (
+              <p style={{ color: '#64748b', fontSize: 13 }}>Selecciona alumnos para calcular el precio automáticamente (según el bloque).</p>
             ) : (
-              <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                {empleados.map(e => (
-                  <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={seleccionados.includes(e.id)} onChange={() => toggle(e.id)} style={{ accentColor: '#8B1A1A', width: 16, height: 16 }} />
-                    <div>
-                      <div style={{ fontSize: 13, color: '#1e293b', fontWeight: 600 }}>{e.nombre}</div>
-                      <div style={{ fontSize: 11, color: '#94a3b8' }}>{e.puesto || 'Sin puesto'} · {e.id_empleado}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#475569', marginBottom: 4 }}>
+                  <span>Bloque {bloque} · {seleccionados.length} alumno(s)</span>
+                  <span>Subtotal ${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8', marginBottom: 6 }}>
+                  <span>IVA (16%)</span><span>${ivaMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, color: '#8B1A1A', fontWeight: 800, borderTop: '1px solid #f3d9d9', paddingTop: 6 }}>
+                  <span>Total</span><span>${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <p style={{ color: '#7c2d2d', fontSize: 11, marginTop: 8 }}>Al finalizar se descarga tu cotización y queda en "Mis cotizaciones". La inscripción se confirma cuando adjuntes tu orden de compra.</p>
+              </>
             )}
-          </>
+          </div>
         )}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
-          {(!esConCosto || compraValidada) && (
-            <button onClick={inscribir} disabled={saving || seleccionados.length === 0} style={btnPrimary}>
+          {esConCosto ? (
+            <button onClick={generarCotizacion} disabled={saving || seleccionados.length === 0 || esEspecial} style={btnPrimary}>
+              {saving ? 'Generando...' : 'Generar cotización'}
+            </button>
+          ) : (
+            <button onClick={inscribirGratis} disabled={saving || seleccionados.length === 0} style={btnPrimary}>
               {saving ? 'Inscribiendo...' : `Inscribir a ${seleccionados.length}`}
             </button>
           )}
@@ -2017,3 +2107,110 @@ const btnSecondary = { background: '#f1f5f9', color: '#475569', border: '1px sol
 const btnGhost = { background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }
 const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }
 const modalStyle = { background: '#fff', borderRadius: 16, padding: '28px 32px', width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
+
+// ─── Precio de convocatoria (mismo modelo que el cotizador público) ───
+const IVA_COT = 0.16
+const EMAIL_COT = 'luisgomez@hablandocondatos.com.mx'
+
+function bloqueDePersonasCot(n) {
+  const num = Number(n) || 0
+  if (num <= 5) return '1-5'
+  if (num <= 10) return '6-10'
+  if (num <= 15) return '11-15'
+  return 'especial'
+}
+function tierDuracionCot(horas) {
+  const h = Number(horas) || 0
+  if (h <= 8) return '1'
+  if (h <= 16) return '2'
+  if (h <= 24) return '3'
+  return '4'
+}
+function precioHoraCot(matriz, categoria, bloque, tier) {
+  const r = (matriz || []).find(x => x.categoria === (categoria || 'B') && x.bloque === bloque && (x.duracion_tier || '1') === tier)
+  return r ? Number(r.precio_hora) || 0 : 0
+}
+
+// PDF imprimible de la cotización generada desde una convocatoria
+function htmlCotizacionConvocatoria({ empresa, curso_nombre, num_personas, bloque, horas, subtotal, iva_monto, total, folio, fecha, alumnos }) {
+  const listaAlumnos = (alumnos && alumnos.length)
+    ? `<div class="seccion"><h3>Alumnos a inscribir (${alumnos.length})</h3><p style="font-size:13px;color:#475569;line-height:1.7">${alumnos.join(' · ')}</p></div>`
+    : ''
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>
+<title>Cotización ${folio}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Inter',sans-serif;color:#1e293b;background:#fff;}
+.page{max-width:800px;margin:0 auto;padding:40px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #8B1A1A;}
+.company{font-size:22px;font-weight:800;color:#8B1A1A;}
+.sub{font-size:11px;color:#64748b;margin-top:2px;}
+.folio-area{text-align:right;}
+.folio-label{font-size:11px;color:#64748b;letter-spacing:1px;text-transform:uppercase;}
+.folio-val{font-size:18px;font-weight:800;color:#8B1A1A;}
+.fecha{color:#64748b;font-size:12px;margin-top:4px;}
+.seccion{margin-bottom:24px;}
+.seccion h3{font-size:13px;font-weight:700;color:#8B1A1A;letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;padding-bottom:4px;border-bottom:1px solid #f1f5f9;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.dato label{font-size:11px;color:#64748b;display:block;margin-bottom:2px;}
+.dato span{font-size:14px;color:#1e293b;font-weight:500;}
+table{width:100%;border-collapse:collapse;margin-top:8px;}
+th{background:#f8f9fb;padding:10px 14px;text-align:left;font-size:11px;color:#64748b;letter-spacing:.5px;text-transform:uppercase;}
+td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
+.total-row td{font-weight:800;font-size:15px;color:#8B1A1A;border-top:2px solid #8B1A1A;border-bottom:none;}
+.footer{margin-top:40px;padding-top:20px;border-top:1px solid #e2e8f0;text-align:center;color:#64748b;font-size:11px;}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+</style></head><body><div class="page">
+<div class="header">
+  <div>
+    <div class="company">● Hablando con Datos</div>
+    <div class="sub">Consultoría y Capacitación en Sistemas de Gestión</div>
+    <div class="sub" style="margin-top:4px">Gerencia de Ventas</div>
+    <div class="sub">WhatsApp: 222 354 9353 · ${EMAIL_COT}</div>
+  </div>
+  <div class="folio-area">
+    <div class="folio-label">Cotización</div>
+    <div class="folio-val">${folio}</div>
+    <div class="fecha">Fecha: ${fecha}</div>
+    <div class="fecha">Vigencia: 30 días naturales</div>
+  </div>
+</div>
+<div class="seccion">
+  <h3>Datos del cliente</h3>
+  <div class="grid2">
+    <div class="dato"><label>Empresa</label><span>${empresa.nombre || ''}</span></div>
+    <div class="dato"><label>Contacto</label><span>${empresa.contacto_nombre || ''}</span></div>
+    <div class="dato"><label>Correo</label><span>${empresa.contacto_email || ''}</span></div>
+    <div class="dato"><label>WhatsApp</label><span>${empresa.contacto_whatsapp || '—'}</span></div>
+  </div>
+</div>
+<div class="seccion">
+  <h3>Detalle de la cotización</h3>
+  <table>
+    <thead><tr><th>Concepto</th><th>Detalle</th><th style="text-align:right">Importe</th></tr></thead>
+    <tbody>
+      <tr><td><strong>${curso_nombre}</strong></td><td>${num_personas} persona(s) · Bloque ${bloque} · ${horas}h</td><td style="text-align:right">$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">Subtotal</td><td style="text-align:right">$${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td colspan="2" style="text-align:right;color:#64748b;font-size:12px">IVA (16%)</td><td style="text-align:right">$${iva_monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>
+      <tr class="total-row"><td colspan="2" style="text-align:right">TOTAL</td><td style="text-align:right">$${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (IVA incl.)</td></tr>
+    </tbody>
+  </table>
+</div>
+${listaAlumnos}
+<div class="seccion" style="background:#f8f9fb;border-radius:8px;padding:16px;">
+  <h3 style="margin-bottom:8px">Condiciones</h3>
+  <p style="font-size:12px;color:#475569;line-height:1.8">
+    • Cotización válida por 30 días naturales.<br/>
+    • Precios en pesos mexicanos (MXN). IVA del 16% incluido.<br/>
+    • La inscripción se confirma al adjuntar la orden de compra en el portal.<br/>
+    • Incluye material didáctico y constancias con folio único verificable.<br/>
+    • Contacto: WhatsApp 222 354 9353 · ${EMAIL_COT}
+  </p>
+</div>
+<div class="footer">
+  <p>Hablando con Datos — Consultoría y Capacitación en Sistemas de Gestión · Puebla, México</p>
+  <p style="margin-top:4px">Folio: ${folio} · Gerencia de Ventas: 222 354 9353 · ${EMAIL_COT}</p>
+</div>
+</div><script>window.onload=()=>{window.print();}</script></body></html>`
+}
