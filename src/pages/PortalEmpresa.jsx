@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AuditoriaEmpresa from './AuditoriaEmpresa.jsx'
 import RutasCapacitacion from './RutasCapacitacion.jsx'
+import BolsaTrabajo from './BolsaTrabajo.jsx'
+import PoolCandidatos from './PoolCandidatos.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -132,10 +134,12 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '📚 Catálogo de cursos' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
-    { id: 'rutas', label: '🧭 Rutas de capacitación' },
+    { id: 'rutas', label: '🏢 Rutas de capacitación' },
     { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
     { id: 'auditoria', label: '📦 Constancias y auditoría' },
+    { id: 'bolsa', label: '👔 Bolsa de trabajo' },
+    { id: 'candidatos', label: '🧑‍💼 Pool de candidatos' },
   ]
 
   return (
@@ -231,6 +235,8 @@ export function EmpresaDashboard() {
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
             {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
+            {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
+            {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
           </>
         )}
       </div>
