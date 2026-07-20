@@ -12,6 +12,7 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
   const [cursos, setCursos] = useState([])
   const [certificados, setCertificados] = useState([])
   const [matriz, setMatriz] = useState([])
+  const [solicitudes, setSolicitudes] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalPuesto, setModalPuesto] = useState(null)
   const [modalReq, setModalReq] = useState(null)
@@ -47,12 +48,16 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
 
     const { data: mat } = await supabase.from('precios_categoria').select('*')
 
+    // Solicitudes de capacitación (para marcar "ya solicitado")
+    const { data: sol } = await supabase.from('solicitudes_capacitacion').select('curso_id, estado').eq('empresa_id', empresa.id)
+
     setPuestos(listaPuestos)
     setRequisitos(reqs)
     setEmpleados(listaEmpleados)
     setCursos(cur || [])
     setCertificados(certs)
     setMatriz(mat || [])
+    setSolicitudes(sol || [])
     setLoading(false)
   }
 
@@ -61,6 +66,7 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
   function empleadosDePuesto(pid) { return empleados.filter(e => e.puesto_id === pid) }
   function nombrePuesto(pid) { return puestos.find(p => p.id === pid)?.nombre || '—' }
   function tieneCurso(empId, cursoId) { return certificados.some(c => c.participante_id === empId && c.curso_id === cursoId) }
+  function cursoYaSolicitado(cursoId) { return solicitudes.some(s => s.curso_id === cursoId && s.estado !== 'atendida') }
   const sinPuesto = empleados.filter(e => !e.puesto_id)
 
   // Diagnóstico por empleado
@@ -137,7 +143,8 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
       {/* Sub-pestañas */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 18, flexWrap: 'wrap' }}>
         {[
-          ['organigrama', '🗂️ Organigrama'],
+          ['organigrama', '🗂️ Puestos'],
+          ['arbol', '🌳 Organigrama'],
           ['diagnostico', `📈 Diagnóstico${totalFaltantes ? ` (${totalFaltantes})` : ''}`],
           ['empleados', '👥 Empleados'],
         ].map(([v, l]) => (
@@ -233,6 +240,22 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
         </div>
       )}
 
+      {/* ─────────── ORGANIGRAMA (ÁRBOL) ─────────── */}
+      {vista === 'arbol' && (
+        <div>
+          <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>
+            Organigrama de tu empresa según el "reporta a" de cada puesto. Haz clic en un puesto para editarlo.
+          </p>
+          {puestos.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+              Aún no hay puestos. Créalos en la pestaña "🗂️ Puestos".
+            </div>
+          ) : (
+            <ArbolOrganigrama puestos={puestos} empleados={empleados} requisitos={requisitos} onEditar={p => setModalPuesto(p)} />
+          )}
+        </div>
+      )}
+
       {/* ─────────── DIAGNÓSTICO ─────────── */}
       {vista === 'diagnostico' && (
         <div>
@@ -246,15 +269,20 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 14 }}>
-              {necesidades.map(n => (
+              {necesidades.map(n => {
+                const yaSol = cursoYaSolicitado(n.curso.id)
+                return (
                 <div key={n.curso.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px', borderLeft: `4px solid ${n.obligatorio ? '#8B1A1A' : '#f59e0b'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 240 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>🎓 {n.curso.nombre}</h3>
                         <span style={{ background: n.obligatorio ? '#f9f0f0' : '#fef9c3', color: n.obligatorio ? '#8B1A1A' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
                           {n.obligatorio ? 'Obligatorio' : 'Deseable'}
                         </span>
+                        {yaSol && (
+                          <span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, border: '1px solid #bfdbfe' }}>⏳ Ya solicitado</span>
+                        )}
                       </div>
                       <p style={{ color: '#64748b', fontSize: 13 }}>
                         <strong style={{ color: '#8B1A1A' }}>{n.empleados.length}</strong> empleado(s) lo necesitan:
@@ -265,13 +293,17 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
                         ))}
                       </div>
                     </div>
-                    <button onClick={() => setModalSolicitar({ curso: n.curso, empleados: n.empleados })}
-                      style={{ ...btnPrimary, whiteSpace: 'nowrap' }}>
-                      💼 Solicitar capacitación
+                    <button onClick={() => {
+                        if (yaSol && !window.confirm('Ya existe una solicitud de este curso pendiente. ¿Generar otra cotización de todos modos?')) return
+                        setModalSolicitar({ curso: n.curso, empleados: n.empleados })
+                      }}
+                      style={{ ...(yaSol ? btnGhost : btnPrimary), whiteSpace: 'nowrap' }}>
+                      {yaSol ? '↻ Solicitar de nuevo' : '💼 Solicitar capacitación'}
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -339,6 +371,88 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
           onClose={() => setModalSolicitar(null)}
           onDone={() => { setModalSolicitar(null); cargar(); irACotizaciones && irACotizaciones() }} />
       )}
+    </div>
+  )
+}
+
+// ─── Árbol de organigrama (SVG + nodos, sin librerías) ────────
+function ArbolOrganigrama({ puestos, empleados, requisitos, onEditar }) {
+  const NODO_W = 190, NODO_H = 76, SEP_X = 210, SEP_Y = 130
+
+  const byId = new Map(puestos.map(p => [p.id, p]))
+  const children = new Map()
+  puestos.forEach(p => {
+    const parent = (p.puesto_padre_id && byId.has(p.puesto_padre_id)) ? p.puesto_padre_id : null
+    if (parent) {
+      if (!children.has(parent)) children.set(parent, [])
+      children.get(parent).push(p)
+    }
+  })
+  const roots = puestos.filter(p => !(p.puesto_padre_id && byId.has(p.puesto_padre_id)))
+
+  // Layout tipo árbol: hojas ocupan columnas consecutivas, padres se centran sobre sus hijos
+  const pos = {}
+  let col = 0
+  const visitados = new Set()
+  function layout(nodo, depth) {
+    if (visitados.has(nodo.id)) { const x = col++; pos[nodo.id] = { x, depth }; return x }
+    visitados.add(nodo.id)
+    const kids = children.get(nodo.id) || []
+    let x
+    if (kids.length === 0) { x = col++ }
+    else { const xs = kids.map(k => layout(k, depth + 1)); x = (xs[0] + xs[xs.length - 1]) / 2 }
+    pos[nodo.id] = { x, depth }
+    return x
+  }
+  roots.forEach(r => layout(r, 0))
+
+  const maxX = Math.max(0, ...Object.values(pos).map(p => p.x))
+  const maxDepth = Math.max(0, ...Object.values(pos).map(p => p.depth))
+  const width = (maxX + 1) * SEP_X + 20
+  const height = (maxDepth + 1) * SEP_Y + 20
+
+  const centerX = id => pos[id].x * SEP_X + NODO_W / 2 + 10
+  const topY = id => pos[id].depth * SEP_Y + 10
+  const bottomY = id => topY(id) + NODO_H
+
+  // Conectores (elbow) padre → hijo
+  const lineas = []
+  puestos.forEach(p => {
+    const parent = (p.puesto_padre_id && byId.has(p.puesto_padre_id)) ? p.puesto_padre_id : null
+    if (parent && pos[parent] && pos[p.id]) {
+      const x1 = centerX(parent), y1 = bottomY(parent)
+      const x2 = centerX(p.id), y2 = topY(p.id)
+      const mid = (y1 + y2) / 2
+      lineas.push(`M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`)
+    }
+  })
+
+  return (
+    <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 14, background: '#fafbfc', padding: 10 }}>
+      <div style={{ position: 'relative', width, height, minWidth: '100%' }}>
+        <svg width={width} height={height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+          {lineas.map((d, i) => <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth={2} />)}
+        </svg>
+        {puestos.map(p => {
+          if (!pos[p.id]) return null
+          const nEmp = empleados.filter(e => e.puesto_id === p.id).length
+          const nReq = requisitos.filter(r => r.puesto_id === p.id).length
+          return (
+            <div key={p.id} onClick={() => onEditar(p)} title="Clic para editar"
+              style={{
+                position: 'absolute', left: pos[p.id].x * SEP_X + 10, top: pos[p.id].depth * SEP_Y + 10,
+                width: NODO_W, minHeight: NODO_H, background: '#fff', border: '2px solid #8B1A1A', borderRadius: 12,
+                padding: '10px 12px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,.06)', boxSizing: 'border-box'
+              }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', lineHeight: 1.2, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.nombre}</div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#64748b' }}>
+                <span>👥 {nEmp}</span>
+                <span>🎓 {nReq} req</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
