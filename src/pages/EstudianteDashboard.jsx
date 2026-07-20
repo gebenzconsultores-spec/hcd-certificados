@@ -49,6 +49,17 @@ export default function EstudianteDashboard() {
       asig = r.data || []
     } catch (_) { asig = [] }
     setAsignaciones(asig)
+    // Refrescar el consentimiento de oportunidades desde la BD (por si cambió)
+    try {
+      const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades').eq('id', est.id).maybeSingle()
+      if (yo) {
+        setEstudiante(prev => ({ ...(prev || est), disponible_oportunidades: yo.disponible_oportunidades }))
+        try {
+          const sesion = JSON.parse(sessionStorage.getItem('estudiante_portal') || '{}')
+          sessionStorage.setItem('estudiante_portal', JSON.stringify({ ...sesion, disponible_oportunidades: yo.disponible_oportunidades }))
+        } catch (_) {}
+      }
+    } catch (_) {}
     setLoading(false)
   }
 
@@ -341,6 +352,7 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
     nombre: estudiante.nombre || '',
     correo: estudiante.correo || '',
     whatsapp: estudiante.whatsapp || '',
+    disponible_oportunidades: estudiante.disponible_oportunidades || false,
   })
   const [saving, setSaving] = useState(false)
   const d = k => v => setDatos(p => ({ ...p, [k]: v }))
@@ -350,7 +362,8 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
     setSaving(true)
     try {
       const { error } = await supabase.from('participantes').update({
-        nombre: datos.nombre, correo: datos.correo, whatsapp: datos.whatsapp
+        nombre: datos.nombre, correo: datos.correo, whatsapp: datos.whatsapp,
+        disponible_oportunidades: datos.disponible_oportunidades
       }).eq('id', estudiante.id)
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
       // Actualizar la sesión guardada
@@ -380,6 +393,14 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
 
         <label style={{ ...estLbl, marginTop: 12 }}>WhatsApp</label>
         <input value={datos.whatsapp} onChange={e => d('whatsapp')(e.target.value)} placeholder="2221234567" style={estInp} />
+
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', marginTop: 18, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 14px' }}>
+          <input type="checkbox" checked={datos.disponible_oportunidades} onChange={e => d('disponible_oportunidades')(e.target.checked)} style={{ accentColor: '#059669', width: 18, height: 18, marginTop: 1 }} />
+          <span style={{ fontSize: 13, color: '#166534' }}>
+            <strong>Quiero recibir nuevas oportunidades laborales</strong><br />
+            <span style={{ color: '#15803d', fontSize: 12 }}>Autorizo a Hablando con Datos a compartir mi perfil profesional con empresas. Puedes desactivarlo cuando quieras.</span>
+          </span>
+        </label>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
           <button onClick={onClose} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
