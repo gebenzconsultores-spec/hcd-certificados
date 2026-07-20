@@ -376,82 +376,177 @@ export default function RutasCapacitacion({ empresa, irACotizaciones }) {
 }
 
 // ─── Árbol de organigrama (SVG + nodos, sin librerías) ────────
+// Orientaciones: vertical (arriba→abajo), horizontal (izq→der) y mixto
+// (vertical, pero los hijos que son hoja se apilan en columna).
 function ArbolOrganigrama({ puestos, empleados, requisitos, onEditar }) {
-  const NODO_W = 190, NODO_H = 76, SEP_X = 210, SEP_Y = 130
+  const [orientacion, setOrientacion] = useState('vertical')
+  const NODO_W = 224, NODO_H = 104, GAP_X = 30, GAP_Y = 52, GAP_STACK = 16, INDENT = 36
 
   const byId = new Map(puestos.map(p => [p.id, p]))
   const children = new Map()
   puestos.forEach(p => {
     const parent = (p.puesto_padre_id && byId.has(p.puesto_padre_id)) ? p.puesto_padre_id : null
-    if (parent) {
-      if (!children.has(parent)) children.set(parent, [])
-      children.get(parent).push(p)
-    }
+    if (parent) { if (!children.has(parent)) children.set(parent, []); children.get(parent).push(p) }
   })
+  const kidsOf = id => children.get(id) || []
   const roots = puestos.filter(p => !(p.puesto_padre_id && byId.has(p.puesto_padre_id)))
 
-  // Layout tipo árbol: hojas ocupan columnas consecutivas, padres se centran sobre sus hijos
   const pos = {}
-  let col = 0
+  const stacked = new Set()
   const visitados = new Set()
-  function layout(nodo, depth) {
-    if (visitados.has(nodo.id)) { const x = col++; pos[nodo.id] = { x, depth }; return x }
-    visitados.add(nodo.id)
-    const kids = children.get(nodo.id) || []
-    let x
-    if (kids.length === 0) { x = col++ }
-    else { const xs = kids.map(k => layout(k, depth + 1)); x = (xs[0] + xs[xs.length - 1]) / 2 }
-    pos[nodo.id] = { x, depth }
-    return x
+  let maxRight = 0, maxBottom = 0
+  const track = id => { maxRight = Math.max(maxRight, pos[id].left + NODO_W); maxBottom = Math.max(maxBottom, pos[id].top + NODO_H) }
+
+  // Vertical: hijos en fila, padre centrado arriba
+  function placeV(node, x, y, depth) {
+    if (visitados.has(node.id)) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return NODO_W }
+    visitados.add(node.id)
+    const kids = kidsOf(node.id)
+    if (kids.length === 0) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return NODO_W }
+    let cursorX = x, first = null, last = null
+    const cy = y + NODO_H + GAP_Y
+    kids.forEach(k => {
+      const w = placeV(k, cursorX, cy, depth + 1)
+      const c = pos[k.id].left + NODO_W / 2
+      if (first === null) first = c; last = c
+      cursorX += w + GAP_X
+    })
+    pos[node.id] = { left: (first + last) / 2 - NODO_W / 2, top: y, depth }
+    track(node.id)
+    return Math.max((cursorX - GAP_X) - x, NODO_W)
   }
-  roots.forEach(r => layout(r, 0))
 
-  const maxX = Math.max(0, ...Object.values(pos).map(p => p.x))
-  const maxDepth = Math.max(0, ...Object.values(pos).map(p => p.depth))
-  const width = (maxX + 1) * SEP_X + 20
-  const height = (maxDepth + 1) * SEP_Y + 20
+  // Horizontal: hijos en columna, padre centrado a la izquierda
+  function placeH(node, x, y, depth) {
+    if (visitados.has(node.id)) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return NODO_H }
+    visitados.add(node.id)
+    const kids = kidsOf(node.id)
+    if (kids.length === 0) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return NODO_H }
+    let cursorY = y, first = null, last = null
+    const cx = x + NODO_W + GAP_X + 20
+    kids.forEach(k => {
+      const h = placeH(k, cx, cursorY, depth + 1)
+      const c = pos[k.id].top + NODO_H / 2
+      if (first === null) first = c; last = c
+      cursorY += h + GAP_Y
+    })
+    pos[node.id] = { left: x, top: (first + last) / 2 - NODO_H / 2, depth }
+    track(node.id)
+    return Math.max((cursorY - GAP_Y) - y, NODO_H)
+  }
 
-  const centerX = id => pos[id].x * SEP_X + NODO_W / 2 + 10
-  const topY = id => pos[id].depth * SEP_Y + 10
-  const bottomY = id => topY(id) + NODO_H
+  // Mixto: vertical, pero si TODOS los hijos son hoja, se apilan en columna
+  function placeM(node, x, y, depth) {
+    if (visitados.has(node.id)) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return { w: NODO_W, h: NODO_H } }
+    visitados.add(node.id)
+    const kids = kidsOf(node.id)
+    if (kids.length === 0) { pos[node.id] = { left: x, top: y, depth }; track(node.id); return { w: NODO_W, h: NODO_H } }
+    const allLeaves = kids.every(k => kidsOf(k.id).length === 0)
+    if (allLeaves && kids.length > 1) {
+      pos[node.id] = { left: x, top: y, depth }; track(node.id)
+      let cy = y + NODO_H + GAP_Y
+      kids.forEach(k => { pos[k.id] = { left: x + INDENT, top: cy, depth: depth + 1 }; track(k.id); cy += NODO_H + GAP_STACK })
+      stacked.add(node.id)
+      return { w: INDENT + NODO_W, h: cy - y }
+    }
+    let cursorX = x, first = null, last = null, maxH = 0
+    const cy = y + NODO_H + GAP_Y
+    kids.forEach(k => {
+      const r = placeM(k, cursorX, cy, depth + 1)
+      const c = pos[k.id].left + NODO_W / 2
+      if (first === null) first = c; last = c
+      cursorX += r.w + GAP_X; maxH = Math.max(maxH, r.h)
+    })
+    pos[node.id] = { left: (first + last) / 2 - NODO_W / 2, top: y, depth }; track(node.id)
+    return { w: Math.max((cursorX - GAP_X) - x, NODO_W), h: NODO_H + GAP_Y + maxH }
+  }
 
-  // Conectores (elbow) padre → hijo
+  if (orientacion === 'horizontal') {
+    let cy = 10
+    roots.forEach(r => { const h = placeH(r, 10, cy, 0); cy += h + GAP_Y * 1.4 })
+  } else if (orientacion === 'mixto') {
+    let cx = 10
+    roots.forEach(r => { const res = placeM(r, cx, 10, 0); cx += res.w + GAP_X * 2 })
+  } else {
+    let cx = 10
+    roots.forEach(r => { const w = placeV(r, cx, 10, 0); cx += w + GAP_X * 2 })
+  }
+
+  const width = maxRight + 20
+  const height = maxBottom + 20
+
+  // Conectores
   const lineas = []
   puestos.forEach(p => {
     const parent = (p.puesto_padre_id && byId.has(p.puesto_padre_id)) ? p.puesto_padre_id : null
-    if (parent && pos[parent] && pos[p.id]) {
-      const x1 = centerX(parent), y1 = bottomY(parent)
-      const x2 = centerX(p.id), y2 = topY(p.id)
-      const mid = (y1 + y2) / 2
+    if (!parent || !pos[parent] || !pos[p.id]) return
+    const P = pos[parent], C = pos[p.id]
+    if (orientacion === 'horizontal') {
+      const x1 = P.left + NODO_W, y1 = P.top + NODO_H / 2, x2 = C.left, y2 = C.top + NODO_H / 2, mid = (x1 + x2) / 2
+      lineas.push(`M ${x1} ${y1} L ${mid} ${y1} L ${mid} ${y2} L ${x2} ${y2}`)
+    } else if (orientacion === 'mixto' && stacked.has(parent)) {
+      const x1 = P.left + 18, y1 = P.top + NODO_H, x2 = C.left, y2 = C.top + NODO_H / 2
+      lineas.push(`M ${x1} ${y1} L ${x1} ${y2} L ${x2} ${y2}`)
+    } else {
+      const x1 = P.left + NODO_W / 2, y1 = P.top + NODO_H, x2 = C.left + NODO_W / 2, y2 = C.top, mid = (y1 + y2) / 2
       lineas.push(`M ${x1} ${y1} L ${x1} ${mid} L ${x2} ${mid} L ${x2} ${y2}`)
     }
   })
 
+  const NIVEL = [
+    { border: '#8B1A1A', head: '#f9f0f0', text: '#8B1A1A' },
+    { border: '#1d4ed8', head: '#eff6ff', text: '#1d4ed8' },
+    { border: '#059669', head: '#f0fdf4', text: '#059669' },
+    { border: '#b45309', head: '#fffbeb', text: '#b45309' },
+    { border: '#7c3aed', head: '#f5f3ff', text: '#7c3aed' },
+  ]
+  function titular(pid) {
+    const emps = empleados.filter(e => e.puesto_id === pid)
+    if (emps.length === 0) return { nombre: null, extra: 0 }
+    return { nombre: emps[0].nombre, extra: emps.length - 1 }
+  }
+
   return (
-    <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 14, background: '#fafbfc', padding: 10 }}>
-      <div style={{ position: 'relative', width, height, minWidth: '100%' }}>
-        <svg width={width} height={height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
-          {lineas.map((d, i) => <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth={2} />)}
-        </svg>
-        {puestos.map(p => {
-          if (!pos[p.id]) return null
-          const nEmp = empleados.filter(e => e.puesto_id === p.id).length
-          const nReq = requisitos.filter(r => r.puesto_id === p.id).length
-          return (
-            <div key={p.id} onClick={() => onEditar(p)} title="Clic para editar"
-              style={{
-                position: 'absolute', left: pos[p.id].x * SEP_X + 10, top: pos[p.id].depth * SEP_Y + 10,
-                width: NODO_W, minHeight: NODO_H, background: '#fff', border: '2px solid #8B1A1A', borderRadius: 12,
-                padding: '10px 12px', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,.06)', boxSizing: 'border-box'
-              }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', lineHeight: 1.2, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.nombre}</div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 11, color: '#64748b' }}>
-                <span>👥 {nEmp}</span>
-                <span>🎓 {nReq} req</span>
+    <div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: '#94a3b8', marginRight: 2 }}>Vista:</span>
+        {[['vertical', '↕ Vertical'], ['horizontal', '↔ Horizontal'], ['mixto', '⌥ Mixto']].map(([v, l]) => (
+          <button key={v} onClick={() => setOrientacion(v)}
+            style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${orientacion === v ? '#8B1A1A' : '#e2e8f0'}`, background: orientacion === v ? '#8B1A1A' : '#fff', color: orientacion === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 14, background: '#fafbfc', padding: 10, maxHeight: '72vh' }}>
+        <div style={{ position: 'relative', width, height, minWidth: '100%' }}>
+          <svg width={width} height={height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
+            {lineas.map((d, i) => <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth={2} />)}
+          </svg>
+          {puestos.map(p => {
+            if (!pos[p.id]) return null
+            const col = NIVEL[(pos[p.id].depth || 0) % NIVEL.length]
+            const nEmp = empleados.filter(e => e.puesto_id === p.id).length
+            const nReq = requisitos.filter(r => r.puesto_id === p.id).length
+            const t = titular(p.id)
+            return (
+              <div key={p.id} onClick={() => onEditar(p)} title="Clic para editar"
+                style={{ position: 'absolute', left: pos[p.id].left, top: pos[p.id].top, width: NODO_W, height: NODO_H, background: '#fff', border: `2px solid ${col.border}`, borderRadius: 12, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,.08)', boxSizing: 'border-box', overflow: 'hidden' }}>
+                <div style={{ background: col.head, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: col.text, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.nombre}</div>
+                </div>
+                <div style={{ padding: '8px 12px' }}>
+                  <div style={{ fontSize: 12, color: '#1e293b', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {t.nombre ? <>👤 {t.nombre}{t.extra > 0 ? <span style={{ color: '#94a3b8', fontWeight: 500 }}> +{t.extra}</span> : ''}</> : <span style={{ color: '#94a3b8', fontWeight: 500 }}>Vacante</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, fontSize: 11, color: '#64748b', marginTop: 5 }}>
+                    <span>👥 {nEmp}</span><span>🎓 {nReq} req</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )
