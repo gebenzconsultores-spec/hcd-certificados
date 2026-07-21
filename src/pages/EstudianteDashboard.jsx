@@ -366,6 +366,10 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
         disponible_oportunidades: datos.disponible_oportunidades
       }).eq('id', estudiante.id)
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
+      // Sincronizar el nombre denormalizado en asignaciones (para que "Asignados" no quede viejo)
+      try {
+        await supabase.from('asignaciones').update({ empleado_nombre: datos.nombre }).eq('empleado_id', estudiante.id)
+      } catch (_) {}
       // Actualizar la sesión guardada
       try {
         const sesion = JSON.parse(sessionStorage.getItem('estudiante_portal') || '{}')
