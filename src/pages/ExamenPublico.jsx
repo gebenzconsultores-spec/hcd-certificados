@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase, getExamenPorCurso, guardarResultadoExamen, crearParticipante, crearCertificado, siguienteConsecutivo } from '../lib/supabase'
 import { generarYAbrirCertificado } from '../lib/certificado'
@@ -19,6 +19,7 @@ export default function ExamenPublico() {
   // Alumno reconocido (viene de su portal con sesión activa)
   const [alumno, setAlumno] = useState(null)
   const [mensajeBloqueo, setMensajeBloqueo] = useState('')
+  const enviandoRef = useRef(false)
 
   const p = k => v => setParticipante(prev => ({ ...prev, [k]: v }))
 
@@ -56,13 +57,44 @@ export default function ExamenPublico() {
           return
         }
 
-        // Reconocido y con acceso: precargar datos y saltar registro
+        // Reconocido y con acceso: precargar datos
         setAlumno(registro)
         setParticipante({
           nombre: registro.nombre || '', correo: registro.correo || '', whatsapp: registro.whatsapp || '',
           empresa: registro.empresa_manual || '', es_universitario: !!registro.es_universitario,
           universidad: registro.universidad || '', carrera: registro.carrera || ''
         })
+
+        // ¿Ya presentó este examen? Restaurar su resultado (evita doble registro al refrescar)
+        const { data: prevRes } = await supabase.from('resultados_examen')
+          .select('*').eq('participante_id', registro.id).eq('curso_id', cursoId)
+          .order('created_at', { ascending: false }).limit(1)
+        const ultimo = prevRes && prevRes[0]
+        if (ultimo) {
+          let resp = ultimo.respuestas_json
+          if (typeof resp === 'string') { try { resp = JSON.parse(resp) } catch (_) { resp = {} } }
+          resp = resp || {}
+          let correctas = 0
+          pregs.forEach(q => { if (resp[q.id] !== undefined && Number(resp[q.id]) === Number(q.respuesta_correcta)) correctas++ })
+          let certPrev = null
+          if (ultimo.aprobado) {
+            try {
+              const { data: cc } = await supabase.from('certificados').select('id_unico')
+                .eq('participante_id', registro.id).eq('curso_id', cursoId)
+                .order('created_at', { ascending: false }).limit(1)
+              if (cc && cc[0]) certPrev = { id_unico: cc[0].id_unico }
+            } catch (_) {}
+          }
+          setIntento(Number(ultimo.intento) || 1)
+          setResultado({
+            correctas, total: pregs.length, calificacion: ultimo.calificacion, aprobado: ultimo.aprobado,
+            cert: certPrev, esDeEmpresa: !!(registro.empresa_id || registro.registrado_por_empresa),
+            respuestas: resp
+          })
+          setFase('resultado')
+          return
+        }
+
         setFase('examen')
       } else {
         setMensajeBloqueo('Para presentar el examen, entra desde el Portal de Estudiante con tu ID.')
@@ -82,7 +114,10 @@ export default function ExamenPublico() {
   }
 
   async function enviarExamen() {
+    if (enviandoRef.current) return
+    enviandoRef.current = true
     setLoading(true)
+    try {
     let correctas = 0
     preguntas.forEach(p => {
       if (respuestas[p.id] !== undefined && Number(respuestas[p.id]) === Number(p.respuesta_correcta)) correctas++
@@ -114,6 +149,15 @@ export default function ExamenPublico() {
         })
         partId = nuevo.id
       }
+    }
+
+    // Anti-duplicado: si este intento ya se registró (doble clic, reenvío), no dupliques
+    const { data: yaReg } = await supabase.from('resultados_examen')
+      .select('id').eq('participante_id', partId).eq('curso_id', cursoId).eq('intento', intento).limit(1)
+    if (yaReg && yaReg.length) {
+      setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: null, esDeEmpresa: !!empresaIdCert, respuestas: { ...respuestas } })
+      setFase('resultado')
+      return
     }
 
     // Guardar resultado
@@ -167,10 +211,16 @@ export default function ExamenPublico() {
 
     setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert, respuestas: { ...respuestas } })
     setFase('resultado')
-    setLoading(false)
+    } catch (e) {
+      alert('Hubo un problema al enviar tu examen. Vuelve a intentarlo.')
+    } finally {
+      enviandoRef.current = false
+      setLoading(false)
+    }
   }
 
   function repetir() {
+    enviandoRef.current = false
     setRespuestas({})
     setIntento(i => i + 1)
     setFase('examen')
