@@ -143,9 +143,21 @@ export default function Cursos() {
     } finally { setSaving(false) }
   }
 
+  // Propaga el nuevo nombre del curso a las copias operativas/comerciales.
+  // NO toca certificados (documentos emitidos: se congelan con su nombre original).
+  async function propagarNombreCurso(viejo, nuevo) {
+    if (!viejo || !nuevo || viejo === nuevo) return
+    const tablas = ['compras', 'cotizaciones', 'asignaciones', 'cursos_confirmados', 'programaciones', 'proximos_cursos', 'ventas']
+    for (const t of tablas) {
+      try { await supabase.from(t).update({ curso_nombre: nuevo }).eq('curso_nombre', viejo) } catch (_) {}
+    }
+  }
+
   async function guardarEdicion() {
     setSaving(true)
     try {
+      const previo = cursos.find(c => c.id === modalEditar.id)
+      const nombreViejo = previo?.nombre
       await supabase.from('cursos').update({
         nombre: modalEditar.nombre, duracion: Number(modalEditar.duracion),
         dias: diasPorHoras(modalEditar.duracion),
@@ -155,6 +167,8 @@ export default function Cursos() {
         aval_institucion: !!modalEditar.aval_institucion,
         nombre_aval: modalEditar.nombre_aval || null
       }).eq('id', modalEditar.id)
+      // Si cambió el nombre, actualizarlo en las pantallas operativas (no en certificados)
+      await propagarNombreCurso(nombreViejo, modalEditar.nombre)
       await cargar()
       setModalEditar(null)
     } catch (e) {
