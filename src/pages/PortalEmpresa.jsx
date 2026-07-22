@@ -144,6 +144,11 @@ export function EmpresaDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f9fb' }}>
+      <a href="https://wa.me/522223549353?text=Hola,%20necesito%20soporte%20con%20la%20plataforma%20de%20Hablando%20con%20Datos" target="_blank" rel="noopener noreferrer" title="Soporte por WhatsApp"
+        style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 900, background: '#25D366', color: '#fff', borderRadius: 999, padding: '11px 18px', display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', fontWeight: 700, fontSize: 14, boxShadow: '0 6px 20px rgba(37,211,102,.45)' }}>
+        <svg width="20" height="20" viewBox="0 0 32 32" fill="#fff"><path d="M16 .396C7.164.396 0 7.56 0 16.396c0 2.885.755 5.598 2.078 7.946L.06 32l7.86-2.06A15.9 15.9 0 0016 32.396c8.836 0 16-7.164 16-16S24.836.396 16 .396zm0 29.2a13.2 13.2 0 01-6.72-1.84l-.48-.286-4.664 1.223 1.244-4.544-.313-.468A13.15 13.15 0 012.8 16.396C2.8 9.11 8.714 3.196 16 3.196S29.2 9.11 29.2 16.396 23.286 29.596 16 29.596zm7.24-9.87c-.397-.198-2.35-1.16-2.714-1.292-.364-.132-.63-.198-.895.199-.264.396-1.026 1.292-1.258 1.556-.232.264-.463.297-.86.099-.397-.198-1.676-.617-3.193-1.97-1.18-1.052-1.977-2.352-2.21-2.749-.231-.396-.025-.61.174-.807.179-.178.397-.463.596-.694.199-.232.264-.397.397-.661.132-.264.066-.496-.033-.694-.099-.198-.895-2.157-1.226-2.952-.323-.775-.65-.67-.895-.683l-.762-.013c-.264 0-.694.099-1.058.496-.364.397-1.39 1.359-1.39 3.317s1.423 3.849 1.622 4.113c.198.264 2.801 4.278 6.786 5.999.949.409 1.689.653 2.266.836.952.302 1.818.26 2.503.158.763-.114 2.35-.961 2.682-1.889.33-.928.33-1.723.231-1.889-.099-.165-.363-.264-.76-.462z"/></svg>
+        Soporte
+      </a>
       {/* Header */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 32px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 60 }}>
