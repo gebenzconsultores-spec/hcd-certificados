@@ -14,6 +14,7 @@ export default function Empresas() {
     estatus: 'cliente_nuevo', clave_vendedor: 'VEND-GERENCIA'
   })
   const [saving, setSaving] = useState(false)
+  const [editando, setEditando] = useState(null)
   const [credencialesNuevas, setCredencialesNuevas] = useState(null)
 
   useEffect(() => { cargar() }, [])
@@ -204,10 +205,48 @@ export default function Empresas() {
     }
   }
 
+  function abrirNueva() {
+    setEditando(null)
+    setForm({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '', estatus: 'cliente_nuevo', clave_vendedor: 'VEND-GERENCIA' })
+    setModal(true)
+  }
+  function abrirEditar(empresa) {
+    setEditando(empresa)
+    setForm({
+      nombre: empresa.nombre || '', contacto_nombre: empresa.contacto_nombre || '',
+      contacto_email: empresa.contacto_email || '', contacto_whatsapp: empresa.contacto_whatsapp || '',
+      ciudad: empresa.ciudad || '', estatus: empresa.estatus || 'cliente_nuevo',
+      clave_vendedor: empresa.clave_vendedor || 'VEND-GERENCIA'
+    })
+    setModal(true)
+  }
+  function cerrarModal() {
+    setModal(false)
+    setEditando(null)
+  }
+
   async function guardar() {
     if (!form.nombre) return
     setSaving(true)
     try {
+      if (editando) {
+        // EDITAR: actualiza datos, conserva credenciales (id_empresa / password)
+        const { error } = await supabase.from('empresas').update({
+          nombre: form.nombre,
+          contacto_nombre: form.contacto_nombre,
+          contacto_email: form.contacto_email,
+          contacto_whatsapp: form.contacto_whatsapp,
+          ciudad: form.ciudad,
+          estatus: form.estatus,
+          clave_vendedor: form.clave_vendedor || 'VEND-GERENCIA'
+        }).eq('id', editando.id)
+        if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
+        await cargar()
+        cerrarModal()
+        setForm({ nombre: '', contacto_nombre: '', contacto_email: '', contacto_whatsapp: '', ciudad: '', estatus: 'cliente_nuevo', clave_vendedor: 'VEND-GERENCIA' })
+        setSaving(false)
+        return
+      }
       const idEmpresa = await generarIdEmpresa()
       const password = Math.random().toString(36).substring(2, 8).toUpperCase()
       const { error } = await supabase.from('empresas').insert({
@@ -244,7 +283,7 @@ export default function Empresas() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Empresas</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Clientes corporativos. Solo los "cliente nuevo" cuentan como venta de la plataforma.</p>
         </div>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Nueva empresa</button>
+        <button onClick={abrirNueva} style={btnPrimary}>+ Nueva empresa</button>
       </div>
 
       {/* Filtros */}
@@ -295,7 +334,10 @@ export default function Empresas() {
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_nombre || '—'}</td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_whatsapp || '—'}</td>
                   <td style={{ padding: '12px 18px' }}>
-                    <button onClick={(ev) => { ev.stopPropagation(); verDetalle(e) }} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>👁 Ver</button>
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      <button onClick={(ev) => { ev.stopPropagation(); abrirEditar(e) }} style={{ background: '#fff', color: '#8B1A1A', border: '1px solid #8B1A1A', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>✏️ Editar</button>
+                      <button onClick={(ev) => { ev.stopPropagation(); verDetalle(e) }} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>👁 Ver</button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -514,9 +556,9 @@ export default function Empresas() {
       )}
 
       {modal && (
-        <div style={overlayStyle} onClick={() => setModal(false)}>
+        <div style={overlayStyle} onClick={cerrarModal}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
-            <h3 style={modalTitle}>Nueva empresa</h3>
+            <h3 style={modalTitle}>{editando ? 'Editar empresa' : 'Nueva empresa'}</h3>
 
             {/* Estatus */}
             <label style={lbl}>Estatus del cliente *</label>
@@ -545,8 +587,8 @@ export default function Empresas() {
               <div style={{ flex: 1 }}><Field label="WhatsApp" value={form.contacto_whatsapp} onChange={f('contacto_whatsapp')} placeholder="222 123 4567" /></div>
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button onClick={() => setModal(false)} style={btnGhost}>Cancelar</button>
-              <button onClick={guardar} disabled={saving || !form.nombre} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar empresa'}</button>
+              <button onClick={cerrarModal} style={btnGhost}>Cancelar</button>
+              <button onClick={guardar} disabled={saving || !form.nombre} style={btnPrimary}>{saving ? 'Guardando...' : (editando ? 'Guardar cambios' : 'Guardar empresa')}</button>
             </div>
           </div>
         </div>
