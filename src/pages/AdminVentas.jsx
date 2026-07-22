@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 const ESTATUS = {
   enviar_factura: { label: 'Enviar factura', color: '#92400e', bg: '#fef9c3', icon: '📄' },
@@ -41,11 +51,29 @@ export default function AdminVentas() {
   const totalPagado = ventas.filter(v => v.estatus_cobro === 'pagado').reduce((acc, v) => acc + (v.monto || 0), 0)
   const porCobrar = totalVendido - totalPagado
 
+  function descargarExcel() {
+    const filas = filtradas.map(v => ({
+      'Fecha': v.created_at ? new Date(v.created_at).toLocaleDateString('es-MX') : '',
+      'Empresa': v.empresa_nombre || '',
+      'Registro': v.empresa_registrada ? 'Con registro' : 'Sin registro',
+      'Curso': v.curso_nombre || '',
+      'ID Compra': v.id_compra || '',
+      'Personas': v.num_personas || 1,
+      'Monto': v.monto || 0,
+      'Estatus de cobro': (ESTATUS[v.estatus_cobro] || ESTATUS.enviar_factura).label,
+    }))
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `ventas_cobranza_${hoy}.xlsx`, 'Ventas')
+  }
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Ventas y cobranza</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Ventas registradas al subir órdenes de compra</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Ventas y cobranza</h1>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Ventas registradas al subir órdenes de compra</p>
+        </div>
+        <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
