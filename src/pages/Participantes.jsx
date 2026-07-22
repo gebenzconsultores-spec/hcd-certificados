@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase, crearParticipante, getEmpresas } from '../lib/supabase'
 
+// Fecha local segura: "2026-07-22" no debe correrse un día por UTC.
+const fLocal = (f) => f ? new Date(String(f).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : ''
+
 export default function Participantes() {
   const [participantes, setParticipantes] = useState([])
   const [empresas, setEmpresas] = useState([])
@@ -300,7 +303,7 @@ export default function Participantes() {
                   {modalEstatus.cursos.asignados.map((c, i) => (
                     <div key={i} style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', color: '#92400e', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
                       <span>{typeof c === 'string' ? c : c.nombre}</span>
-                      {typeof c === 'object' && c.fecha && <span style={{ fontSize: 11 }}>📅 {new Date(c.fecha).toLocaleDateString('es-MX')}</span>}
+                      {typeof c === 'object' && c.fecha && <span style={{ fontSize: 11 }}>📅 {fLocal(c.fecha)}</span>}
                     </div>
                   ))}
                 </div>
@@ -431,7 +434,7 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
         }
       } catch (_) {}
 
-      alert(`✅ ${participante.nombre} inscrito en "${proximo.curso_nombre}" (Curso N° ${proximo.numero_certificado || ''}) para el ${new Date(proximo.fecha).toLocaleDateString('es-MX')}.`)
+      alert(`✅ ${participante.nombre} inscrito en "${proximo.curso_nombre}" (Curso N° ${proximo.numero_certificado || ''}) para el ${fLocal(proximo.fecha)}.`)
       onDone()
     } catch (e) {
       alert('Error al asignar: ' + (e.message || ''))
@@ -454,7 +457,7 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
             <option value="">— Selecciona un curso programado —</option>
             {cursos.map(c => (
               <option key={c.id} value={c.id}>
-                {c.numero_certificado ? `N° ${c.numero_certificado} · ` : ''}{c.curso_nombre} — {new Date(c.fecha).toLocaleDateString('es-MX')}
+                {c.numero_certificado ? `N° ${c.numero_certificado} · ` : ''}{c.curso_nombre} — {fLocal(c.fecha)}
               </option>
             ))}
           </select>
@@ -463,7 +466,7 @@ function ModalAsignarCurso({ participante, cursos, onClose, onDone }) {
         {proximo && (
           <div style={{ background: '#f9f0f0', borderRadius: 10, padding: '12px 14px', marginTop: 12 }}>
             <div style={{ fontSize: 13, color: '#8B1A1A', fontWeight: 700 }}>{proximo.numero_certificado ? `Curso N° ${proximo.numero_certificado}` : 'Curso'}</div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>📅 {new Date(proximo.fecha).toLocaleDateString('es-MX')} · 🕐 {proximo.hora || '—'} · 🎥 Zoom</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>📅 {fLocal(proximo.fecha)} · 🕐 {proximo.hora || '—'} · 🎥 Zoom</div>
           </div>
         )}
 
