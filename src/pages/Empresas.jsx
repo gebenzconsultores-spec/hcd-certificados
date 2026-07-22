@@ -269,6 +269,7 @@ export default function Empresas() {
         ciudad: form.ciudad,
         estatus: form.estatus,
         clave_vendedor: form.clave_vendedor || 'VEND-GERENCIA',
+        estado_acceso: 'autorizado',
         activo: true
       })
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
@@ -280,7 +281,9 @@ export default function Empresas() {
     } catch (e) { alert('Error: ' + (e.message || '')) } finally { setSaving(false) }
   }
 
-  const filtradas = filtro === 'todas' ? empresas : empresas.filter(e => (e.estatus || 'cliente_nuevo') === filtro)
+  const filtradas = filtro === 'todas' ? empresas
+    : filtro === 'pendiente' ? empresas.filter(e => e.estado_acceso === 'pendiente')
+    : empresas.filter(e => (e.estatus || 'cliente_nuevo') === filtro)
   const nombreVendedor = clave => vendedores.find(v => v.clave === clave)?.nombre || clave || '—'
 
   function descargarExcel() {
@@ -304,6 +307,17 @@ export default function Empresas() {
 
   const conteoNuevos = empresas.filter(e => (e.estatus || 'cliente_nuevo') === 'cliente_nuevo').length
   const conteoCartera = empresas.filter(e => e.estatus === 'cartera').length
+  const conteoPendientes = empresas.filter(e => e.estado_acceso === 'pendiente').length
+
+  async function cambiarAcceso(empresa, estado, ev) {
+    if (ev) ev.stopPropagation()
+    const verbo = estado === 'autorizado' ? 'AUTORIZAR' : 'NEGAR'
+    if (!window.confirm(`¿${verbo} el acceso de "${empresa.nombre}" a la plataforma?`)) return
+    const { error } = await supabase.from('empresas').update({ estado_acceso: estado }).eq('id', empresa.id)
+    if (error) { alert('No se pudo actualizar: ' + error.message); return }
+    await cargar()
+    if (detalle?.id === empresa.id) setDetalle(d => d ? { ...d, estado_acceso: estado } : d)
+  }
 
   return (
     <div>
@@ -320,7 +334,7 @@ export default function Empresas() {
 
       {/* Filtros */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {[['todas', `Todas (${empresas.length})`], ['cliente_nuevo', `🟢 Cliente nuevo (${conteoNuevos})`], ['cartera', `📁 En cartera (${conteoCartera})`]].map(([v, l]) => (
+        {[['todas', `Todas (${empresas.length})`], ['pendiente', `⏳ Pendientes (${conteoPendientes})`], ['cliente_nuevo', `🟢 Cliente nuevo (${conteoNuevos})`], ['cartera', `📁 En cartera (${conteoCartera})`]].map(([v, l]) => (
           <button key={v} onClick={() => setFiltro(v)}
             style={{ background: filtro === v ? '#8B1A1A' : '#fff', color: filtro === v ? '#fff' : '#475569', border: `1px solid ${filtro === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             {l}
@@ -357,6 +371,8 @@ export default function Empresas() {
                     </span>
                     {e.exento_pago && <div style={{ marginTop: 3 }}><span style={{ background: '#eff6ff', color: '#1d4ed8', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>Exento de pago</span></div>}
                     {e.dada_de_baja && <div style={{ marginTop: 3 }}><span style={{ background: '#fef2f2', color: '#dc2626', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>Dada de baja</span></div>}
+                    {e.estado_acceso === 'pendiente' && <div style={{ marginTop: 3 }}><span style={{ background: '#fef9c3', color: '#92400e', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>⏳ Pendiente autorización</span></div>}
+                    {e.estado_acceso === 'negado' && <div style={{ marginTop: 3 }}><span style={{ background: '#fef2f2', color: '#dc2626', padding: '1px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>⛔ Acceso negado</span></div>}
                   </td>
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>
                     <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>{e.clave_vendedor || 'VEND-GERENCIA'}</code>
@@ -367,6 +383,15 @@ export default function Empresas() {
                   <td style={{ padding: '12px 18px', color: '#475569', fontSize: 13 }}>{e.contacto_whatsapp || '—'}</td>
                   <td style={{ padding: '12px 18px' }}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      {e.estado_acceso === 'pendiente' && (
+                        <>
+                          <button onClick={(ev) => cambiarAcceso(e, 'autorizado', ev)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>✅ Autorizar</button>
+                          <button onClick={(ev) => cambiarAcceso(e, 'negado', ev)} style={{ background: '#fff', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>⛔ Negar</button>
+                        </>
+                      )}
+                      {e.estado_acceso === 'negado' && (
+                        <button onClick={(ev) => cambiarAcceso(e, 'autorizado', ev)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>✅ Autorizar</button>
+                      )}
                       <button onClick={(ev) => { ev.stopPropagation(); abrirEditar(e) }} style={{ background: '#fff', color: '#8B1A1A', border: '1px solid #8B1A1A', borderRadius: 6, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>✏️ Editar</button>
                       <button onClick={(ev) => { ev.stopPropagation(); verDetalle(e) }} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 16px', fontSize: 12, cursor: 'pointer', fontWeight: 700, whiteSpace: 'nowrap' }}>👁 Ver</button>
                     </div>

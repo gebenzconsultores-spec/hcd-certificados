@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function AdminCompras() {
   const [tab, setTab] = useState('compras')
@@ -71,11 +81,41 @@ export default function AdminCompras() {
     await cargar()
   }
 
+  function descargarExcel() {
+    const hoy = new Date().toISOString().slice(0, 10)
+    if (tab === 'compras') {
+      const filas = compras.map(c => ({
+        'ID Compra': c.id_compra || '',
+        'Empresa': c.empresa_nombre || '',
+        'Curso': c.curso_nombre || '',
+        'Monto': c.monto || 0,
+        'Personas': c.num_personas || 1,
+        'Estado': c.estado || '',
+        'Notas': c.notas || '',
+        'Fecha': c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX') : '',
+      }))
+      exportarAExcel(filas, `compras_${hoy}.xlsx`, 'Compras')
+    } else {
+      const filas = programaciones.map(p => ({
+        'Empresa': p.empresa_nombre || '',
+        'Curso': p.curso_nombre || '',
+        'Fecha solicitada': p.fecha_solicitada ? new Date(p.fecha_solicitada).toLocaleDateString('es-MX') : '',
+        'Modalidad': p.modalidad || '',
+        'Personas': p.num_personas || 1,
+        'Estado': p.estado || '',
+      }))
+      exportarAExcel(filas, `solicitudes_curso_${hoy}.xlsx`, 'Solicitudes')
+    }
+  }
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Compras y programaciones</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Genera IDs de compra y gestiona solicitudes de cursos</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Compras y programaciones</h1>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Genera IDs de compra y gestiona solicitudes de cursos</p>
+        </div>
+        <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
       </div>
 
       {error && (

@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function AdminCotizaciones() {
   const [cotizaciones, setCotizaciones] = useState([])
@@ -84,11 +94,33 @@ export default function AdminCotizaciones() {
     cancelada: { label: 'Cancelada', color: '#64748b', bg: '#f1f5f9' },
   }
 
+  function descargarExcel() {
+    const filas = filtradas.map(c => ({
+      'Folio': c.folio || '',
+      'Fecha': c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX') : '',
+      'Empresa': c.empresa_nombre || '',
+      'Registro': c.empresa_id ? 'Con registro' : 'Sin registro',
+      'Contacto': c.contacto_nombre || '',
+      'Email': c.contacto_email || '',
+      'Curso': c.curso_nombre || '',
+      'Total': c.total || 0,
+      'Comisión': c.comision_monto || 0,
+      '% Comisión': c.comision_porcentaje || 0,
+      'Estado': (ESTADOS[c.estado] || ESTADOS.enviada).label,
+      'Orden de compra': c.orden_compra_nombre || (c.orden_compra_url ? 'Adjunta' : ''),
+    }))
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `cotizaciones_${hoy}.xlsx`, 'Cotizaciones')
+  }
+
   return (
     <div>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Cotizaciones generadas</h1>
-        <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Seguimiento comercial y órdenes de compra</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Cotizaciones generadas</h1>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Seguimiento comercial y órdenes de compra</p>
+        </div>
+        <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 24 }}>
