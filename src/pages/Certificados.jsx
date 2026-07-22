@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase, getCertificados, crearCertificado, getCursos, getEmpresas, getParticipantes, siguienteConsecutivo } from '../lib/supabase'
 import { generarYAbrirCertificado } from '../lib/certificado'
+import * as XLSX from 'xlsx'
+
+// Fecha local segura para columnas tipo "YYYY-MM-DD"
+const fLocal = (f) => f ? new Date(String(f).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : ''
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function Certificados() {
   const [certificados, setCertificados] = useState([])
@@ -156,6 +168,25 @@ export default function Certificados() {
     `${c.nombre_participante} ${c.id_unico} ${c.nombre_curso}`.toLowerCase().includes(busqueda.toLowerCase())
   )
 
+  const nombreEmpresa = (c) => c.empresa_nombre || empresas.find(e => e.id === c.empresa_id)?.nombre || ''
+
+  function descargarExcel() {
+    const filas = filtrados.map(c => ({
+      'ID Único': c.id_unico || '',
+      'Participante': c.nombre_participante || '',
+      'Curso': c.nombre_curso || '',
+      'Empresa': nombreEmpresa(c),
+      'Modalidad': c.modalidad || '',
+      'Lugar': c.lugar || '',
+      'Fecha del curso': fLocal(c.fecha_curso),
+      'Fecha de emisión': c.fecha_emision ? new Date(c.fecha_emision).toLocaleDateString('es-MX') : '',
+      'Instructor': c.instructor_nombre || '',
+      'Director': c.director_nombre || '',
+    }))
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `certificados_${hoy}.xlsx`, 'Certificados')
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -163,7 +194,10 @@ export default function Certificados() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Certificados</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Emite y gestiona certificados</p>
         </div>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Emitir certificado</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
+          <button onClick={() => setModal(true)} style={btnPrimary}>+ Emitir certificado</button>
+        </div>
       </div>
 
       <input value={busqueda} onChange={e => setBusqueda(e.target.value)}
