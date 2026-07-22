@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase, getEmpresas } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function Empresas() {
   const [empresas, setEmpresas] = useState([])
@@ -273,6 +283,25 @@ export default function Empresas() {
   const filtradas = filtro === 'todas' ? empresas : empresas.filter(e => (e.estatus || 'cliente_nuevo') === filtro)
   const nombreVendedor = clave => vendedores.find(v => v.clave === clave)?.nombre || clave || '—'
 
+  function descargarExcel() {
+    const filas = filtradas.map(e => ({
+      'ID Empresa': e.id_empresa || '',
+      'Nombre': e.nombre || '',
+      'Ciudad': e.ciudad || '',
+      'Contacto': e.contacto_nombre || '',
+      'Email': e.contacto_email || '',
+      'WhatsApp': e.contacto_whatsapp || '',
+      'Estatus': e.estatus || '',
+      'Vendedor (clave)': e.clave_vendedor || '',
+      'Vendedor (nombre)': nombreVendedor(e.clave_vendedor),
+      'Contraseña portal': e.portal_password || '',
+      'Exento de pago': e.exento_pago ? 'Sí' : 'No',
+      'Activa': e.activo === false ? 'No' : 'Sí',
+    }))
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `empresas_${hoy}.xlsx`, 'Empresas')
+  }
+
   const conteoNuevos = empresas.filter(e => (e.estatus || 'cliente_nuevo') === 'cliente_nuevo').length
   const conteoCartera = empresas.filter(e => e.estatus === 'cartera').length
 
@@ -283,7 +312,10 @@ export default function Empresas() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Empresas</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Clientes corporativos. Solo los "cliente nuevo" cuentan como venta de la plataforma.</p>
         </div>
-        <button onClick={abrirNueva} style={btnPrimary}>+ Nueva empresa</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
+          <button onClick={abrirNueva} style={btnPrimary}>+ Nueva empresa</button>
+        </div>
       </div>
 
       {/* Filtros */}

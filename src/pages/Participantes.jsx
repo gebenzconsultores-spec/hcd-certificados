@@ -1,8 +1,18 @@
 import { useEffect, useState } from 'react'
 import { supabase, crearParticipante, getEmpresas } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
 // Fecha local segura: "2026-07-22" no debe correrse un día por UTC.
 const fLocal = (f) => f ? new Date(String(f).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : ''
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function Participantes() {
   const [participantes, setParticipantes] = useState([])
@@ -166,6 +176,25 @@ export default function Participantes() {
     })
     .filter(p => `${p.nombre} ${p.correo} ${p.id_empleado || ''} ${p.empresa?.nombre || ''}`.toLowerCase().includes(busqueda.toLowerCase()))
 
+  function descargarExcel() {
+    const filas = filtrados.map(p => ({
+      'ID Alumno': p.id_empleado || '',
+      'Nombre': p.nombre || '',
+      'Correo': p.correo || '',
+      'WhatsApp': p.whatsapp || '',
+      'Tipo': p.tipo || '',
+      'Empresa': p.empresa?.nombre || '',
+      'Contraseña portal': p.portal_password || '',
+      'Universidad': p.universidad || '',
+      'Carrera': p.carrera || '',
+      'Acceso examen': p.acceso_examen ? 'Sí' : 'No',
+      'Disponible oportunidades': p.disponible_oportunidades ? 'Sí' : 'No',
+      'Fecha de alta': fLocal(p.created_at),
+    }))
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `participantes_${hoy}.xlsx`, 'Participantes')
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -173,7 +202,10 @@ export default function Participantes() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Participantes</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Personas registradas, incluidos empleados dados de alta por empresas</p>
         </div>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo participante</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
+          <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo participante</button>
+        </div>
       </div>
 
       {/* Filtros y búsqueda */}
