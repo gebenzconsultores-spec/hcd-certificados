@@ -399,7 +399,11 @@ export default function CotizadorPublico() {
                   {co.clave_interna && <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, marginBottom: 4 }}>🔑 {co.clave_interna}</div>}
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
                   {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
-                  <div style={{ color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>Desde ${(co.precio_persona_1dia || 2830).toLocaleString('es-MX')} p/persona</div>
+                  <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '" con un asesor.')}`}
+                    target="_blank" rel="noopener noreferrer" onClick={(ev) => ev.stopPropagation()}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                    💬 Cotizar con un asesor
+                  </a>
                 </div>
               ))}
             </div>
