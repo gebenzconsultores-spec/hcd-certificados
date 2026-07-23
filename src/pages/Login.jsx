@@ -18,7 +18,9 @@ export default function Login() {
     setLoading(true); setError('')
     try {
       await loginAdmin(email, password)
-      navigate('/admin')
+      // Carga limpia para que la sesión de Supabase ya esté lista al entrar
+      // (evita el panel en blanco que obligaba a refrescar a mano).
+      window.location.assign('/admin')
     } catch (e) {
       setError('Credenciales incorrectas. Verifica tu correo y contraseña.')
     } finally { setLoading(false) }
