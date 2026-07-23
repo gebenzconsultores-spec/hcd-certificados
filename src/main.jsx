@@ -34,6 +34,7 @@ import AdminProximosCursos from './pages/AdminProximosCursos.jsx'
 import AdminCursosConfirmados from './pages/AdminCursosConfirmados.jsx'
 import AdminCandidatos from './pages/AdminCandidatos.jsx'
 import AdminComisiones from './pages/AdminComisiones.jsx'
+import AdminSeguimiento from './pages/AdminSeguimiento.jsx'
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
@@ -71,6 +72,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="ventas" element={<AdminVentas />} />
             <Route path="renta" element={<RentaPlataforma />} />
             <Route path="compras" element={<AdminCompras />} />
+            <Route path="seguimiento" element={<AdminSeguimiento />} />
             <Route path="equipo" element={<AdminEquipo />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
