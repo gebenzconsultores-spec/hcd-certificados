@@ -33,6 +33,7 @@ import AdminCotizadorConfig from './pages/AdminCotizadorConfig.jsx'
 import AdminProximosCursos from './pages/AdminProximosCursos.jsx'
 import AdminCursosConfirmados from './pages/AdminCursosConfirmados.jsx'
 import AdminCandidatos from './pages/AdminCandidatos.jsx'
+import AdminComisiones from './pages/AdminComisiones.jsx'
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
@@ -64,6 +65,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="empresas" element={<Empresas />} />
             <Route path="candidatos" element={<AdminCandidatos />} />
             <Route path="vendedores" element={<Vendedores />} />
+            <Route path="comisiones" element={<AdminComisiones />} />
             <Route path="cotizaciones" element={<AdminCotizaciones />} />
             <Route path="cotizador-config" element={<AdminCotizadorConfig />} />
             <Route path="ventas" element={<AdminVentas />} />

@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+// Descarga un arreglo de objetos como archivo .xlsx
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 export default function Vendedores() {
   const [vendedores, setVendedores] = useState([])
@@ -7,7 +17,7 @@ export default function Vendedores() {
   const [modal, setModal] = useState(false)
   const [editar, setEditar] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ nombre: '', whatsapp: '', correo: '', zona: '', comision: 0, rol: 'vendedor' })
+  const [form, setForm] = useState({ nombre: '', whatsapp: '', correo: '', zona: '', comision: 0, comision_recompra: 0, rol: 'vendedor' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { cargar() }, [])
@@ -46,13 +56,13 @@ export default function Vendedores() {
       const clave = await generarClave()
       const { error } = await supabase.from('vendedores').insert({
         clave, nombre: form.nombre, whatsapp: form.whatsapp, correo: form.correo,
-        zona: form.zona, comision: Number(form.comision) || 0, rol: form.rol, activo: true
+        zona: form.zona, comision: Number(form.comision) || 0, comision_recompra: Number(form.comision_recompra) || 0, rol: form.rol, activo: true
       })
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
       alert(`✅ Vendedor creado.\n\nClave asignada: ${clave}\n\nEsta clave se usa al registrar empresas que este vendedor traiga.`)
       await cargar()
       setModal(false)
-      setForm({ nombre: '', whatsapp: '', correo: '', zona: '', comision: 0, rol: 'vendedor' })
+      setForm({ nombre: '', whatsapp: '', correo: '', zona: '', comision: 0, comision_recompra: 0, rol: 'vendedor' })
     } catch (e) {
       alert('Error: ' + (e.message || ''))
     } finally { setSaving(false) }
@@ -63,7 +73,7 @@ export default function Vendedores() {
     try {
       const { error } = await supabase.from('vendedores').update({
         nombre: editar.nombre, whatsapp: editar.whatsapp, correo: editar.correo,
-        zona: editar.zona, comision: Number(editar.comision) || 0, rol: editar.rol, activo: editar.activo
+        zona: editar.zona, comision: Number(editar.comision) || 0, comision_recompra: Number(editar.comision_recompra) || 0, rol: editar.rol, activo: editar.activo
       }).eq('id', editar.id)
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
       await cargar()
@@ -90,6 +100,27 @@ export default function Vendedores() {
 
   const ROL_LABEL = { vendedor: 'Vendedor', director: 'Director', gerencia: 'Gerencia' }
 
+  function descargarExcel() {
+    const filas = vendedores.map(v => {
+      const st = statsVendedor(v.clave)
+      return {
+        'Clave': v.clave || '',
+        'Nombre': v.nombre || '',
+        'Rol': ROL_LABEL[v.rol] || v.rol || '',
+        'Zona': v.zona || '',
+        'Comisión nuevo (%)': v.comision || 0,
+        'Comisión recompra (%)': v.comision_recompra || 0,
+        'Clientes': st.total,
+        'Ventas (nuevos)': st.ventas,
+        'WhatsApp': v.whatsapp || '',
+        'Correo': v.correo || '',
+        'Activo': v.activo === false ? 'No' : 'Sí',
+      }
+    })
+    const hoy = new Date().toISOString().slice(0, 10)
+    exportarAExcel(filas, `vendedores_${hoy}.xlsx`, 'Vendedores')
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -97,7 +128,10 @@ export default function Vendedores() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Vendedores</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Distribuidores de la plataforma. Cada uno tiene una clave para asignar los clientes que trae.</p>
         </div>
-        <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo vendedor</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={descargarExcel} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>⬇️ Descargar Excel</button>
+          <button onClick={() => setModal(true)} style={btnPrimary}>+ Nuevo vendedor</button>
+        </div>
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
@@ -127,7 +161,7 @@ export default function Vendedores() {
                     <span style={{ background: v.rol === 'director' ? '#eff6ff' : v.rol === 'gerencia' ? '#f5f3ff' : '#f0fdf4', color: v.rol === 'director' ? '#1d4ed8' : v.rol === 'gerencia' ? '#7c3aed' : '#059669', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>{ROL_LABEL[v.rol] || v.rol}</span>
                   </td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{v.zona || '—'}</td>
-                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{v.comision ? `${v.comision}%` : '—'}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{(v.comision || 0)}% <span style={{ color: '#94a3b8' }}>nuevo</span> / {(v.comision_recompra || 0)}% <span style={{ color: '#94a3b8' }}>recompra</span></td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{st.total}</td>
                   <td style={{ padding: '11px 16px' }}>
                     <span style={{ color: '#059669', fontSize: 14, fontWeight: 700 }}>{st.ventas}</span>
@@ -159,7 +193,8 @@ export default function Vendedores() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}><Field label="Zona" value={form.zona} onChange={f('zona')} placeholder="ej. Puebla-Tlaxcala" /></div>
-              <div style={{ flex: 1 }}><Field label="Comisión (%)" type="number" value={form.comision} onChange={f('comision')} placeholder="0" /></div>
+              <div style={{ flex: 1 }}><Field label="Comisión cliente nuevo (%)" type="number" value={form.comision} onChange={f('comision')} placeholder="15" /></div>
+              <div style={{ flex: 1 }}><Field label="Comisión recompra (%)" type="number" value={form.comision_recompra} onChange={f('comision_recompra')} placeholder="10" /></div>
             </div>
             <label style={lbl}>Rol</label>
             <select value={form.rol} onChange={e => f('rol')(e.target.value)} style={inp}>
@@ -188,7 +223,8 @@ export default function Vendedores() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ flex: 1 }}><Field label="Zona" value={editar.zona || ''} onChange={v => setEditar(p => ({ ...p, zona: v }))} /></div>
-              <div style={{ flex: 1 }}><Field label="Comisión (%)" type="number" value={editar.comision || 0} onChange={v => setEditar(p => ({ ...p, comision: v }))} /></div>
+              <div style={{ flex: 1 }}><Field label="Comisión cliente nuevo (%)" type="number" value={editar.comision || 0} onChange={v => setEditar(p => ({ ...p, comision: v }))} /></div>
+              <div style={{ flex: 1 }}><Field label="Comisión recompra (%)" type="number" value={editar.comision_recompra || 0} onChange={v => setEditar(p => ({ ...p, comision_recompra: v }))} /></div>
             </div>
             <label style={lbl}>Rol</label>
             <select value={editar.rol} onChange={e => setEditar(p => ({ ...p, rol: e.target.value }))} style={inp}>
