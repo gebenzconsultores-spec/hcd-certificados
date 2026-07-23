@@ -388,8 +388,8 @@ export default function CotizadorPublico() {
                 <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta categoría</div>
               )}
               {cursosFamilia.map(co => (
-                <div key={co.id} onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
-                  style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: '18px 20px', cursor: 'pointer' }}>
+                <div key={co.id}
+                  style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: '18px 20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span style={{ background: `${co.familia?.color || '#8B1A1A'}15`, color: co.familia?.color || '#8B1A1A', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>
                       {co.familia?.icono} {co.familia?.clave ? `${co.familia.clave} · ` : ''}{co.familia?.nombre}
@@ -399,11 +399,17 @@ export default function CotizadorPublico() {
                   {co.clave_interna && <div style={{ color: '#94a3b8', fontSize: 10, fontWeight: 600, marginBottom: 4 }}>🔑 {co.clave_interna}</div>}
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
                   {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
-                  <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '" con un asesor.')}`}
-                    target="_blank" rel="noopener noreferrer" onClick={(ev) => ev.stopPropagation()}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                    💬 Cotizar con un asesor
-                  </a>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                    <button onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                      ⚡ Usar cotizador automático
+                    </button>
+                    <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '" con un asesor.')}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                      💬 Cotizar con un asesor
+                    </a>
+                  </div>
                 </div>
               ))}
             </div>
