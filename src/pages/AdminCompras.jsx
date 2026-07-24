@@ -33,7 +33,7 @@ export default function AdminCompras() {
       // Cargar cada tabla por separado para que una falla no rompa todo
       const compRes = await supabase.from('compras').select('*').order('created_at', { ascending: false })
       const progRes = await supabase.from('programaciones').select('*').order('created_at', { ascending: false })
-      const empRes = await supabase.from('empresas').select('id, nombre').order('nombre')
+      const empRes = await supabase.from('empresas').select('id, nombre, clave_vendedor').order('nombre')
       const curRes = await supabase.from('cursos').select('id, nombre, numero_curso').eq('activo', true)
 
       if (compRes.error || progRes.error) {
@@ -59,9 +59,10 @@ export default function AdminCompras() {
     try {
       const { count } = await supabase.from('compras').select('id', { count: 'exact', head: true })
       const id_compra = `COMPRA-${String((count || 0) + 1).padStart(4, '0')}`
+      const emp = empresas.find(e => e.id === form.empresa_id) || empresas.find(e => e.nombre === form.empresa_nombre)
       await supabase.from('compras').insert({
         id_compra,
-        empresa_id: form.empresa_id || null,
+        empresa_id: emp?.id || form.empresa_id || null,
         empresa_nombre: form.empresa_nombre,
         curso_id: form.curso_id || null,
         curso_nombre: form.curso_nombre,
@@ -70,6 +71,21 @@ export default function AdminCompras() {
         notas: form.notas,
         estado: 'activo'
       })
+      // Registrar también la VENTA (para que aparezca en Ventas y cobranza y genere comisión)
+      try {
+        await supabase.from('ventas').insert({
+          empresa_id: emp?.id || null,
+          empresa_nombre: form.empresa_nombre,
+          empresa_registrada: !!emp?.id,
+          curso_id: form.curso_id || null,
+          curso_nombre: form.curso_nombre,
+          monto: form.monto ? Number(form.monto) : null,
+          num_personas: Number(form.num_personas),
+          id_compra,
+          clave_vendedor: emp?.clave_vendedor || 'VEND-GERENCIA',
+          estatus_cobro: 'enviar_factura'
+        })
+      } catch (_) {}
       await cargar()
       setNuevoID(id_compra)
       setForm({ empresa_id: '', empresa_nombre: '', curso_id: '', curso_nombre: '', monto: '', num_personas: 1, notas: '' })

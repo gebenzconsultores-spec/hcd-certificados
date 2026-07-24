@@ -36,9 +36,11 @@ export default function AdminComisiones() {
 
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando comisiones...</div>
 
-  // empresa_id -> clave_vendedor
+  // empresa_id -> clave_vendedor (respaldo si la venta no la trae)
   const claveDeEmpresa = {}
   empresas.forEach(e => { claveDeEmpresa[e.id] = e.clave_vendedor || 'VEND-GERENCIA' })
+  // El vendedor de la venta manda; si no, el de la empresa; si no, Gerencia
+  const claveDeVenta = v => v.clave_vendedor || claveDeEmpresa[v.empresa_id] || 'VEND-GERENCIA'
 
   // Primera venta por empresa = cliente nuevo (el resto, recompra)
   const primeraPorEmpresa = {}
@@ -56,16 +58,17 @@ export default function AdminComisiones() {
 
   // Comisión de cada venta
   function comisionVenta(v) {
-    const clave = claveDeEmpresa[v.empresa_id] || 'VEND-GERENCIA'
+    const clave = claveDeVenta(v)
     const nuevo = esNuevo(v)
-    const tasa = nuevo ? tasaNuevo(clave) : tasaRecompra(clave)
+    // Gerencia NO genera comisión
+    const tasa = clave === 'VEND-GERENCIA' ? 0 : (nuevo ? tasaNuevo(clave) : tasaRecompra(clave))
     const monto = Number(v.monto) || 0
     return { clave, nuevo, tasa, monto, comision: monto * tasa / 100 }
   }
 
   // Agrupar por vendedor (incluye vendedores sin ventas)
   const resumen = vendedores.map(vd => {
-    const suyas = ventas.filter(v => (claveDeEmpresa[v.empresa_id] || 'VEND-GERENCIA') === vd.clave)
+    const suyas = ventas.filter(v => claveDeVenta(v) === vd.clave)
     let montoVendido = 0, comNuevo = 0, comRecompra = 0, nVentas = suyas.length, nNuevos = 0, nRecompras = 0
     suyas.forEach(v => {
       const c = comisionVenta(v)
@@ -98,7 +101,7 @@ export default function AdminComisiones() {
 
   // Detalle de ventas de un vendedor
   const ventasDetalle = detalle
-    ? ventas.filter(v => (claveDeEmpresa[v.empresa_id] || 'VEND-GERENCIA') === detalle.clave)
+    ? ventas.filter(v => claveDeVenta(v) === detalle.clave)
         .map(v => ({ v, ...comisionVenta(v) }))
         .sort((a, b) => new Date(b.v.created_at) - new Date(a.v.created_at))
     : []

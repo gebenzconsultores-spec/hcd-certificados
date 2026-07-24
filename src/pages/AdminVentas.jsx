@@ -19,6 +19,7 @@ const ESTATUS = {
 
 export default function AdminVentas() {
   const [ventas, setVentas] = useState([])
+  const [vendedores, setVendedores] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('todas')
   const [busqueda, setBusqueda] = useState('')
@@ -27,9 +28,18 @@ export default function AdminVentas() {
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.from('ventas').select('*').order('created_at', { ascending: false })
-    setVentas(data || [])
+    const [ven, vend] = await Promise.all([
+      supabase.from('ventas').select('*').order('created_at', { ascending: false }),
+      supabase.from('vendedores').select('clave, nombre').order('nombre'),
+    ])
+    setVentas(ven.data || [])
+    setVendedores(vend.data || [])
     setLoading(false)
+  }
+
+  async function cambiarVendedor(venta, clave) {
+    await supabase.from('ventas').update({ clave_vendedor: clave }).eq('id', venta.id)
+    await cargar()
   }
 
   async function cambiarEstatus(venta, estatus) {
@@ -60,6 +70,7 @@ export default function AdminVentas() {
       'ID Compra': v.id_compra || '',
       'Personas': v.num_personas || 1,
       'Monto': v.monto || 0,
+      'Vendedor': v.clave_vendedor || 'VEND-GERENCIA',
       'Estatus de cobro': (ESTATUS[v.estatus_cobro] || ESTATUS.enviar_factura).label,
     }))
     const hoy = new Date().toISOString().slice(0, 10)
@@ -105,15 +116,15 @@ export default function AdminVentas() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Fecha', 'Empresa', 'Registro', 'Curso', 'ID Compra', 'Personas', 'Monto', 'Estatus de cobro', ''].map(h => (
+              {['Fecha', 'Empresa', 'Registro', 'Curso', 'ID Compra', 'Personas', 'Monto', 'Vendedor (comisión)', 'Estatus de cobro', ''].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Cargando...</td></tr>}
+            {loading && <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Cargando...</td></tr>}
             {!loading && filtradas.length === 0 && (
-              <tr><td colSpan={9} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay ventas registradas. Se registran cuando una empresa sube su orden de compra.</td></tr>
+              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay ventas registradas. Se registran cuando una empresa sube su orden de compra.</td></tr>
             )}
             {filtradas.map(v => {
               const est = ESTATUS[v.estatus_cobro] || ESTATUS.enviar_factura
@@ -130,6 +141,13 @@ export default function AdminVentas() {
                   <td style={{ padding: '11px 14px' }}>{v.id_compra ? <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 7px', borderRadius: 4, fontSize: 11 }}>{v.id_compra}</code> : '—'}</td>
                   <td style={{ padding: '11px 14px', color: '#475569', fontSize: 13 }}>{v.num_personas || 1}</td>
                   <td style={{ padding: '11px 14px', color: '#8B1A1A', fontWeight: 700, fontSize: 13 }}>${v.monto?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+                  <td style={{ padding: '11px 14px' }}>
+                    <select value={v.clave_vendedor || 'VEND-GERENCIA'} onChange={e => cambiarVendedor(v, e.target.value)}
+                      style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer', outline: 'none', maxWidth: 160 }}>
+                      <option value="VEND-GERENCIA">Gerencia (sin comisión)</option>
+                      {vendedores.filter(vd => vd.clave !== 'VEND-GERENCIA').map(vd => <option key={vd.clave} value={vd.clave}>{vd.nombre}</option>)}
+                    </select>
+                  </td>
                   <td style={{ padding: '11px 14px' }}>
                     <select value={v.estatus_cobro || 'enviar_factura'} onChange={e => cambiarEstatus(v, e.target.value)}
                       style={{ border: `1px solid ${est.color}33`, background: est.bg, color: est.color, borderRadius: 8, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', outline: 'none' }}>

@@ -5,6 +5,7 @@ import AuditoriaEmpresa from './AuditoriaEmpresa.jsx'
 import RutasCapacitacion from './RutasCapacitacion.jsx'
 import BolsaTrabajo from './BolsaTrabajo.jsx'
 import PoolCandidatos from './PoolCandidatos.jsx'
+import ConsultoriaEmpresa from './ConsultoriaEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -136,6 +137,7 @@ export function EmpresaDashboard() {
     { id: 'asignaciones', label: '📋 Asignaciones' },
     { id: 'rutas', label: '🏢 Rutas de capacitación' },
     { id: 'proximos', label: '📣 Convocatorias HCD' },
+    { id: 'consultoria', label: '🧩 Consultoría y auditoría' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
     { id: 'auditoria', label: '📦 Constancias y auditoría' },
     { id: 'bolsa', label: '👔 Bolsa de trabajo' },
@@ -242,6 +244,7 @@ export function EmpresaDashboard() {
             {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
             {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
             {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
+            {tab === 'consultoria' && <ConsultoriaEmpresa empresa={empresa} />}
           </>
         )}
       </div>
@@ -1571,6 +1574,16 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
       }
       const { data: urlData } = supabase.storage.from('ordenes-compra').getPublicUrl(nombreArchivo)
 
+      // ¿Ya se había procesado la venta? Entonces esto es solo REEMPLAZO del documento.
+      if (cot.id_compra_generado) {
+        await supabase.from('cotizaciones').update({ orden_compra_url: urlData.publicUrl, orden_compra_nombre: file.name }).eq('id', cot.id)
+        try { await supabase.from('ventas').update({ orden_compra_url: urlData.publicUrl }).eq('cotizacion_id', cot.id) } catch (_) {}
+        alert('✅ Orden de compra actualizada.')
+        await cargar()
+        setSubiendo(null)
+        return
+      }
+
       // 2. Generar ID de compra automático
       const idCompra = await generarIdCompra()
       const numPersonas = cot.num_personas || 1
@@ -1618,6 +1631,7 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
         empresa_registrada: true,
         num_personas: numPersonas,
         fecha_curso: cot.fecha_deseada || null,
+        clave_vendedor: empresa.clave_vendedor || 'VEND-GERENCIA',
         estatus_cobro: 'enviar_factura'
       })
       if (errVenta) {
@@ -1639,6 +1653,18 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
     } catch (e) {
       alert('Error inesperado: ' + (e.message || 'intenta de nuevo'))
     } finally { setSubiendo(null) }
+  }
+
+  async function eliminarOC(cot) {
+    if (!cot.orden_compra_url) return
+    if (!window.confirm('¿Eliminar la orden de compra adjunta? Podrás subir otro documento en su lugar.')) return
+    try {
+      const partes = cot.orden_compra_url.split('/ordenes-compra/')
+      if (partes[1]) { try { await supabase.storage.from('ordenes-compra').remove([partes[1]]) } catch (_) {} }
+      await supabase.from('cotizaciones').update({ orden_compra_url: null, orden_compra_nombre: null }).eq('id', cot.id)
+      try { await supabase.from('ventas').update({ orden_compra_url: null }).eq('cotizacion_id', cot.id) } catch (_) {}
+      await cargar()
+    } catch (e) { alert('Error: ' + (e.message || '')) }
   }
 
   async function cancelar(cot) {
@@ -1705,7 +1731,7 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
                     <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4 }}>Generada: {new Date(cot.created_at).toLocaleDateString('es-MX')}</p>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                    {!aceptada && !cancelada && (
+                    {!cot.orden_compra_url && !cancelada && (
                       <label style={{ background: '#8B1A1A', color: '#fff', padding: '8px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: subiendo === cot.id ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>
                         {subiendo === cot.id ? 'Procesando...' : '⬆️ Adjuntar orden de compra'}
                         <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendo === cot.id}
@@ -1713,9 +1739,16 @@ function TabCotizaciones({ empresa, empleados, recargar }) {
                       </label>
                     )}
                     {cot.orden_compra_url && (
-                      <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
-                        📎 Ver OC
-                      </a>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        <a href={cot.orden_compra_url} target="_blank" style={{ background: '#f0fdf4', color: '#059669', padding: '6px 14px', borderRadius: 8, fontSize: 11, textDecoration: 'none', fontWeight: 600, border: '1px solid #bbf7d0' }}>
+                          📎 Ver OC
+                        </a>
+                        {!cancelada && (
+                          <button onClick={() => eliminarOC(cot)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            🗑 Eliminar OC
+                          </button>
+                        )}
+                      </div>
                     )}
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {!aceptada && (
