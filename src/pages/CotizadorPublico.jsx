@@ -52,6 +52,7 @@ export default function CotizadorPublico() {
   const [cursos, setCursos] = useState([])
   const [matriz, setMatriz] = useState([])
   const [servicios, setServicios] = useState([])
+  const [promosPreventa, setPromosPreventa] = useState([])
   const [viaticosZonas, setViaticosZonas] = useState([])
   const [familiaActiva, setFamiliaActiva] = useState(null)
   const [buscaCurso, setBuscaCurso] = useState('')
@@ -78,6 +79,9 @@ export default function CotizadorPublico() {
     supabase.from('servicios').select('*').eq('activo', true).order('orden').then(({ data }) => setServicios(data || []))
     supabase.from('viaticos_zonas').select('*').eq('activo', true).order('monto').then(({ data }) => setViaticosZonas(data || []))
     supabase.from('precios_categoria').select('*').then(({ data }) => setMatriz(data || []))
+    // Convocatorias con Precio Preventa vigente (descuento > 0, aún no inicia)
+    { const hoy = new Date().toISOString().slice(0, 10)
+      supabase.from('proximos_cursos').select('curso_id, curso_nombre, fecha, descuento_promo, estado').gte('fecha', hoy).then(({ data }) => setPromosPreventa((data || []).filter(c => Number(c.descuento_promo) > 0 && c.estado !== 'en_curso'))) }
 
     const params = new URLSearchParams(window.location.search)
     const cursoId = params.get('curso')
@@ -168,6 +172,14 @@ export default function CotizadorPublico() {
       desc_catalogo = precio_base * (cursoSel.descuento_porcentaje / 100)
     }
 
+    // Precio Preventa: descuento de una convocatoria vigente de este curso
+    let desc_preventa = 0, preventaPct = 0
+    const pv = promosPreventa.find(c => (cursoSel.id && c.curso_id === cursoSel.id) || (c.curso_nombre && cursoSel.nombre && c.curso_nombre === cursoSel.nombre))
+    if (pv && Number(pv.descuento_promo) > 0) {
+      preventaPct = Number(pv.descuento_promo)
+      desc_preventa = precio_base * (preventaPct / 100)
+    }
+
     // Descuento de cupón
     let desc_cupon = 0
     if (config.cupon_validado) {
@@ -175,7 +187,7 @@ export default function CotizadorPublico() {
       else desc_cupon = precio_base * (config.cupon_validado.valor / 100)
     }
 
-    const desc = desc_grupo + desc_catalogo + desc_cupon
+    const desc = desc_grupo + desc_catalogo + desc_cupon + desc_preventa
     const precio_con_desc = precio_base - desc
 
     // Consultoría: precio_hora × número de horas (exacto)
@@ -203,7 +215,7 @@ export default function CotizadorPublico() {
     const total = subtotal + iva_monto
     const comision = total * (config.es_cliente_nuevo ? 0.15 : 0.10)
 
-    return { precio_base, desc_grupo, desc_catalogo, desc_cupon, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision, dias_curso, especial, bloque }
+    return { precio_base, desc_grupo, desc_catalogo, desc_cupon, desc_preventa, preventaPct, desc, precio_con_desc, cons, viat, subtotal, iva_monto, total, comision, dias_curso, especial, bloque }
   }
 
   const nums = calcular()
@@ -580,6 +592,7 @@ export default function CotizadorPublico() {
                 </div>
                 {nums.especial && <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 4 }}>HCD te enviará el precio con las condiciones.</div>}
                 {!nums.especial && nums.desc_catalogo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🏷️ Promoción {cursoSel.descuento_porcentaje}%: -${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
+                {!nums.especial && nums.desc_preventa > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🏷️ Precio Preventa {nums.preventaPct}%: -${nums.desc_preventa.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
                 {nums.desc_grupo > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>👥 Grupo cerrado 20%: -${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
                 {nums.desc_cupon > 0 && <div style={{ color: '#4de8a0', fontSize: 13 }}>🎟️ Cupón: -${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</div>}
               </div>
@@ -768,6 +781,7 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       <tr><td><strong>${cursoSel?.nombre}</strong></td><td>${config.num_personas} persona(s)${nums.especial ? ' — Cotización especial (16+)' : ` · Bloque ${nums.bloque} · ${cursoSel?.duracion}h`}</td><td style="text-align:right">${nums.especial ? 'A cotizar' : `$${nums.precio_base.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}</td></tr>
       ${nums.desc_grupo > 0 ? `<tr><td>Descuento grupo cerrado (20%)</td><td>Mínimo ${MIN_GRUPO} participantes</td><td style="text-align:right;color:#059669">-$${nums.desc_grupo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${nums.desc_catalogo > 0 ? `<tr><td>Descuento promocional (${cursoSel.descuento_porcentaje}%)</td><td>Precio especial</td><td style="text-align:right;color:#059669">-$${nums.desc_catalogo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
+      ${nums.desc_preventa > 0 ? `<tr><td>Precio Preventa (${nums.preventaPct}%)</td><td>Vigente hasta inicio del curso</td><td style="text-align:right;color:#059669">-$${nums.desc_preventa.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${nums.desc_cupon > 0 ? `<tr><td>Cupón ${config.cupon_validado?.codigo}</td><td>${config.cupon_validado?.tipo === '2x1' ? '2x1' : config.cupon_validado?.valor + '%'}</td><td style="text-align:right;color:#059669">-$${nums.desc_cupon.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${config.incluye_consultoria && nums.cons > 0 ? `<tr><td>Consultoría</td><td>${serv?.nombre || ''}</td><td style="text-align:right">$${nums.cons.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}
       ${config.requiere_viaticos && nums.viat > 0 ? `<tr><td>Viáticos / Traslado</td><td>${zona?.estado || ''}</td><td style="text-align:right">$${nums.viat.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td></tr>` : ''}

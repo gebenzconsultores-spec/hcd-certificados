@@ -6,6 +6,7 @@ import RutasCapacitacion from './RutasCapacitacion.jsx'
 import BolsaTrabajo from './BolsaTrabajo.jsx'
 import PoolCandidatos from './PoolCandidatos.jsx'
 import ConsultoriaEmpresa from './ConsultoriaEmpresa.jsx'
+import PromocionesEmpresa from './PromocionesEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -137,6 +138,7 @@ export function EmpresaDashboard() {
     { id: 'asignaciones', label: '📋 Asignaciones' },
     { id: 'rutas', label: '🏢 Rutas de capacitación' },
     { id: 'proximos', label: '📣 Convocatorias HCD' },
+    { id: 'promociones', label: '🏷️ Promociones' },
     { id: 'consultoria', label: '🧩 Consultoría y auditoría' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
     { id: 'auditoria', label: '📦 Constancias y auditoría' },
@@ -245,6 +247,7 @@ export function EmpresaDashboard() {
             {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
             {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
             {tab === 'consultoria' && <ConsultoriaEmpresa empresa={empresa} />}
+            {tab === 'promociones' && <PromocionesEmpresa empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
           </>
         )}
       </div>
