@@ -12,7 +12,7 @@ export default function AdminProximosCursos() {
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({
     curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00',
-    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos',
+    tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', descuento_promo: '', mostrar_en: 'ambos',
     tipo_curso: 'hcd', // 'hcd' (abierto) o 'empresa'
     empresa_id: '', empresa_nueva_nombre: '', empresa_nueva_correo: '', empresa_nueva_contacto: ''
   })
@@ -54,7 +54,7 @@ export default function AdminProximosCursos() {
   }
 
   function abrirNuevo() {
-    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', mostrar_en: 'ambos' })
+    setForm({ curso_id: '', curso_nombre: '', temario: '', fecha: '', hora: '10:00', tipo_costo: 'sin_costo', precio: 0, cupo_maximo: 10, link_zoom: '', notas: '', codigo_promo: '', descuento_promo: '', mostrar_en: 'ambos' })
     setModal(true)
   }
 
@@ -129,6 +129,7 @@ export default function AdminProximosCursos() {
         tipo_costo: form.tipo_costo,
         precio: form.tipo_costo === 'con_costo' ? Number(form.precio) : 0,
         codigo_promo: form.codigo_promo || null,
+        descuento_promo: form.descuento_promo ? Number(form.descuento_promo) : 0,
         mostrar_en: form.mostrar_en,
         cupo_maximo: Number(form.cupo_maximo),
         cupo_ocupado: 0,
@@ -406,6 +407,10 @@ export default function AdminProximosCursos() {
             <label style={lbl}>Código promocional (opcional, ej. 2x1)</label>
             <input value={form.codigo_promo} onChange={e => f('codigo_promo')(e.target.value.toUpperCase())} placeholder="ej. 2X1JULIO o PROMO50" style={inp} />
             <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4, marginBottom: 8 }}>Se mostrará en la convocatoria que ven empresas y estudiantes.</p>
+
+            <label style={lbl}>Precio Preventa — % de descuento (opcional)</label>
+            <input type="number" min={0} max={100} value={form.descuento_promo} onChange={e => f('descuento_promo')(e.target.value)} placeholder="ej. 15" style={inp} />
+            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4, marginBottom: 8 }}>Descuento que se aplica al cotizar este curso. Vigente hasta el día que inicia el curso.</p>
 
             <label style={lbl}>Notas (opcional)</label>
             <textarea value={form.notas} onChange={e => f('notas')(e.target.value)} rows={2} style={{ ...inp, resize: 'none' }} />
