@@ -466,9 +466,18 @@ function CursosAsignados({ estudiante, certificados }) {
 // ─── Mis cursos (individual: solo los desbloqueados) ──────────
 function MisCursosIndividual({ estudiante, certificados }) {
   const [cursos, setCursos] = useState([])
+  const [evaluaciones, setEvaluaciones] = useState([])
+  const [modalCalificar, setModalCalificar] = useState(null)
   useEffect(() => {
     cargarCursos()
+    cargarEvaluaciones()
   }, [])
+
+  async function cargarEvaluaciones() {
+    const { data } = await supabase.from('evaluaciones_curso').select('*').eq('participante_id', estudiante.id)
+    setEvaluaciones(data || [])
+  }
+  const evalDe = nombre => evaluaciones.find(e => e.curso_nombre === nombre)
 
   async function cargarCursos() {
     // Combinar: cursos comprados (con ID) + cursos asignados (convocatorias, manual)
@@ -506,14 +515,78 @@ function MisCursosIndividual({ estudiante, certificados }) {
                 Presentar examen →
               </a>
             )}
+            <div style={{ marginTop: 10 }}>
+              {(() => { const ev = evalDe(c.curso_nombre); return (
+                <button onClick={() => setModalCalificar({ curso: c, evaluacion: ev })}
+                  style={{ background: ev ? '#fffbeb' : '#f8f9fb', color: ev ? '#b45309' : '#475569', border: `1px solid ${ev ? '#fde68a' : '#e2e8f0'}`, borderRadius: 7, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {ev ? `★ ${ev.calificacion}/5 · Editar` : '⭐ Calificar curso'}
+                </button>
+              ) })()}
+            </div>
           </div>
         )
       })}
+      {modalCalificar && (
+        <ModalCalificarCurso estudiante={estudiante} curso={modalCalificar.curso} evaluacion={modalCalificar.evaluacion}
+          onClose={() => setModalCalificar(null)}
+          onDone={() => { setModalCalificar(null); cargarEvaluaciones() }} />
+      )}
     </div>
   )
 }
 
-// ─── Desbloquear curso con ID de compra (individual) ──────────
+// ─── Modal: el alumno califica el curso y sugiere mejoras ─────
+function ModalCalificarCurso({ estudiante, curso, evaluacion, onClose, onDone }) {
+  const [cal, setCal] = useState(evaluacion?.calificacion || 0)
+  const [mejoras, setMejoras] = useState(evaluacion?.mejoras || '')
+  const [saving, setSaving] = useState(false)
+
+  async function guardar() {
+    if (!cal) { alert('Elige una calificación de 1 a 5 estrellas.'); return }
+    setSaving(true)
+    try {
+      const payload = {
+        participante_id: estudiante.id, participante_nombre: estudiante.nombre,
+        curso_id: curso.curso_id || null, curso_nombre: curso.curso_nombre,
+        calificacion: cal, mejoras: mejoras.trim() || null
+      }
+      if (evaluacion) {
+        const { error } = await supabase.from('evaluaciones_curso').update(payload).eq('id', evaluacion.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('evaluaciones_curso').insert(payload)
+        if (error) throw error
+      }
+      onDone()
+      alert('✅ ¡Gracias por tu opinión!')
+    } catch (e) { alert('Error al guardar: ' + (e.message || '')) } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Califica el curso</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 18 }}>{curso.curso_nombre}</p>
+
+        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 18 }}>
+          {[1, 2, 3, 4, 5].map(n => (
+            <button key={n} onClick={() => setCal(n)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 34, lineHeight: 1, color: n <= cal ? '#f59e0b' : '#e2e8f0', padding: 0 }}>★</button>
+          ))}
+        </div>
+
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>¿Qué podríamos mejorar? (opcional)</label>
+        <textarea value={mejoras} onChange={e => setMejoras(e.target.value)} rows={4} placeholder="Tus sugerencias nos ayudan a mejorar…"
+          style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none', color: '#1e293b', boxSizing: 'border-box', resize: 'vertical' }} />
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+          <button onClick={onClose} style={{ background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving || !cal} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Enviar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
   const [idCompra, setIdCompra] = useState('')
   const [fecha, setFecha] = useState('')
@@ -750,10 +823,11 @@ function ProximosEstudiante({ estudiante, irACotizaciones }) {
                 ) : disp <= 0 ? (
                   <button disabled style={{ width: '100%', background: '#f1f5f9', color: '#94a3b8', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, cursor: 'not-allowed' }}>Cupo lleno</button>
                 ) : (
-                  <button onClick={() => inscribirme(p)} disabled={inscribiendo === p.id}
-                    style={{ width: '100%', background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    {inscribiendo === p.id ? 'Inscribiendo...' : p.tipo_costo === 'sin_costo' ? `Inscribirme (${disp} lugares)` : 'Inscribirme'}
-                  </button>
+                  <a href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent('Hola, quiero inscribirme a la convocatoria "' + p.curso_nombre + '" del ' + fmtFecha(p.fecha) + '.')}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ width: '100%', boxSizing: 'border-box', background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '10px', fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    💬 Inscribirme por WhatsApp
+                  </a>
                 )}
               </div>
             )
