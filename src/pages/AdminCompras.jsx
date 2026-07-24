@@ -81,6 +81,19 @@ export default function AdminCompras() {
     await cargar()
   }
 
+  async function eliminarCompra(c) {
+    if (!window.confirm(`¿Eliminar el ID de compra ${c.id_compra}?\n\nEsto lo quita también de donde se muestre esta compra.`)) return
+    const { error } = await supabase.from('compras').delete().eq('id', c.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    await cargar()
+  }
+  async function eliminarProgramacion(p) {
+    if (!window.confirm(`¿Eliminar la solicitud de "${p.curso_nombre}" de ${p.empresa_nombre}?`)) return
+    const { error } = await supabase.from('programaciones').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    await cargar()
+  }
+
   function descargarExcel() {
     const hoy = new Date().toISOString().slice(0, 10)
     if (tab === 'compras') {
@@ -147,14 +160,14 @@ export default function AdminCompras() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f8f9fb' }}>
-                  {['ID Compra', 'Empresa', 'Curso', 'Monto', 'Personas', 'Estado', 'Fecha'].map(h => (
+                  {['ID Compra', 'Empresa', 'Curso', 'Monto', 'Personas', 'Estado', 'Fecha', ''].map(h => (
                     <th key={h} style={{ padding: '11px 16px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {compras.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin IDs de compra generados</td></tr>
+                  <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Sin IDs de compra generados</td></tr>
                 )}
                 {compras.map(c => (
                   <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
@@ -169,6 +182,9 @@ export default function AdminCompras() {
                       </span>
                     </td>
                     <td style={{ padding: '11px 16px', color: '#94a3b8', fontSize: 11 }}>{new Date(c.created_at).toLocaleDateString('es-MX')}</td>
+                    <td style={{ padding: '11px 16px' }}>
+                      <button onClick={() => eliminarCompra(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -205,15 +221,18 @@ export default function AdminCompras() {
                     </span>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    {p.estado === 'pendiente' && (
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={() => cambiarEstadoProg(p.id, 'confirmada')} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Confirmar</button>
-                        <button onClick={() => cambiarEstadoProg(p.id, 'rechazada')} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Rechazar</button>
-                      </div>
-                    )}
-                    {p.estado === 'confirmada' && (
-                      <button onClick={() => cambiarEstadoProg(p.id, 'completada')} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Marcar completada</button>
-                    )}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      {p.estado === 'pendiente' && (
+                        <>
+                          <button onClick={() => cambiarEstadoProg(p.id, 'confirmada')} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Confirmar</button>
+                          <button onClick={() => cambiarEstadoProg(p.id, 'rechazada')} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Rechazar</button>
+                        </>
+                      )}
+                      {p.estado === 'confirmada' && (
+                        <button onClick={() => cambiarEstadoProg(p.id, 'completada')} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>Marcar completada</button>
+                      )}
+                      <button onClick={() => eliminarProgramacion(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -244,9 +263,9 @@ export default function AdminCompras() {
                 <datalist id="emp-list">{empresas.map(e => <option key={e.id} value={e.nombre} />)}</datalist>
 
                 <label style={lbl}>Curso *</label>
-                <select value={form.curso_nombre} onChange={e => f('curso_nombre')(e.target.value)} style={inp}>
+                <select value={form.curso_id} onChange={e => { const c = cursos.find(x => x.id === e.target.value); setForm(p => ({ ...p, curso_id: e.target.value, curso_nombre: c?.nombre || '' })) }} style={inp}>
                   <option value="">Selecciona un curso</option>
-                  {cursos.map(c => <option key={c.id} value={c.nombre}>#{c.numero_curso} - {c.nombre}</option>)}
+                  {cursos.map(c => <option key={c.id} value={c.id}>#{c.numero_curso} - {c.nombre}</option>)}
                 </select>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

@@ -152,14 +152,14 @@ export default function AdminCotizaciones() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#f8f9fb' }}>
-              {['Folio', 'Fecha', 'Empresa', 'Registro', 'Curso', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
+              {['Folio', 'Fecha', 'Empresa', 'Registro', 'Curso', 'Cap. deseada', 'Total', 'Comisión', 'OC', 'Estado', ''].map(h => (
                 <th key={h} style={{ padding: '11px 14px', textAlign: 'left', color: '#64748b', fontSize: 11, letterSpacing: .5 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtradas.length === 0 && (
-              <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
+              <tr><td colSpan={11} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cotizaciones</td></tr>
             )}
             {filtradas.map(c => {
               const est = ESTADOS[c.estado] || ESTADOS.enviada
@@ -174,6 +174,7 @@ export default function AdminCotizaciones() {
                     </span>
                   </td>
                   <td style={{ padding: '11px 14px', color: '#475569', fontSize: 12 }}>{c.curso_nombre}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12 }}>{c.fecha_deseada ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>📅 {new Date(String(c.fecha_deseada).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX')}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                   <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 700, fontSize: 13 }}>${c.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
                   <td style={{ padding: '11px 14px', color: '#059669', fontWeight: 700, fontSize: 13 }}>${c.comision_monto?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
                   <td style={{ padding: '11px 14px' }}>
@@ -208,6 +209,7 @@ export default function AdminCotizaciones() {
               ['Contacto', detalle.contacto_nombre],
               ['Email', detalle.contacto_email],
               ['Curso', detalle.curso_nombre],
+              ['Capacitación deseada', detalle.fecha_deseada ? new Date(String(detalle.fecha_deseada).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : 'No especificada'],
               ['Total', `$${detalle.total?.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`],
               ['Comisión', `$${detalle.comision_monto?.toLocaleString('es-MX', { minimumFractionDigits: 2 })} (${detalle.comision_porcentaje}%)`],
             ].filter(Boolean).map(([l, v]) => (

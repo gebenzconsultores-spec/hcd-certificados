@@ -42,6 +42,7 @@ function labelDuracion(horas) {
 
 export default function Cursos() {
   const [cursos, setCursos] = useState([])
+  const [busqueda, setBusqueda] = useState('')
   const [familias, setFamilias] = useState([])
   const [loading, setLoading] = useState(true)
   const [familiaAbierta, setFamiliaAbierta] = useState(null)
@@ -274,6 +275,10 @@ export default function Cursos() {
   if (loading) return <div style={{ color: '#64748b', padding: 40 }}>Cargando catálogo...</div>
 
   const cursosDeFamilia = familiaAbierta ? cursos.filter(c => c.familia_id === familiaAbierta) : []
+  const buscando = busqueda.trim().length > 0
+  const resultadosBusqueda = buscando
+    ? cursos.filter(c => `${c.nombre || ''} ${c.clave_interna || ''}`.toLowerCase().includes(busqueda.toLowerCase()))
+    : cursosDeFamilia
 
   return (
     <div>
@@ -293,7 +298,12 @@ export default function Cursos() {
 
       {vista === 'cursos' ? (
         <>
-          {/* Familias como pestañas */}
+          {/* Buscador de cursos */}
+          <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar curso por nombre o clave..."
+            style={{ width: '100%', maxWidth: 420, border: '1px solid #d1d5db', borderRadius: 10, padding: '10px 14px', fontSize: 14, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+
+          {/* Familias como pestañas (se ocultan al buscar) */}
+          {!buscando && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
             {familias.map(fam => {
               const count = cursos.filter(c => c.familia_id === fam.id).length
@@ -307,13 +317,16 @@ export default function Cursos() {
               )
             })}
           </div>
+          )}
 
-          {/* Cursos de la familia abierta */}
+          {buscando && <p style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>{resultadosBusqueda.length} curso(s) que coinciden con "{busqueda}"</p>}
+
+          {/* Cursos (de la familia abierta, o resultados de búsqueda) */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 16 }}>
-            {cursosDeFamilia.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta familia.</div>
+            {resultadosBusqueda.length === 0 ? (
+              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>{buscando ? 'Ningún curso coincide con tu búsqueda.' : 'No hay cursos en esta familia.'}</div>
             ) : (
-              cursosDeFamilia.map(c => {
+              resultadosBusqueda.map(c => {
                 const fam = familias.find(x => x.id === c.familia_id)
                 const color = COLOR_FAMILIA[fam?.nombre] || '#64748b'
                 return (

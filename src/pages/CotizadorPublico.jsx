@@ -54,6 +54,7 @@ export default function CotizadorPublico() {
   const [servicios, setServicios] = useState([])
   const [viaticosZonas, setViaticosZonas] = useState([])
   const [familiaActiva, setFamiliaActiva] = useState(null)
+  const [buscaCurso, setBuscaCurso] = useState('')
   const [paso, setPaso] = useState(1)
   const [cursoSel, setCursoSel] = useState(null)
   const [config, setConfig] = useState({
@@ -341,6 +342,9 @@ export default function CotizadorPublico() {
   }
 
   const cursosFamilia = familiaActiva ? cursos.filter(co => co.familia_id === familiaActiva) : cursos
+  const cursosMostrados = buscaCurso.trim()
+    ? cursosFamilia.filter(co => `${co.nombre || ''} ${co.clave_interna || ''}`.toLowerCase().includes(buscaCurso.toLowerCase()))
+    : cursosFamilia
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f9fb' }}>
@@ -368,7 +372,25 @@ export default function CotizadorPublico() {
         {paso === 1 && (
           <div>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>¿Qué curso te interesa?</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Filtra por familia o navega por todos los cursos</p>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 20 }}>Busca tu curso, filtra por familia, o solicita un servicio de consultoría</p>
+
+            {/* Barra de servicios de consultoría (arriba) */}
+            {servicios.length > 0 && (
+              <div style={{ background: 'linear-gradient(90deg,#8B1A1A,#a52a2a)', borderRadius: 14, padding: '18px 22px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h3 style={{ color: '#fff', fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Soluciones de Consultoría & Auditoría</h3>
+                  <p style={{ color: '#f9d5d5', fontSize: 13 }}>{servicios.map(s => s.nombre).join(' · ')}</p>
+                </div>
+                <button onClick={() => { setCursoSel({ id: null, nombre: 'Servicio de Consultoría', precio_persona_1dia: 0 }); setConfig(p => ({ ...p, incluye_consultoria: true, tipo: 'grupo', servicio_id: servicios[0]?.id || '' })); setPaso(2) }}
+                  style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Solicitar servicio →
+                </button>
+              </div>
+            )}
+
+            {/* Buscador de cursos */}
+            <input value={buscaCurso} onChange={e => setBuscaCurso(e.target.value)} placeholder="🔍 Busca tu curso por nombre o clave..."
+              style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 10, padding: '11px 16px', fontSize: 15, outline: 'none', marginBottom: 20, boxSizing: 'border-box' }} />
 
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
               <button onClick={() => setFamiliaActiva(null)}
@@ -384,10 +406,10 @@ export default function CotizadorPublico() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 14 }}>
-              {cursosFamilia.length === 0 && (
-                <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta categoría</div>
+              {cursosMostrados.length === 0 && (
+                <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>{buscaCurso.trim() ? 'Ningún curso coincide con tu búsqueda.' : 'No hay cursos en esta categoría'}</div>
               )}
-              {cursosFamilia.map(co => (
+              {cursosMostrados.map(co => (
                 <div key={co.id}
                   style={{ background: '#fff', border: '2px solid #e2e8f0', borderRadius: 12, padding: '18px 20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -413,18 +435,6 @@ export default function CotizadorPublico() {
                 </div>
               ))}
             </div>
-
-            {/* Consultoría */}
-            {servicios.length > 0 && (
-              <div style={{ background: '#f9f0f0', border: '1px solid #fecaca', borderRadius: 14, padding: '20px 24px', marginTop: 24 }}>
-                <h3 style={{ color: '#8B1A1A', fontWeight: 800, fontSize: 15, marginBottom: 6 }}>¿Necesitas consultoría?</h3>
-                <p style={{ color: '#64748b', fontSize: 13, marginBottom: 12 }}>{servicios.map(s => s.nombre).join(' · ')}</p>
-                <button onClick={() => { setCursoSel({ id: null, nombre: 'Servicio de Consultoría', precio_persona_1dia: 0 }); setConfig(p => ({ ...p, incluye_consultoria: true, tipo: 'grupo', servicio_id: servicios[0]?.id || '' })); setPaso(2) }}
-                  style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                  Cotizar consultoría →
-                </button>
-              </div>
-            )}
           </div>
         )}
 
