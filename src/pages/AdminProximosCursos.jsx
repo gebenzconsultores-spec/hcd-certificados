@@ -295,6 +295,12 @@ export default function AdminProximosCursos() {
                   ) : (
                     <button onClick={() => cambiarEstado(p.id, 'abierto')} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>Abrir</button>
                   )}
+                  {p.estado !== 'en_curso' ? (
+                    <button onClick={() => { if (window.confirm('¿Marcar este curso como EN CURSO? Ya no aparecerá como convocatoria abierta y no se podrán inscribir más alumnos.')) cambiarEstado(p.id, 'en_curso') }}
+                      style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>▶ En curso</button>
+                  ) : (
+                    <button onClick={() => cambiarEstado(p.id, 'abierto')} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 8, padding: '8px 12px', fontSize: 12, cursor: 'pointer' }}>Reabrir</button>
+                  )}
                 </div>
               </div>
             )
