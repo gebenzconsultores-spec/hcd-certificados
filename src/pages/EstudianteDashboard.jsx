@@ -426,6 +426,8 @@ const estInp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, pa
 // ─── Cursos asignados (empleado de empresa) ───────────────────
 function CursosAsignados({ estudiante, certificados }) {
   const [asignaciones, setAsignaciones] = useState([])
+  const [evaluaciones, setEvaluaciones] = useState([])
+  const [modalCalificar, setModalCalificar] = useState(null)
   useEffect(() => {
     supabase.from('asignaciones').select('*').eq('empleado_id', estudiante.id).then(({ data }) => {
       // Solo cursos (no microcursos) y que no estén dados de baja/cancelados
@@ -435,7 +437,14 @@ function CursosAsignados({ estudiante, certificados }) {
       )
       setAsignaciones(soloCursos)
     })
+    cargarEvaluaciones()
   }, [])
+
+  async function cargarEvaluaciones() {
+    const { data } = await supabase.from('evaluaciones_curso').select('*').eq('participante_id', estudiante.id)
+    setEvaluaciones(data || [])
+  }
+  const evalDe = nombre => evaluaciones.find(e => e.curso_nombre === nombre)
 
   if (asignaciones.length === 0) {
     return <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Tu empresa aún no te ha asignado cursos.</div>
@@ -456,9 +465,22 @@ function CursosAsignados({ estudiante, certificados }) {
                 Presentar examen →
               </a>
             )}
+            <div style={{ marginTop: 10 }}>
+              {(() => { const ev = evalDe(a.curso_nombre); return (
+                <button onClick={() => setModalCalificar({ curso: { curso_id: a.curso_id, curso_nombre: a.curso_nombre }, evaluacion: ev })}
+                  style={{ background: ev ? '#fffbeb' : '#f8f9fb', color: ev ? '#b45309' : '#475569', border: `1px solid ${ev ? '#fde68a' : '#e2e8f0'}`, borderRadius: 7, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {ev ? `★ ${ev.calificacion}/5 · Editar` : '⭐ Calificar curso'}
+                </button>
+              ) })()}
+            </div>
           </div>
         )
       })}
+      {modalCalificar && (
+        <ModalCalificarCurso estudiante={estudiante} curso={modalCalificar.curso} evaluacion={modalCalificar.evaluacion}
+          onClose={() => setModalCalificar(null)}
+          onDone={() => { setModalCalificar(null); cargarEvaluaciones() }} />
+      )}
     </div>
   )
 }
@@ -704,9 +726,11 @@ function BannerConvocatoriaEstudiante({ onIr }) {
         </p>
         {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
       </div>
-      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        Inscríbete →
-      </button>
+      <a href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent('Hola, quiero inscribirme a la convocatoria "' + convocatoria.curso_nombre + '" del ' + new Date(convocatoria.fecha + 'T00:00:00').toLocaleDateString('es-MX') + '.')}`}
+        target="_blank" rel="noopener noreferrer"
+        style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        💬 Inscríbete por WhatsApp
+      </a>
       {convocatorias.length > 1 && (
         <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
           {convocatorias.map((_, i) => (

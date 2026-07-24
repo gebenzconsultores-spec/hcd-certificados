@@ -337,16 +337,9 @@ function BannerConvocatoria({ empresa, onIr }) {
         </p>
         {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
       </div>
-      {convocatoria.tipo_costo === 'sin_costo' ? (
-        <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          Inscribir empleados →
-        </button>
-      ) : (
-        <a href={`/cotizar?curso=${convocatoria.curso_id || ''}&empresa=${empresa?.id || ''}&convocatoria=${convocatoria.id}`} target="_blank"
-          style={{ background: '#fff', color: '#8B1A1A', textDecoration: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap' }}>
-          Cotizar e inscribir →
-        </a>
-      )}
+      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+        Inscribir alumnos →
+      </button>
       {/* Indicadores del carrusel */}
       {convocatorias.length > 1 && (
         <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
