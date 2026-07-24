@@ -1,7 +1,26 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 export default function Bienvenida() {
   const navigate = useNavigate()
+  const [convocatorias, setConvocatorias] = useState([])
+  const [idx, setIdx] = useState(0)
+
+  useEffect(() => {
+    (async () => {
+      const hoy = new Date().toISOString().slice(0, 10)
+      const { data } = await supabase.from('proximos_cursos').select('*').gte('fecha', hoy).order('fecha', { ascending: true })
+      // Los cursos "en curso" ya no se muestran como convocatorias
+      setConvocatorias((data || []).filter(c => c.estado !== 'en_curso'))
+    })()
+  }, [])
+
+  useEffect(() => {
+    if (convocatorias.length <= 1) return
+    const t = setInterval(() => setIdx(i => (i + 1) % convocatorias.length), 4000)
+    return () => clearInterval(t)
+  }, [convocatorias])
 
   const opciones = [
     {
@@ -54,6 +73,22 @@ export default function Bienvenida() {
           Acceso administrador
         </button>
       </header>
+
+      {/* Cintillo de convocatorias abiertas */}
+      {convocatorias.length > 0 && (() => {
+        const c = convocatorias[idx]
+        return (
+          <div onClick={() => navigate('/empresa/acceso')}
+            style={{ background: 'linear-gradient(90deg,#8B1A1A,#a52a2a)', color: '#fff', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, cursor: 'pointer', flexWrap: 'wrap' }}>
+            <span style={{ background: 'rgba(255,255,255,.2)', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800, letterSpacing: .5 }}>📣 CONVOCATORIA ABIERTA</span>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>{c.curso_nombre}</span>
+            <span style={{ fontSize: 13, opacity: .95 }}>📅 {new Date(c.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}{c.hora ? ` · ${c.hora}` : ''}</span>
+            {c.tipo_costo === 'sin_costo' && <span style={{ background: '#fff', color: '#8B1A1A', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 800 }}>🎁 Sin costo</span>}
+            {c.codigo_promo && <span style={{ background: 'rgba(255,255,255,.2)', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>🎟️ {c.codigo_promo}</span>}
+            <span style={{ fontSize: 12, textDecoration: 'underline', opacity: .9 }}>Inscríbete →</span>
+          </div>
+        )
+      })()}
 
       {/* Hero */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px 24px 60px' }}>
