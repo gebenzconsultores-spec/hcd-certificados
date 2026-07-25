@@ -160,49 +160,66 @@ export default function ExamenPublico() {
       return
     }
 
-    // Guardar resultado
-    await guardarResultadoExamen({
-      participante_id: partId,
-      empresa_id: empresaIdCert,
-      curso_id: cursoId,
-      calificacion: Math.round(calificacion * 100),
-      aprobado,
-      respuestas_json: respuestas,
-      intento
-    })
+    // Guardar resultado (CRÍTICO). Reintenta una vez ante fallos de red.
+    let guardado = false, ultimoError = null
+    for (let i = 0; i < 2 && !guardado; i++) {
+      try {
+        await guardarResultadoExamen({
+          participante_id: partId,
+          empresa_id: empresaIdCert,
+          curso_id: cursoId,
+          calificacion: Math.round(calificacion * 100),
+          aprobado,
+          respuestas_json: respuestas,
+          intento
+        })
+        guardado = true
+      } catch (err) {
+        ultimoError = err
+        await new Promise(r => setTimeout(r, 900))
+      }
+    }
+    if (!guardado) throw (ultimoError || new Error('No se pudo guardar el resultado'))
 
+    // Certificado: NO debe bloquear el envío. Si falla (p. ej. permisos del
+    // participante anónimo), el resultado YA quedó guardado y el alumno ve su
+    // calificación; el certificado se puede generar después desde el admin.
     let certData = null
     if (aprobado) {
-      const consec = await siguienteConsecutivo()
-      // Número de evento y fecha del curso programado (cursos_confirmados)
-      let numEvento = null, fechaCurso = null
       try {
-        const { data: ccList } = await supabase.from('cursos_confirmados')
-          .select('numero_curso, fecha_inicio').eq('curso_id', cursoId).not('numero_curso', 'is', null)
-          .order('fecha_inicio', { ascending: false }).limit(1)
-        const cc = ccList && ccList[0]
-        numEvento = cc?.numero_curso
-        fechaCurso = cc?.fecha_inicio || null
-      } catch (_) {}
-      const numCurso = numEvento || curso.numero_curso || consec
-      const id_unico = `HCD-${numCurso}-${String(consec).padStart(4, '0')}`
-      certData = await crearCertificado({
-        id_unico,
-        participante_id: partId,
-        curso_id: cursoId,
-        empresa_id: empresaIdCert, // liga a la empresa para que aparezca en su portal
-        nombre_participante: participante.nombre,
-        nombre_curso: curso.nombre,
-        lugar: curso.lugar_online || 'Online',
-        duracion: curso.duracion,
-        modalidad: 'online',
-        instructor_nombre: 'Néstor Daniel Reyes Díaz',
-        instructor_rfc: 'REDN-770428-433-0005',
-        director_nombre: 'Mirna Rosas Delgado',
-        fecha_curso: fechaCurso,
-        fecha_emision: new Date().toISOString(),
-      })
-      // Marcar la asignación como completada (si existe)
+        const consec = await siguienteConsecutivo()
+        let numEvento = null, fechaCurso = null
+        try {
+          const { data: ccList } = await supabase.from('cursos_confirmados')
+            .select('numero_curso, fecha_inicio').eq('curso_id', cursoId).not('numero_curso', 'is', null)
+            .order('fecha_inicio', { ascending: false }).limit(1)
+          const cc = ccList && ccList[0]
+          numEvento = cc?.numero_curso
+          fechaCurso = cc?.fecha_inicio || null
+        } catch (_) {}
+        const numCurso = numEvento || curso.numero_curso || consec
+        const id_unico = `HCD-${numCurso}-${String(consec).padStart(4, '0')}`
+        certData = await crearCertificado({
+          id_unico,
+          participante_id: partId,
+          curso_id: cursoId,
+          empresa_id: empresaIdCert,
+          nombre_participante: participante.nombre,
+          nombre_curso: curso.nombre,
+          lugar: curso.lugar_online || 'Online',
+          duracion: curso.duracion,
+          modalidad: 'online',
+          instructor_nombre: 'Néstor Daniel Reyes Díaz',
+          instructor_rfc: 'REDN-770428-433-0005',
+          director_nombre: 'Mirna Rosas Delgado',
+          fecha_curso: fechaCurso,
+          fecha_emision: new Date().toISOString(),
+        })
+      } catch (errCert) {
+        console.error('El resultado se guardó, pero el certificado no se generó automáticamente:', errCert)
+        certData = null
+      }
+      // Marcar la asignación como completada (si existe) — tampoco bloquea
       try {
         await supabase.from('asignaciones').update({ estado: 'completado' })
           .eq('empleado_id', partId).eq('curso_id', cursoId)
