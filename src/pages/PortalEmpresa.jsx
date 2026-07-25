@@ -313,6 +313,7 @@ function BannerConvocatoria({ empresa, onIr }) {
       // Solo las dirigidas a EMPRESA (mostrar_en = 'empresa' o 'ambos', o sin definir = ambos)
       const visibles = data.filter(c =>
         (!c.estado || c.estado === 'abierto') &&
+        c.tipo_curso !== 'empresa' &&
         (!c.mostrar_en || c.mostrar_en === 'empresa' || c.mostrar_en === 'ambos')
       )
       setConvocatorias(visibles)

@@ -144,8 +144,8 @@ export default function EstudianteDashboard() {
           ))}
         </div>
 
-        {/* Banner convocatoria (solo individuales) */}
-        {!esDeEmpresa && <BannerConvocatoriaEstudiante onIr={() => setTab('proximos')} />}
+        {/* Banner convocatoria (todos los alumnos) */}
+        <BannerConvocatoriaEstudiante onIr={() => setTab('proximos')} />
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20 }}>
@@ -697,6 +697,7 @@ function BannerConvocatoriaEstudiante({ onIr }) {
         // Solo las dirigidas a ESTUDIANTE (mostrar_en = 'estudiante' o 'ambos', o sin definir = ambos)
         const visibles = data.filter(c =>
           (!c.estado || c.estado === 'abierto') &&
+          c.tipo_curso !== 'empresa' &&
           (!c.mostrar_en || c.mostrar_en === 'estudiante' || c.mostrar_en === 'ambos')
         )
         setConvocatorias(visibles)
