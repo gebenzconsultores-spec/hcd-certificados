@@ -11,8 +11,8 @@ export default function Bienvenida() {
     (async () => {
       const hoy = new Date().toISOString().slice(0, 10)
       const { data } = await supabase.from('proximos_cursos').select('*').gte('fecha', hoy).order('fecha', { ascending: true })
-      // Los cursos "en curso" ya no se muestran como convocatorias
-      setConvocatorias((data || []).filter(c => c.estado !== 'en_curso'))
+      // El cintillo público solo muestra convocatorias ABIERTAS de HCD (no las cerradas/de una empresa específica)
+      setConvocatorias((data || []).filter(c => c.estado !== 'en_curso' && c.estado !== 'cerrado' && c.tipo_curso !== 'empresa' && c.mostrar_en !== 'empresa' && !c.empresa_id))
     })()
   }, [])
 

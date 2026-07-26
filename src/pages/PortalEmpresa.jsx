@@ -313,7 +313,7 @@ function BannerConvocatoria({ empresa, onIr }) {
       // Solo las dirigidas a EMPRESA (mostrar_en = 'empresa' o 'ambos', o sin definir = ambos)
       const visibles = data.filter(c =>
         (!c.estado || c.estado === 'abierto') &&
-        c.tipo_curso !== 'empresa' &&
+        c.tipo_curso !== 'empresa' && !c.empresa_id &&
         (!c.mostrar_en || c.mostrar_en === 'empresa' || c.mostrar_en === 'ambos')
       )
       setConvocatorias(visibles)
@@ -799,6 +799,7 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
   const [modalCompra, setModalCompra] = useState(null)
   const [vista, setVista] = useState('cursos') // 'cursos' o 'microcredenciales'
   const [familiaAbierta, setFamiliaAbierta] = useState('todas')
+  const [buscaCurso, setBuscaCurso] = useState('')
 
   const COLOR_FAMILIA = {
     'Sistemas de Gestión': '#1d4ed8',
@@ -809,7 +810,10 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
 
   // Agrupar cursos por familia
   const familias = [...new Set(cursos.map(c => c.familia?.nombre).filter(Boolean))]
-  const cursosFiltrados = familiaAbierta === 'todas' ? cursos : cursos.filter(c => c.familia?.nombre === familiaAbierta)
+  const porFamilia = familiaAbierta === 'todas' ? cursos : cursos.filter(c => c.familia?.nombre === familiaAbierta)
+  const cursosFiltrados = buscaCurso.trim()
+    ? porFamilia.filter(c => `${c.nombre || ''} ${c.clave_interna || ''} ${c.categoria || ''}`.toLowerCase().includes(buscaCurso.toLowerCase()))
+    : porFamilia
 
   return (
     <div>
@@ -821,6 +825,10 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
 
       {vista === 'cursos' ? (
         <>
+          {/* Buscador de cursos */}
+          <input value={buscaCurso} onChange={e => setBuscaCurso(e.target.value)} placeholder="🔍 Busca un curso por nombre o clave..."
+            style={{ width: '100%', maxWidth: 440, border: '1px solid #d1d5db', borderRadius: 10, padding: '10px 14px', fontSize: 14, outline: 'none', marginBottom: 16, boxSizing: 'border-box' }} />
+
           {/* Pestañas de familias */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
             <button onClick={() => setFamiliaAbierta('todas')}
@@ -843,7 +851,7 @@ function TabCursos({ empresa, cursos, microcursos, empleados, recargar }) {
           {/* Cursos de la familia */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: 14 }}>
             {cursosFiltrados.length === 0 ? (
-              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos en esta familia.</div>
+              <div style={{ gridColumn: '1/-1', padding: 40, textAlign: 'center', color: '#94a3b8' }}>{buscaCurso.trim() ? 'Ningún curso coincide con tu búsqueda.' : 'No hay cursos en esta familia.'}</div>
             ) : (
               cursosFiltrados.map(c => {
                 const color = COLOR_FAMILIA[c.familia?.nombre] || '#8B1A1A'
