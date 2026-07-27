@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getEmpresas } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 const IVA = 0.16
 
@@ -68,6 +77,21 @@ export default function RentaPlataforma() {
 
   async function toggleEstadoFactura(id, estado) {
     await supabase.from('facturas_renta').update({ estado }).eq('id', id)
+    await cargar()
+  }
+
+  async function eliminarFactura(f) {
+    if (!window.confirm(`¿Eliminar la factura ${f.folio || ''}?`)) return
+    const { error } = await supabase.from('facturas_renta').delete().eq('id', f.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    await cargar()
+  }
+  async function eliminarRenta(r) {
+    const nombre = r.empresa?.nombre || 'esta empresa'
+    if (!window.confirm(`¿Eliminar la renta de ${nombre}? También se eliminarán sus facturas de renta.`)) return
+    try { await supabase.from('facturas_renta').delete().eq('renta_id', r.id) } catch (_) {}
+    const { error } = await supabase.from('rentas_plataforma').delete().eq('id', r.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
     await cargar()
   }
 
@@ -157,7 +181,11 @@ td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       </div>
 
       {/* Rentas activas */}
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 14 }}>Rentas configuradas</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>Rentas configuradas</h2>
+        <button onClick={() => exportarAExcel(rentas.map(r => ({ 'Empresa': r.empresa?.nombre || '', 'Precio mensual': r.precio_mensual || 0, 'IVA': r.aplica_iva ? 'Sí' : 'No', 'Total mensual': (r.precio_mensual || 0) + (r.aplica_iva ? (r.precio_mensual || 0) * IVA : 0), 'Desde': r.fecha_inicio ? new Date(r.fecha_inicio).toLocaleDateString('es-MX') : '', 'Estado': r.activo ? 'Activo' : 'Inactivo' })), `rentas_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Rentas')}
+          style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel</button>
+      </div>
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden', marginBottom: 28 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -184,10 +212,13 @@ td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
                     </span>
                   </td>
                   <td style={{ padding: '11px 16px' }}>
-                    <button onClick={() => generarFactura(r)} disabled={saving}
-                      style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
-                      📄 Generar factura
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <button onClick={() => generarFactura(r)} disabled={saving}
+                        style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        📄 Generar factura
+                      </button>
+                      <button onClick={() => eliminarRenta(r)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 9px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
                   </td>
                 </tr>
               )
@@ -197,7 +228,11 @@ td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
       </div>
 
       {/* Historial facturas */}
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 14 }}>Historial de facturas</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>Historial de facturas</h2>
+        <button onClick={() => exportarAExcel(facturas.map(f => ({ 'Folio': f.folio || '', 'Empresa': (empresas.find(e => e.id === f.empresa_id)?.nombre) || f.empresa?.nombre || '', 'Periodo': f.periodo || '', 'Subtotal': f.subtotal || 0, 'IVA': f.iva || 0, 'Total': f.total || 0, 'Estado': f.estado === 'pagada' ? 'Pagada' : 'Pendiente', 'Pago avisado': f.pago_avisado ? 'Sí' : 'No' })), `facturas_renta_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Facturas')}
+          style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel</button>
+      </div>
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -221,12 +256,16 @@ td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
                   <span style={{ background: f.estado === 'pagada' ? '#f0fdf4' : '#fef9c3', color: f.estado === 'pagada' ? '#059669' : '#92400e', padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600 }}>
                     {f.estado === 'pagada' ? '✓ Pagada' : '⏳ Pendiente'}
                   </span>
+                  {f.estado !== 'pagada' && f.pago_avisado && <span style={{ marginLeft: 6, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>💰 Pago avisado</span>}
                 </td>
                 <td style={{ padding: '11px 16px' }}>
-                  <button onClick={() => toggleEstadoFactura(f.id, f.estado === 'pagada' ? 'pendiente' : 'pagada')}
-                    style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', color: '#475569' }}>
-                    {f.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button onClick={() => toggleEstadoFactura(f.id, f.estado === 'pagada' ? 'pendiente' : 'pagada')}
+                      style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', color: '#475569' }}>
+                      {f.estado === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada'}
+                    </button>
+                    <button onClick={() => eliminarFactura(f)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                  </div>
                 </td>
               </tr>
             ))}
