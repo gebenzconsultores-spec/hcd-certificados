@@ -102,7 +102,7 @@ export default function EstudianteDashboard() {
         Soporte
       </a>
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 32px' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 clamp(14px,4vw,32px)' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 60 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, background: '#1d4ed8', borderRadius: '50%' }} />
@@ -124,14 +124,14 @@ export default function EstudianteDashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'clamp(16px,4vw,32px) clamp(14px,4vw,24px)' }}>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Mi panel de capacitación</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Tus exámenes, certificados y cursos disponibles</p>
         </div>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 28 }}>
           {[
             { label: 'Certificados obtenidos', value: certificados.length, color: '#1d4ed8' },
             { label: 'Exámenes presentados', value: resultados.length, color: '#059669' },
@@ -148,7 +148,7 @@ export default function EstudianteDashboard() {
         <BannerConvocatoriaEstudiante onIr={() => setTab('proximos')} />
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           {[
             { id: 'asignados', label: '⚡ Microcredenciales' },
             { id: 'certificados', label: '📜 Mis certificados' },
@@ -159,7 +159,7 @@ export default function EstudianteDashboard() {
             ...(!esDeEmpresa ? [{ id: 'cotizaciones', label: '💼 Mis cotizaciones' }] : []),
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#1d4ed8' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#1d4ed8' : '#64748b', cursor: 'pointer' }}>
+              style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#1d4ed8' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#1d4ed8' : '#64748b', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {t.label}
             </button>
           ))}
@@ -390,7 +390,7 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(440px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Mis datos</h3>
         <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>Corrige tu información de contacto.</p>
 
@@ -639,7 +639,7 @@ function ModalCalificarCurso({ estudiante, curso, evaluacion, onClose, onDone })
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 440, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(440px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Califica el curso</h3>
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 18 }}>{curso.curso_nombre}</p>
 
@@ -1185,7 +1185,7 @@ function MisCotizacionesEstudiante({ estudiante }) {
 const IVA_COT_EST = 0.16
 const EMAIL_COT_EST = 'luisgomez@hablandocondatos.com.mx'
 const overlayEst = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
-const modalStyleEst = { background: '#fff', borderRadius: 16, padding: '28px 32px', width: 460, maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
+const modalStyleEst = { background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(460px,92vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
 
 function tierDuracionCotEst(horas) {
   const h = Number(horas) || 0
