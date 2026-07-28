@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import Notificaciones from './Notificaciones.jsx'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { logout } from '../lib/supabase'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: '◉', end: true },
@@ -32,6 +32,14 @@ const NAV = [
 export default function AdminLayout() {
   const { session, loading } = useAuth()
   const navigate = useNavigate()
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    const onR = () => setIsMobile(window.innerWidth < 900)
+    window.addEventListener('resize', onR)
+    return () => window.removeEventListener('resize', onR)
+  }, [])
 
   useEffect(() => {
     if (!loading && !session) navigate('/login')
@@ -41,7 +49,7 @@ export default function AdminLayout() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8f9fb' }}>
-      <aside style={{ width: 240, background: '#fff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, height: '100vh', overflowY: 'auto' }}>
+      <aside style={{ width: 240, background: '#fff', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, height: '100vh', overflowY: 'auto', zIndex: 200, transition: 'transform .25s ease', transform: (isMobile && !menuOpen) ? 'translateX(-100%)' : 'translateX(0)', boxShadow: (isMobile && menuOpen) ? '0 0 40px rgba(0,0,0,.2)' : 'none' }}>
         <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 32, height: 32, background: '#8B1A1A', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -62,7 +70,7 @@ export default function AdminLayout() {
               </div>
             )
             return (
-              <NavLink key={item.to} to={item.to} end={item.end}
+              <NavLink key={item.to} to={item.to} end={item.end} onClick={() => { if (isMobile) setMenuOpen(false) }}
                 style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '8px 12px', borderRadius: 8, marginBottom: 2,
@@ -94,11 +102,18 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main style={{ flex: 1, marginLeft: 240, minHeight: '100vh' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', padding: '16px 32px 0' }}>
+      {isMobile && menuOpen && (
+        <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 150 }} />
+      )}
+
+      <main style={{ flex: 1, marginLeft: isMobile ? 0 : 240, minHeight: '100vh', width: isMobile ? '100%' : 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px clamp(14px,4vw,32px) 0', gap: 12 }}>
+          {isMobile ? (
+            <button onClick={() => setMenuOpen(true)} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 12px', fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>☰</button>
+          ) : <div />}
           <Notificaciones />
         </div>
-        <div style={{ padding: '12px 32px 28px' }}>
+        <div style={{ padding: '12px clamp(14px,4vw,32px) 28px', overflowX: 'auto' }}>
           <Outlet />
         </div>
       </main>
