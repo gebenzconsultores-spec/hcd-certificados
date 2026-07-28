@@ -156,7 +156,7 @@ export function EmpresaDashboard() {
         Soporte
       </a>
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 32px' }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e2e8f0', padding: '0 clamp(14px,4vw,32px)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: 60 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 8, height: 8, background: '#8B1A1A', borderRadius: '50%' }} />
@@ -179,7 +179,7 @@ export function EmpresaDashboard() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: 'clamp(16px,4vw,28px) clamp(14px,4vw,24px)' }}>
 
         {/* Banner de prueba */}
         {empresa.tipo_acceso === 'invitado' && diasRestantes !== null && !empresa.exento_pago && (
@@ -227,10 +227,10 @@ export function EmpresaDashboard() {
         ) : (
           <>
             {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 24, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 24, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
               {TABS.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
-                  style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#8B1A1A' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#8B1A1A' : '#64748b', cursor: 'pointer' }}>
+                  style={{ flexShrink: 0, whiteSpace: 'nowrap', background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#8B1A1A' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#8B1A1A' : '#64748b', cursor: 'pointer' }}>
                   {t.label}
                 </button>
               ))}
@@ -360,7 +360,7 @@ function TabResumen({ empresa, empleados, asignaciones, certificados, cursos }) 
   const completados = asignaciones.filter(a => a.estado === 'completado').length
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14, marginBottom: 28 }}>
         {[
           { label: 'Empleados registrados', value: empleados.length, color: '#8B1A1A' },
           { label: 'Cursos asignados', value: asignaciones.length, color: '#1d4ed8' },
@@ -977,7 +977,7 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
 
   return (
     <div style={overlay} onClick={onClose}>
-      <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ ...modalStyle, width: 'min(520px,94vw)', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Asignar: {item.titulo}</h3>
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Selecciona empleados y la fecha de la sesión por Zoom</p>
 
@@ -987,7 +987,7 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
           <span style={{ color: '#64748b', fontSize: 12 }}> — se impartirá en la fecha y hora que programes</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 }}>
           <div>
             <label style={lbl}>Fecha</label>
             <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
@@ -999,7 +999,7 @@ function ModalAsignar({ empresa, item, tipo, empleados, onClose, onDone }) {
         </div>
 
         {false && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={lbl}>Fecha</label>
               <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={inp} />
@@ -1258,7 +1258,7 @@ function ModalCompra({ empresa, curso, empleados, onClose, onDone, idPrecargado 
 
   return (
     <div style={overlay} onClick={onClose}>
-      <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ ...modalStyle, width: 'min(520px,94vw)', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Asignar curso: {curso.nombre}</h3>
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Este curso tiene costo. Ingresa tu ID de compra.</p>
 
@@ -2091,7 +2091,7 @@ function ModalInscribirProximo({ empresa, empleados, proximo, cuposDisponibles, 
 
   return (
     <div style={overlay} onClick={onClose}>
-      <div style={{ ...modalStyle, width: 520, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ ...modalStyle, width: 'min(520px,94vw)', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Inscribir alumnos: {proximo.curso_nombre}</h3>
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>
           {new Date(proximo.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })} · {proximo.hora} · {cuposDisponibles} lugares disponibles
@@ -2164,7 +2164,7 @@ const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borde
 const btnSecondary = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer' }
 const btnGhost = { background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }
 const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }
-const modalStyle = { background: '#fff', borderRadius: 16, padding: '28px 32px', width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
+const modalStyle = { background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(460px,94vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
 
 // ─── Precio de convocatoria (mismo modelo que el cotizador público) ───
 const IVA_COT = 0.16
