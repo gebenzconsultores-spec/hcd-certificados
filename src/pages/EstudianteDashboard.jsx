@@ -473,6 +473,7 @@ function CursosAsignados({ estudiante, certificados }) {
                 </button>
               ) })()}
             </div>
+            <BotonManualCurso estudiante={estudiante} cursoId={a.curso_id} cursoNombre={a.curso_nombre} aprobado={certificados.some(cert => cert.nombre_curso === a.curso_nombre)} />
           </div>
         )
       })}
@@ -486,6 +487,57 @@ function CursosAsignados({ estudiante, certificados }) {
 }
 
 // ─── Mis cursos (individual: solo los desbloqueados) ──────────
+// ─── Botón: descargar manual del curso (solo si aprobó, una sola vez) ───
+function BotonManualCurso({ estudiante, cursoId, cursoNombre, aprobado }) {
+  const [manualUrl, setManualUrl] = useState(null)
+  const [descargado, setDescargado] = useState(false)
+  const [bajando, setBajando] = useState(false)
+
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      if (!aprobado || !cursoId) return
+      try {
+        const { data: c } = await supabase.from('cursos').select('manual_url').eq('id', cursoId).maybeSingle()
+        const url = c?.manual_url || null
+        if (!vivo) return
+        setManualUrl(url)
+        if (url) {
+          const { data: md } = await supabase.from('manuales_descargados')
+            .select('id').eq('participante_id', estudiante.id).eq('curso_id', cursoId).limit(1)
+          if (vivo) setDescargado(!!(md && md.length))
+        }
+      } catch (_) {}
+    })()
+    return () => { vivo = false }
+  }, [cursoId, aprobado])
+
+  async function descargar() {
+    if (!manualUrl || bajando) return
+    setBajando(true)
+    try {
+      window.open(manualUrl, '_blank', 'noopener')
+      await supabase.from('manuales_descargados').insert({ participante_id: estudiante.id, curso_id: cursoId, curso_nombre: cursoNombre })
+    } catch (_) {}
+    setDescargado(true)
+    setBajando(false)
+  }
+
+  if (!aprobado || !manualUrl) return null
+  return (
+    <div style={{ marginTop: 8 }}>
+      {descargado ? (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f1f5f9', color: '#64748b', borderRadius: 7, padding: '6px 12px', fontSize: 12, fontWeight: 600 }}>✓ Manual descargado</div>
+      ) : (
+        <button onClick={descargar} disabled={bajando}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#0f766e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+          📘 {bajando ? 'Descargando...' : 'Descargar manual (1 vez)'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function MisCursosIndividual({ estudiante, certificados }) {
   const [cursos, setCursos] = useState([])
   const [evaluaciones, setEvaluaciones] = useState([])
@@ -545,6 +597,7 @@ function MisCursosIndividual({ estudiante, certificados }) {
                 </button>
               ) })()}
             </div>
+            <BotonManualCurso estudiante={estudiante} cursoId={c.curso_id} cursoNombre={c.curso_nombre} aprobado={certificados.some(cert => cert.nombre_curso === c.curso_nombre)} />
           </div>
         )
       })}

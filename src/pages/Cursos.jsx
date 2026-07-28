@@ -177,6 +177,21 @@ export default function Cursos() {
     } finally { setSaving(false) }
   }
 
+  async function subirManual(c, file) {
+    if (!file) return
+    if (file.type !== 'application/pdf') { alert('El manual debe ser un PDF.'); return }
+    try {
+      const nombreArch = `manual_${c.id}_${Date.now()}.pdf`
+      const { error: upErr } = await supabase.storage.from('manuales').upload(nombreArch, file, { upsert: true })
+      if (upErr) { alert('No se pudo subir el PDF: ' + upErr.message + '\n(Verifica que exista el bucket "manuales" público en Supabase.)'); return }
+      const { data: urlData } = supabase.storage.from('manuales').getPublicUrl(nombreArch)
+      const { error } = await supabase.from('cursos').update({ manual_url: urlData.publicUrl }).eq('id', c.id)
+      if (error) { alert('No se pudo guardar el manual: ' + error.message); return }
+      await cargar()
+      alert('✅ Manual del curso subido.')
+    } catch (e) { alert('Error: ' + (e.message || '')) }
+  }
+
   async function borrarCurso(curso) {
     if (!window.confirm(`¿Eliminar "${curso.nombre}" del catálogo?`)) return
     await supabase.from('cursos').delete().eq('id', curso.id)
@@ -348,6 +363,14 @@ export default function Cursos() {
                       <button onClick={() => abrirVerExamen(c)} style={btnSecondary}>👁 Ver examen</button>
                       <button onClick={() => setModalEditar({ ...c })} style={{ ...btnSecondary, padding: '7px 12px' }}>✏️</button>
                       <button onClick={() => borrarCurso(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '7px 12px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
+                      {c.manual_url ? (
+                        <>
+                          <a href={c.manual_url} target="_blank" rel="noopener noreferrer" style={{ ...btnSecondary, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#0f766e', borderColor: '#99f6e4' }}>📘 Manual</a>
+                          <label style={{ ...btnSecondary, cursor: 'pointer' }} title="Reemplazar manual">↻<input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => subirManual(c, e.target.files[0])} /></label>
+                        </>
+                      ) : (
+                        <label style={{ ...btnSecondary, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>⬆️ Manual<input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => subirManual(c, e.target.files[0])} /></label>
+                      )}
                     </div>
                   </div>
                 )
