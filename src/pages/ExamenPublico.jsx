@@ -20,6 +20,12 @@ export default function ExamenPublico() {
   const [alumno, setAlumno] = useState(null)
   const [mensajeBloqueo, setMensajeBloqueo] = useState('')
   const enviandoRef = useRef(false)
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
+  useEffect(() => {
+    const onR = () => setIsMobile(window.innerWidth < 640)
+    window.addEventListener('resize', onR)
+    return () => window.removeEventListener('resize', onR)
+  }, [])
 
   const p = k => v => setParticipante(prev => ({ ...prev, [k]: v }))
 
@@ -304,10 +310,10 @@ export default function ExamenPublico() {
         <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 13 }}>— Examen en línea</span>
       </div>
 
-      <div style={{ maxWidth: 640, margin: '0 auto', padding: '40px 24px' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto', padding: isMobile ? '20px 14px' : '40px 24px' }}>
         {/* FASE BLOQUEADO */}
         {fase === 'bloqueado' && (
-          <div style={{ background: '#fff', border: '2px solid #f59e0b', borderRadius: 16, padding: '36px 32px', textAlign: 'center' }}>
+          <div style={{ background: '#fff', border: '2px solid #f59e0b', borderRadius: 16, padding: isMobile ? '26px 18px' : '36px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#92400e', marginBottom: 8 }}>Acceso no habilitado</h2>
             <p style={{ color: '#64748b', fontSize: 15, marginBottom: 20 }}>{mensajeBloqueo}</p>
@@ -317,7 +323,7 @@ export default function ExamenPublico() {
 
         {/* FASE CARGANDO */}
         {fase === 'cargando' && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: '40px 32px', textAlign: 'center', color: '#64748b' }}>
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: isMobile ? '28px 18px' : '40px 32px', textAlign: 'center', color: '#64748b' }}>
             Cargando…
           </div>
         )}
@@ -330,7 +336,7 @@ export default function ExamenPublico() {
                 <span style={{ color: '#15803d', fontSize: 13 }}>✓ Presentando como <strong>{alumno.nombre}</strong>{alumno.id_empleado ? ` (${alumno.id_empleado})` : ''}</span>
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 10, flexWrap: 'wrap' }}>
               <h2 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{curso.nombre}</h2>
               <span style={{ color: '#64748b', fontSize: 13 }}>{Object.keys(respuestas).length}/{preguntas.length} respondidas</span>
             </div>
@@ -338,7 +344,7 @@ export default function ExamenPublico() {
             {preguntas.map((p, idx) => {
               const opciones = p.tipo === 'verdadero_falso' ? ['Verdadero', 'Falso'] : (p.opciones || [])
               return (
-                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 24px', marginBottom: 14 }}>
+                <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: isMobile ? '16px 16px' : '20px 24px', marginBottom: 14 }}>
                   <p style={{ fontWeight: 600, color: '#1e293b', fontSize: 15, marginBottom: 14 }}>
                     <span style={{ color: '#8B1A1A', marginRight: 8 }}>{idx + 1}.</span>{p.pregunta}
                   </p>
@@ -368,9 +374,9 @@ export default function ExamenPublico() {
 
         {/* FASE RESULTADO */}
         {fase === 'resultado' && resultado && (
-          <div style={{ background: '#fff', border: `2px solid ${resultado.aprobado ? '#16a34a' : '#dc2626'}`, borderRadius: 16, padding: '36px 32px', textAlign: 'center' }}>
+          <div style={{ background: '#fff', border: `2px solid ${resultado.aprobado ? '#16a34a' : '#dc2626'}`, borderRadius: 16, padding: isMobile ? '26px 18px' : '36px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: 56, marginBottom: 16 }}>{resultado.aprobado ? '🎉' : '😔'}</div>
-            <h2 style={{ fontSize: 24, fontWeight: 800, color: resultado.aprobado ? '#15803d' : '#dc2626', marginBottom: 8 }}>
+            <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: resultado.aprobado ? '#15803d' : '#dc2626', marginBottom: 8 }}>
               {resultado.aprobado ? '¡Felicidades, aprobaste!' : 'No aprobaste esta vez'}
             </h2>
             <p style={{ color: '#64748b', fontSize: 15, marginBottom: 24 }}>
