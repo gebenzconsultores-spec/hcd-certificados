@@ -48,7 +48,7 @@ export default function ExamenPublico() {
 
         // Verificar que esté asignado a ESTE curso (asignación viva)
         const { data: asigs } = await supabase.from('asignaciones')
-          .select('id, estado').eq('empleado_id', registro.id).eq('curso_id', cursoId)
+          .select('id, estado, fecha_programada').eq('empleado_id', registro.id).eq('curso_id', cursoId)
         const asignado = (asigs || []).some(a => a.estado !== 'baja' && a.estado !== 'cancelado')
 
         if (!asignado && registro.tipo !== 'individual') {
@@ -93,6 +93,55 @@ export default function ExamenPublico() {
           })
           setFase('resultado')
           return
+        }
+
+        // ── Candado de fecha: el examen solo el ÚLTIMO DÍA del curso ──
+        // Nos guiamos por las FECHAS DEL CURSO (cursos_confirmados), NO por la inscripción.
+        let fechaInicio = null
+        try {
+          const { data: runs } = await supabase.from('cursos_confirmados')
+            .select('fecha_inicio').eq('curso_id', cursoId).order('fecha_inicio', { ascending: false })
+          const listaRuns = (runs || []).filter(r => r.fecha_inicio)
+          if (listaRuns.length) {
+            // Hay fechas del curso: mandan ellas. Ubicamos la corrida del alumno; si no, la más reciente.
+            const asigConFecha = (asigs || []).find(a => a.fecha_programada && a.estado !== 'baja' && a.estado !== 'cancelado')
+            let suRun = null
+            if (asigConFecha) suRun = listaRuns.find(r => String(r.fecha_inicio).slice(0, 10) === String(asigConFecha.fecha_programada).slice(0, 10))
+            fechaInicio = (suRun && suRun.fecha_inicio) || listaRuns[0].fecha_inicio
+          }
+        } catch (_) {}
+        // Solo si el curso NO tiene fechas programadas usamos respaldos (para no bloquear de más).
+        if (!fechaInicio) {
+          const asigConFecha = (asigs || []).find(a => a.fecha_programada && a.estado !== 'baja' && a.estado !== 'cancelado')
+          if (asigConFecha) fechaInicio = asigConFecha.fecha_programada
+        }
+        if (!fechaInicio) {
+          try {
+            const { data: comps } = await supabase.from('compras')
+              .select('fecha_curso, created_at').eq('participante_id', registro.id).eq('curso_id', cursoId)
+              .order('created_at', { ascending: false }).limit(1)
+            if (comps && comps[0] && comps[0].fecha_curso) fechaInicio = comps[0].fecha_curso
+          } catch (_) {}
+        }
+        // Solo aplicamos el candado si tenemos una fecha confiable (si no, NO bloqueamos)
+        if (fechaInicio) {
+          const dias = Number(data?.dias) || 1
+          const addDays = (ymd, n) => {
+            const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() + n)
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+          }
+          const iniYmd = String(fechaInicio).slice(0, 10)
+          const ultimoYmd = addDays(iniYmd, dias - 1)
+          const hoyYmd = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+          if (hoyYmd !== ultimoYmd) {
+            const legible = new Date(ultimoYmd + 'T00:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
+            const antes = hoyYmd < ultimoYmd
+            setMensajeBloqueo(antes
+              ? `Este examen estará disponible únicamente el ${legible} (último día del curso). Por favor, preséntalo ese día.`
+              : `El período para presentar este examen fue el ${legible} (último día del curso) y ya concluyó. Si necesitas presentarlo, contacta al administrador.`)
+            setFase('bloqueado')
+            return
+          }
         }
 
         setFase('examen')
