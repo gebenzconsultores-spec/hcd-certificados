@@ -129,8 +129,9 @@ export default function ExamenPublico() {
             if (comps && comps[0] && comps[0].fecha_curso) fechaInicio = comps[0].fecha_curso
           } catch (_) {}
         }
-        // Solo aplicamos el candado si tenemos una fecha confiable (si no, NO bloqueamos)
-        if (fechaInicio) {
+        // Solo aplicamos el candado si tenemos una fecha confiable Y el alumno
+        // NO tiene permiso especial del admin (examen_sin_fecha).
+        if (fechaInicio && registro.examen_sin_fecha !== true) {
           const dias = Number(data?.dias) || 1
           const addDays = (ymd, n) => {
             const d = new Date(ymd + 'T00:00:00'); d.setDate(d.getDate() + n)

@@ -158,6 +158,13 @@ export default function Participantes() {
     } finally { setSaving(false) }
   }
 
+  async function toggleExamenSinFecha(p) {
+    const nuevo = !p.examen_sin_fecha
+    const { error } = await supabase.from('participantes').update({ examen_sin_fecha: nuevo }).eq('id', p.id)
+    if (error) { alert('No se pudo actualizar: ' + error.message); return }
+    setParticipantes(prev => prev.map(x => x.id === p.id ? { ...x, examen_sin_fecha: nuevo } : x))
+  }
+
   async function eliminar(p) {
     if (!window.confirm(`¿ELIMINAR PERMANENTEMENTE a "${p.nombre}"?\n\nEsta acción no se puede deshacer.`)) return
     try {
@@ -273,6 +280,10 @@ export default function Participantes() {
                       <button onClick={() => setModalAsignar(p)} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>➕ Asignar curso</button>
                       <button onClick={() => verOGenerarPassword(p)} style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>🔑 {p.portal_password ? 'Contraseña' : 'Generar clave'}</button>
                       <button onClick={() => setModalEditar({ ...p })} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>✏️ Editar</button>
+                      <button onClick={() => toggleExamenSinFecha(p)} title="Permitir presentar el examen aunque no sea la fecha del curso"
+                        style={{ background: p.examen_sin_fecha ? '#8B1A1A' : '#f1f5f9', color: p.examen_sin_fecha ? '#fff' : '#475569', border: `1px solid ${p.examen_sin_fecha ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>
+                        {p.examen_sin_fecha ? '🔓 Examen libre ✓' : '🔒 Examen libre'}
+                      </button>
                       <button onClick={() => eliminar(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
                     </div>
                   </td>
