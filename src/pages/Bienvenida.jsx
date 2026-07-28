@@ -58,7 +58,7 @@ export default function Bienvenida() {
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg,#fff 0%,#fef5f5 100%)', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <header style={{ padding: '24px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <header style={{ padding: 'clamp(16px,4vw,24px) clamp(16px,4vw,32px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 36, height: 36, background: '#8B1A1A', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ width: 12, height: 12, background: '#fff', borderRadius: '50%' }} />
@@ -93,16 +93,16 @@ export default function Bienvenida() {
       {/* Hero */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px 24px 60px' }}>
         <div style={{ textAlign: 'center', marginBottom: 48, maxWidth: 680 }}>
-          <h1 style={{ fontSize: 38, fontWeight: 800, color: '#1e293b', lineHeight: 1.15, marginBottom: 16 }}>
+          <h1 style={{ fontSize: 'clamp(26px,7vw,38px)', fontWeight: 800, color: '#1e293b', lineHeight: 1.15, marginBottom: 16 }}>
             Plataforma de capacitación y<br /><span style={{ color: '#8B1A1A' }}>certificación profesional</span>
           </h1>
-          <p style={{ fontSize: 16, color: '#64748b', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 'clamp(14px,3.5vw,16px)', color: '#64748b', lineHeight: 1.6 }}>
             Gestiona cursos, certificados verificables con QR, exámenes en línea y todo el proceso de capacitación de tu organización en un solo lugar.
           </p>
         </div>
 
         {/* Tarjetas de acceso */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 20, maxWidth: 980, width: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 20, maxWidth: 980, width: '100%' }}>
           {opciones.map(o => (
             <div key={o.id} onClick={o.accion}
               style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '32px 28px', cursor: 'pointer', transition: 'transform .15s, box-shadow .15s', display: 'flex', flexDirection: 'column' }}
@@ -122,7 +122,7 @@ export default function Bienvenida() {
       </div>
 
       {/* Footer */}
-      <footer style={{ padding: '20px 32px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+      <footer style={{ padding: 'clamp(16px,4vw,20px) clamp(16px,4vw,32px)', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
         <p style={{ color: '#94a3b8', fontSize: 12 }}>
           Hablando con Datos · Puebla, México · Tel: 222 354 9353 · www.hablandocondatos.com.mx
         </p>
