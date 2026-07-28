@@ -378,7 +378,7 @@ export default function CotizadorPublico() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: 'clamp(16px,4vw,32px) clamp(14px,4vw,24px)' }}>
 
         {/* PASO 1 */}
         {paso === 1 && (
@@ -457,7 +457,7 @@ export default function CotizadorPublico() {
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Configura tu cotización</h2>
             <p style={{ color: '#8B1A1A', fontWeight: 600, marginBottom: 24 }}>{cursoSel.nombre}</p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 20 }}>
               {/* Tipo */}
               {cursoSel.id && (
                 <div style={card}>
@@ -584,7 +584,7 @@ export default function CotizadorPublico() {
             </div>
 
             {/* Preview precio */}
-            <div style={{ background: '#1e293b', borderRadius: 14, padding: '20px 28px', marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: '#1e293b', borderRadius: 14, padding: '20px 28px', marginTop: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <div style={{ color: '#94a3b8', fontSize: 12, marginBottom: 4 }}>{nums.especial ? 'COTIZACIÓN' : 'TOTAL ESTIMADO'}</div>
                 <div style={{ color: '#fff', fontSize: nums.especial ? 20 : 28, fontWeight: 800 }}>
@@ -607,7 +607,7 @@ export default function CotizadorPublico() {
             <button onClick={() => setPaso(2)} style={btnBack}>← Volver</button>
             <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 6 }}>Tus datos de contacto</h2>
             <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Para enviarte la cotización formal</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 600 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16, maxWidth: 600 }}>
               <div style={{ gridColumn: '1/-1' }}>
                 <label style={lbl}>Empresa *</label>
                 <input value={contacto.empresa_nombre} onChange={e => ct('empresa_nombre')(e.target.value)} placeholder="Nombre de tu empresa" style={inp} />
