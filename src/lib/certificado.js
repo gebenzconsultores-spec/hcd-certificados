@@ -43,7 +43,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
 .cuerpo{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding-top:16mm;}
 .empresa-nombre{font-size:17pt;font-weight:700;color:#8B1A1A;margin-bottom:2mm;}
 .otorga{font-size:11pt;color:#555;margin-bottom:5mm;}
-.nombre{font-family:'Lucida Calligraphy','Lucida Handwriting','Segoe Script',cursive;font-weight:700;font-size:30pt;color:#1a1a1a;line-height:1.1;margin-bottom:9mm;padding:0 10mm;}
+.nombre{font-family:'Lucida Calligraphy','Lucida Handwriting','Segoe Script',cursive;font-weight:700;font-size:27pt;color:#1a1a1a;line-height:1.1;margin-bottom:9mm;padding:0 10mm;}
 .por{font-size:10pt;color:#555;margin-bottom:1.5mm;}
 .participar{font-size:13pt;font-weight:700;color:#1a1a1a;margin-bottom:1.5mm;}
 .el-curso{font-size:10pt;color:#555;margin-bottom:3mm;}
@@ -116,7 +116,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
     while(el.offsetWidth > avail && s > minPt && guard < 300){ s -= 0.5; el.style.fontSize = s + 'pt'; guard++; }
   }
   function ajustarCert(){
-    fitTexto('.nombre', 30, 16);
+    fitTexto('.nombre', 27, 16);
     fitTexto('.curso-nombre', 19, 10);
   }
   window.onload = () => {
