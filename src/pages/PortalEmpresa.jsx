@@ -226,11 +226,19 @@ export function EmpresaDashboard() {
           </div>
         ) : (
           <>
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 24, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+            {/* Tabs (pastillas que se acomodan solas, sin barra de scroll) */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
               {TABS.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
-                  style={{ flexShrink: 0, whiteSpace: 'nowrap', background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#8B1A1A' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#8B1A1A' : '#64748b', cursor: 'pointer' }}>
+                  style={{
+                    background: tab === t.id ? '#8B1A1A' : '#f8fafc',
+                    color: tab === t.id ? '#fff' : '#475569',
+                    border: `1px solid ${tab === t.id ? '#8B1A1A' : '#e2e8f0'}`,
+                    borderRadius: 10, padding: '9px 16px', fontSize: 13,
+                    fontWeight: tab === t.id ? 700 : 500, cursor: 'pointer',
+                    whiteSpace: 'nowrap', transition: 'background .15s, color .15s, border-color .15s',
+                    boxShadow: tab === t.id ? '0 2px 8px rgba(139,26,26,.18)' : 'none'
+                  }}>
                   {t.label}
                 </button>
               ))}
