@@ -44,6 +44,7 @@ export default function Cursos() {
   const [cursos, setCursos] = useState([])
   const [busqueda, setBusqueda] = useState('')
   const [familias, setFamilias] = useState([])
+  const [importando, setImportando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [familiaAbierta, setFamiliaAbierta] = useState(null)
   const [vista, setVista] = useState('cursos') // 'cursos' o 'microcredenciales'
@@ -177,6 +178,77 @@ export default function Cursos() {
     } finally { setSaving(false) }
   }
 
+  const prefijoFam = fam => (fam?.clave || (fam?.nombre || 'HCD').slice(0, 3).toUpperCase())
+
+  function descargarExcelCursos() {
+    if (!cursos.length) { alert('No hay cursos para exportar.'); return }
+    const filas = cursos.map(c => ({
+      'Nombre': c.nombre || '',
+      'Clave': c.clave_interna || '',
+      'Categoría': c.categoria || '',
+      'Familia': familias.find(f => f.id === c.familia_id)?.nombre || '',
+      'Duración (h)': c.duracion || 0,
+      'Días': c.dias || '',
+      'Modalidad': c.modalidad || '',
+      'Aval': c.aval_institucion ? 'Sí' : 'No',
+      'Nombre aval': c.nombre_aval || '',
+      'Público': c.es_publico === false ? 'No' : 'Sí',
+    }))
+    const ws = XLSX.utils.json_to_sheet(filas)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Cursos')
+    XLSX.writeFile(wb, `cursos_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
+
+  async function subirExcelCursos(file) {
+    if (!file) return
+    setImportando(true)
+    try {
+      const buf = await file.arrayBuffer()
+      const wb = XLSX.read(buf, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const filas = XLSX.utils.sheet_to_json(ws, { defval: '' })
+      if (!filas.length) { alert('El Excel está vacío.'); setImportando(false); return }
+
+      // Contador de clave por familia, a partir del máximo actual
+      const contador = {}
+      familias.forEach(fam => {
+        const pref = prefijoFam(fam)
+        let max = 0
+        cursos.filter(c => c.familia_id === fam.id).forEach(c => {
+          const m = (c.clave_interna || '').match(new RegExp(`${pref}-(\\d+)`))
+          if (m) max = Math.max(max, parseInt(m[1], 10))
+        })
+        contador[fam.id] = max
+      })
+
+      const val = (fila, ...keys) => { for (const k of keys) { if (fila[k] !== undefined && fila[k] !== '') return fila[k] } return '' }
+      let creados = 0, errores = 0
+      for (const fila of filas) {
+        const nombre = String(val(fila, 'Nombre', 'nombre', 'NOMBRE')).trim()
+        if (!nombre) continue
+        const famNombre = String(val(fila, 'Familia', 'familia')).trim()
+        const fam = familias.find(f => (f.nombre || '').toLowerCase() === famNombre.toLowerCase())
+        let clave_interna = null
+        if (fam) { contador[fam.id] = (contador[fam.id] || 0) + 1; clave_interna = `${prefijoFam(fam)}-${String(contador[fam.id]).padStart(3, '0')}` }
+        const duracion = Number(val(fila, 'Duración (h)', 'Duracion', 'duracion', 'Duración')) || 0
+        let categoria = String(val(fila, 'Categoría', 'Categoria', 'categoria') || 'B').trim().toUpperCase().slice(0, 1)
+        if (!['A', 'B', 'C'].includes(categoria)) categoria = 'B'
+        const modalidad = String(val(fila, 'Modalidad', 'modalidad') || 'online').trim().toLowerCase() === 'presencial' ? 'presencial' : 'online'
+        const avalTxt = String(val(fila, 'Aval', 'aval')).trim().toLowerCase()
+        const aval_institucion = ['sí', 'si', 'true', '1', 'x'].includes(avalTxt)
+        const nombre_aval = String(val(fila, 'Nombre aval', 'nombre_aval')).trim()
+        try {
+          await crearCurso({ nombre, duracion, dias: diasPorHoras(duracion), categoria, familia_id: fam?.id || null, clave_interna, modalidad, aval_institucion, nombre_aval, activo: true, es_publico: true })
+          creados++
+        } catch (_) { errores++ }
+      }
+      await cargar()
+      alert(`✅ Importación terminada.\nCursos creados: ${creados}${errores ? `\nCon error: ${errores}` : ''}`)
+    } catch (e) { alert('Error al leer el Excel: ' + (e.message || '')) }
+    setImportando(false)
+  }
+
   async function subirManual(c, file) {
     if (!file) return
     if (file.type !== 'application/pdf') { alert('El manual debe ser un PDF.'); return }
@@ -302,7 +374,17 @@ export default function Cursos() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b' }}>Catálogo de cursos</h1>
           <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>Cursos organizados por familia, con clave interna y exámenes</p>
         </div>
-        {vista === 'cursos' && <button onClick={() => setModal(true)} style={btnPrimary}>+ Agregar curso</button>}
+        {vista === 'cursos' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button onClick={descargarExcelCursos} style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel</button>
+            <label style={{ background: '#fff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 700, cursor: importando ? 'wait' : 'pointer' }}>
+              {importando ? 'Importando...' : '⬆️ Importar Excel'}
+              <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }} disabled={importando}
+                onChange={e => { subirExcelCursos(e.target.files[0]); e.target.value = '' }} />
+            </label>
+            <button onClick={() => setModal(true)} style={btnPrimary}>+ Agregar curso</button>
+          </div>
+        )}
       </div>
 
       {/* Sub-pestañas: Cursos / Microcredenciales */}
