@@ -46,6 +46,12 @@ export default function BolsaTrabajo({ empresa }) {
     await cargar()
   }
 
+  async function togglePublica(v) {
+    const { error } = await supabase.from('vacantes').update({ publica: !v.publica }).eq('id', v.id)
+    if (error) { alert('No se pudo actualizar: ' + error.message); return }
+    await cargar()
+  }
+
   if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando bolsa de trabajo...</div>
 
   return (
@@ -87,9 +93,13 @@ export default function BolsaTrabajo({ empresa }) {
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                       <button onClick={() => setModal(v)} style={iconBtn}>✏️ Editar</button>
                       <button onClick={() => eliminar(v)} style={{ ...iconBtn, color: '#dc2626', borderColor: '#fecaca' }}>🗑</button>
+                      <button onClick={() => togglePublica(v)} title="Mostrar esta vacante a los alumnos en su portal"
+                        style={{ ...iconBtn, background: v.publica ? '#8B1A1A' : '#fff', color: v.publica ? '#fff' : '#475569', borderColor: v.publica ? '#8B1A1A' : '#e2e8f0' }}>
+                        {v.publica ? '👁️ Visible a alumnos' : '🙈 Mostrar a alumnos'}
+                      </button>
                     </div>
                     <select value={v.estatus} onChange={e => cambiarEstatus(v, e.target.value)} style={{ ...inp, padding: '5px 8px', fontSize: 12, width: 'auto' }}>
                       <option value="abierta">Abierta</option>

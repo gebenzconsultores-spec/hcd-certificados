@@ -154,6 +154,7 @@ export default function EstudianteDashboard() {
             { id: 'certificados', label: '📜 Mis certificados' },
             { id: 'examenes', label: '📊 Mis exámenes' },
             { id: 'cursos', label: '🎓 Mis cursos' },
+            { id: 'vacantes', label: '👔 Vacantes' },
             ...(!esDeEmpresa ? [{ id: 'desbloquear', label: '🔑 Activar curso pagado' }] : []),
             ...(!esDeEmpresa ? [{ id: 'proximos', label: '📣 Convocatorias HCD' }] : []),
             ...(!esDeEmpresa ? [{ id: 'cotizaciones', label: '💼 Mis cotizaciones' }] : []),
@@ -307,6 +308,8 @@ export default function EstudianteDashboard() {
         )}
 
         {/* TAB CURSOS DISPONIBLES */}
+        {tab === 'vacantes' && <VacantesEstudiante estudiante={estudiante} />}
+
         {tab === 'cursos' && (
           <div>
             {esDeEmpresa ? (
@@ -533,6 +536,106 @@ function BotonManualCurso({ estudiante, cursoId, cursoNombre, aprobado }) {
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#0f766e', color: '#fff', border: 'none', borderRadius: 7, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
           📘 {bajando ? 'Descargando...' : 'Descargar manual (1 vez)'}
         </button>
+      )}
+    </div>
+  )
+}
+
+// ─── Vacantes para el alumno: ver, postularse y marcar disponibilidad ───
+function VacantesEstudiante({ estudiante }) {
+  const [vacantes, setVacantes] = useState([])
+  const [empresasMap, setEmpresasMap] = useState({})
+  const [postuladas, setPostuladas] = useState([])
+  const [disponible, setDisponible] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [postulando, setPostulando] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    try {
+      const { data: vac } = await supabase.from('vacantes').select('*').eq('publica', true).eq('estatus', 'abierta').order('created_at', { ascending: false })
+      setVacantes(vac || [])
+      const { data: emps } = await supabase.from('empresas').select('id, nombre')
+      const map = {}; (emps || []).forEach(e => { map[e.id] = e.nombre }); setEmpresasMap(map)
+      const { data: post } = await supabase.from('postulaciones').select('vacante_id').eq('participante_id', estudiante.id)
+      setPostuladas((post || []).map(p => p.vacante_id))
+      const { data: part } = await supabase.from('participantes').select('disponible_oportunidades').eq('id', estudiante.id).maybeSingle()
+      setDisponible(!!part?.disponible_oportunidades)
+    } catch (_) {}
+    setLoading(false)
+  }
+
+  async function postularme(v) {
+    if (postuladas.includes(v.id)) return
+    setPostulando(v.id)
+    try {
+      await supabase.from('postulaciones').insert({
+        participante_id: estudiante.id, participante_nombre: estudiante.nombre, participante_correo: estudiante.correo || null,
+        vacante_id: v.id, vacante_titulo: v.titulo, empresa_id: v.empresa_id || null
+      })
+      setPostuladas(prev => [...prev, v.id])
+      alert('✅ ¡Postulación enviada! La empresa recibirá tu interés.')
+    } catch (e) { alert('Error al postularte: ' + (e.message || '')) }
+    setPostulando(null)
+  }
+
+  async function toggleDisponible() {
+    const nuevo = !disponible
+    try {
+      await supabase.from('participantes').update({ disponible_oportunidades: nuevo }).eq('id', estudiante.id)
+      setDisponible(nuevo)
+    } catch (e) { alert('Error: ' + (e.message || '')) }
+  }
+
+  if (loading) return <div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando vacantes...</div>
+
+  return (
+    <div>
+      {/* Disponibilidad para oportunidades */}
+      <div style={{ background: disponible ? '#f0fdf4' : '#f8fafc', border: `1px solid ${disponible ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 12, padding: '14px 18px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>Disponible para oportunidades</div>
+          <div style={{ color: '#64748b', fontSize: 12 }}>Actívalo para que te lleguen ofertas y promociones de empleo.</div>
+        </div>
+        <button onClick={toggleDisponible}
+          style={{ background: disponible ? '#059669' : '#fff', color: disponible ? '#fff' : '#475569', border: `1px solid ${disponible ? '#059669' : '#cbd5e1'}`, borderRadius: 20, padding: '8px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {disponible ? '✓ Disponible' : 'Marcar disponible'}
+        </button>
+      </div>
+
+      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 12 }}>Vacantes abiertas</h3>
+      {vacantes.length === 0 ? (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
+          Por ahora no hay vacantes publicadas. ¡Vuelve pronto!
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {vacantes.map(v => {
+            const yaPostulado = postuladas.includes(v.id)
+            return (
+              <div key={v.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <h4 style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{v.titulo}</h4>
+                    {empresasMap[v.empresa_id] && <div style={{ color: '#8B1A1A', fontSize: 12, fontWeight: 600, marginTop: 2 }}>🏢 {empresasMap[v.empresa_id]}</div>}
+                    {v.descripcion && <p style={{ color: '#64748b', fontSize: 13, marginTop: 8, lineHeight: 1.5 }}>{v.descripcion}</p>}
+                    {(v.modalidad || v.ubicacion) && <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 6 }}>{[v.modalidad, v.ubicacion].filter(Boolean).join(' · ')}</div>}
+                  </div>
+                  {yaPostulado ? (
+                    <div style={{ background: '#f0fdf4', color: '#059669', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Postulado</div>
+                  ) : (
+                    <button onClick={() => postularme(v)} disabled={postulando === v.id}
+                      style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {postulando === v.id ? 'Enviando...' : 'Postularme'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
