@@ -7,12 +7,28 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined) // undefined = cargando
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => subscription.unsubscribe()
+    let mounted = true
+
+    // 1) Suscripción primero: supabase-js dispara la sesión restaurada (INITIAL_SESSION)
+    //    y también los cambios (login, logout, refresh de token).
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+      if (mounted) setSession(s ?? null)
+    })
+
+    // 2) Respaldo: leemos la sesión persistida por si el evento inicial no llega.
+    //    Solo la aplicamos si aún no se ha cargado nada (no pisamos la del paso 1).
+    supabase.auth.getSession().then(({ data }) => {
+      if (mounted) setSession(prev => (prev === undefined ? (data.session ?? null) : prev))
+    })
+
+    return () => { mounted = false; subscription.unsubscribe() }
   }, [])
 
-  return <AuthContext.Provider value={{ session, loading: session === undefined }}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{ session, loading: session === undefined }}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {
