@@ -1,5 +1,21 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
+
+const ESTADO_POSTULACION = {
+  nueva: { l: 'Nueva', bg: '#eff6ff', c: '#1d4ed8' },
+  revisada: { l: 'Revisada', bg: '#fef9c3', c: '#92400e' },
+  contactado: { l: 'Contactado', bg: '#f0fdf4', c: '#059669' },
+  descartada: { l: 'Descartada', bg: '#fef2f2', c: '#dc2626' },
+}
 
 const ESTADO_ENVIO = {
   enviado: { l: 'Enviado', bg: '#eff6ff', c: '#1d4ed8' },
@@ -14,6 +30,7 @@ export default function AdminCandidatos() {
   const [candidatos, setCandidatos] = useState([])
   const [empresas, setEmpresas] = useState([])
   const [vacantes, setVacantes] = useState([])
+  const [postulaciones, setPostulaciones] = useState([])
   const [envios, setEnvios] = useState([])
   const [empleados, setEmpleados] = useState([])
   const [loading, setLoading] = useState(true)
@@ -26,19 +43,39 @@ export default function AdminCandidatos() {
 
   async function cargar() {
     setLoading(true)
-    const [cand, emp, vac, env, part] = await Promise.all([
+    const [cand, emp, vac, env, part, post] = await Promise.all([
       supabase.from('candidatos').select('*').order('created_at', { ascending: false }),
       supabase.from('empresas').select('id, nombre').order('nombre'),
       supabase.from('vacantes').select('*').order('created_at', { ascending: false }),
       supabase.from('candidato_envios').select('*'),
       supabase.from('participantes').select('id, nombre, correo, empresa_id, registrado_por_empresa, disponible_oportunidades, tipo'),
+      supabase.from('postulaciones').select('*').order('created_at', { ascending: false }),
     ])
     setCandidatos(cand.data || [])
     setEmpresas(emp.data || [])
     setVacantes(vac.data || [])
     setEnvios(env.data || [])
     setEmpleados(part.data || [])
+    setPostulaciones(post.data || [])
     setLoading(false)
+  }
+
+  async function eliminarVacante(v) {
+    if (!window.confirm(`¿Eliminar la vacante "${v.titulo}"?\nTambién se quitarán sus postulaciones. Desaparecerá del portal de la empresa y del alumno.`)) return
+    try { await supabase.from('postulaciones').delete().eq('vacante_id', v.id) } catch (_) {}
+    const { error } = await supabase.from('vacantes').delete().eq('id', v.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    await cargar()
+  }
+  async function eliminarPostulacion(p) {
+    if (!window.confirm(`¿Eliminar la postulación de ${p.participante_nombre}?`)) return
+    const { error } = await supabase.from('postulaciones').delete().eq('id', p.id)
+    if (error) { alert('No se pudo eliminar: ' + error.message); return }
+    await cargar()
+  }
+  async function cambiarEstatusPostulacion(p, estatus) {
+    await supabase.from('postulaciones').update({ estatus }).eq('id', p.id)
+    setPostulaciones(prev => prev.map(x => x.id === p.id ? { ...x, estatus } : x))
   }
 
   const empresaNombre = id => empresas.find(e => e.id === id)?.nombre || '—'
@@ -70,6 +107,7 @@ export default function AdminCandidatos() {
           { id: 'pool', label: `🧑‍💼 Pool (${candidatos.length})` },
           { id: 'promover', label: '⬆️ Promover empleados' },
           { id: 'vacantes', label: `👔 Vacantes (${vacantes.filter(v => v.estatus === 'abierta').length})` },
+          { id: 'postulaciones', label: `📨 Postulaciones (${postulaciones.length})` },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#8B1A1A' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#8B1A1A' : '#64748b', cursor: 'pointer' }}>
@@ -81,7 +119,8 @@ export default function AdminCandidatos() {
       {/* ─── POOL ─── */}
       {tab === 'pool' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
+            <button onClick={() => exportarAExcel(candidatos.map(c => ({ 'Nombre': c.nombre || '', 'Correo': c.correo || '', 'WhatsApp': c.whatsapp || '', 'Puesto/Perfil': c.perfil || c.puesto || '', 'Origen': c.origen || '', 'Notas': c.notas || '', 'Promovido': c.participante_id ? 'Sí' : 'No' })), `pool_candidatos_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Candidatos')} style={btnExcel}>⬇️ Excel</button>
             <button onClick={() => setModalCand({})} style={btnPrimary}>+ Nuevo candidato</button>
           </div>
           {candidatos.length === 0 ? (
@@ -181,7 +220,10 @@ export default function AdminCandidatos() {
       {/* ─── VACANTES ─── */}
       {tab === 'vacantes' && (
         <div>
-          <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>Vacantes publicadas por las empresas. Envía candidatos alineados directamente a cada una.</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <p style={{ color: '#64748b', fontSize: 13 }}>Vacantes publicadas por las empresas. Puedes eliminarlas y se reflejará en el portal de la empresa y del alumno.</p>
+            <button onClick={() => exportarAExcel(vacantes.map(v => ({ 'Título': v.titulo || '', 'Empresa': empresaNombre(v.empresa_id), 'Estatus': v.estatus || '', 'Ubicación': v.ubicacion || '', 'Visible a alumnos': v.publica ? 'Sí' : 'No', 'Descripción': v.descripcion || '' })), `vacantes_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Vacantes')} style={btnExcel}>⬇️ Excel</button>
+          </div>
           {vacantes.length === 0 ? (
             <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Ninguna empresa ha publicado vacantes todavía.</div>
           ) : (
@@ -199,12 +241,54 @@ export default function AdminCandidatos() {
                       {v.descripcion && <p style={{ color: '#475569', fontSize: 13, marginTop: 6, whiteSpace: 'pre-wrap' }}>{v.descripcion}</p>}
                       {v.requisitos && <p style={{ color: '#64748b', fontSize: 12, marginTop: 6, whiteSpace: 'pre-wrap' }}><strong>Requisitos:</strong> {v.requisitos}</p>}
                     </div>
-                    {v.estatus !== 'cerrada' && (
-                      <button onClick={() => setModalEnviar({ candidato: null, empresaPre: v.empresa_id, vacantePre: v.id })} style={{ ...btnPrimary, fontSize: 12, padding: '7px 14px', whiteSpace: 'nowrap' }}>📨 Enviar candidato</button>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                      {v.publica && <span style={{ background: '#f0fdf4', color: '#059669', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>👁️ Visible a alumnos</span>}
+                      {v.estatus !== 'cerrada' && (
+                        <button onClick={() => setModalEnviar({ candidato: null, empresaPre: v.empresa_id, vacantePre: v.id })} style={{ ...btnPrimary, fontSize: 12, padding: '7px 14px', whiteSpace: 'nowrap' }}>📨 Enviar candidato</button>
+                      )}
+                      <button onClick={() => eliminarVacante(v)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>🗑 Eliminar</button>
+                    </div>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── POSTULACIONES ─── */}
+      {tab === 'postulaciones' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <p style={{ color: '#64748b', fontSize: 13 }}>Alumnos que se postularon a las vacantes. Cambia el estatus para dar seguimiento o elimínalas.</p>
+            <button onClick={() => exportarAExcel(postulaciones.map(p => ({ 'Alumno': p.participante_nombre || '', 'Correo': p.participante_correo || '', 'Vacante': p.vacante_titulo || '', 'Empresa': empresaNombre(p.empresa_id), 'Estatus': (ESTADO_POSTULACION[p.estatus] || ESTADO_POSTULACION.nueva).l, 'Fecha': p.created_at ? new Date(p.created_at).toLocaleDateString('es-MX') : '' })), `postulaciones_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Postulaciones')} style={btnExcel}>⬇️ Excel</button>
+          </div>
+          {postulaciones.length === 0 ? (
+            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no hay postulaciones de alumnos.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {postulaciones.map(p => {
+                const est = ESTADO_POSTULACION[p.estatus] || ESTADO_POSTULACION.nueva
+                return (
+                  <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{p.participante_nombre}</div>
+                      <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>👔 {p.vacante_titulo} · {empresaNombre(p.empresa_id)}{p.participante_correo ? ` · ${p.participante_correo}` : ''}</div>
+                      <div style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>{p.created_at ? new Date(p.created_at).toLocaleDateString('es-MX') : ''}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ background: est.bg, color: est.c, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{est.l}</span>
+                      <select value={p.estatus || 'nueva'} onChange={e => cambiarEstatusPostulacion(p, e.target.value)} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 8px', fontSize: 12, cursor: 'pointer' }}>
+                        <option value="nueva">Nueva</option>
+                        <option value="revisada">Revisada</option>
+                        <option value="contactado">Contactado</option>
+                        <option value="descartada">Descartada</option>
+                      </select>
+                      <button onClick={() => eliminarPostulacion(p)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -377,6 +461,7 @@ function ModalPromover({ empleado, empresaNombre, onClose, onDone }) {
 const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5, marginTop: 12 }
 const inp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none', color: '#1e293b', background: '#fff', boxSizing: 'border-box' }
 const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+const btnExcel = { background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '9px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
 const btnGhost = { background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }
 const iconBtn = { background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '5px 10px', cursor: 'pointer', fontSize: 13, color: '#475569' }
 const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
