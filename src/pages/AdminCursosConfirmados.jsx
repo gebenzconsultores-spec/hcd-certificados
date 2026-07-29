@@ -465,6 +465,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
   const [cupoMaximo, setCupoMaximo] = useState(20)
   const [linkZoom, setLinkZoom] = useState('')
   const [codigoPromo, setCodigoPromo] = useState('')
+  const [numeroManual, setNumeroManual] = useState('')
   const [mostrarEn, setMostrarEn] = useState('ambos') // cintillo: 'ambos' | 'empresa' | 'estudiante'
   const [vendedorClave, setVendedorClave] = useState('VEND-GERENCIA')
   const [tipoVenta, setTipoVenta] = useState(null) // 'primera_compra' | 'recompra' (solo empresa)
@@ -632,7 +633,10 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
       }
 
       // Crear la CONVOCATORIA en proximos_cursos (para el cintillo de empresas/estudiantes)
-      const numeroCert = await siguienteNumeroCurso()
+      // Número de curso: manual si lo escribiste, si no, el automático de respaldo
+      const numeroCert = (numeroManual !== '' && !isNaN(Number(numeroManual)))
+        ? Number(numeroManual)
+        : await siguienteNumeroCurso()
       await supabase.from('proximos_cursos').insert({
         curso_id: curso.id,
         curso_nombre: curso.nombre,
@@ -898,6 +902,10 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
             <input value={linkZoom} onChange={e => setLinkZoom(e.target.value)} placeholder="https://zoom.us/j/..." style={inp} />
           </div>
           <div style={{ flex: 1 }}>
+            <label style={lbl}>Número de curso (manual)</label>
+            <input type="number" value={numeroManual} onChange={e => setNumeroManual(e.target.value)} placeholder="Escríbelo tú (ej. 498). Vacío = automático" style={inp} />
+            <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 4, marginBottom: 8 }}>Este número va en el certificado (HCD-<b>núm</b>-0001). Si lo dejas vacío, se asigna el automático.</p>
+
             <label style={lbl}>Código promocional</label>
             <input value={codigoPromo} onChange={e => setCodigoPromo(e.target.value)} placeholder="ej. HCD10" style={inp} />
           </div>
