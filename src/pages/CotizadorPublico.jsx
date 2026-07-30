@@ -440,14 +440,16 @@ export default function CotizadorPublico() {
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
                   {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                    <button onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                      ⚡ Usar cotizador automático
-                    </button>
+                    {!co.cotizacion_especial && (
+                      <button onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        ⚡ Usar cotizador automático
+                      </button>
+                    )}
                     <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '" con un asesor.')}`}
                       target="_blank" rel="noopener noreferrer"
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                      💬 Cotizar con un asesor
+                      💬 {co.cotizacion_especial ? 'Cotizar por WhatsApp' : 'Cotizar con un asesor'}
                     </a>
                   </div>
                 </div>

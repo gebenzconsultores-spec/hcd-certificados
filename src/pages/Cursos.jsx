@@ -55,7 +55,7 @@ export default function Cursos() {
   const [modalExamen, setModalExamen] = useState(null)
   const [modalVer, setModalVer] = useState(null)
   const [preguntasVer, setPreguntasVer] = useState([])
-  const [form, setForm] = useState({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+  const [form, setForm] = useState({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '', cotizacion_especial: false })
   const [preguntas, setPreguntas] = useState([])
   const [saving, setSaving] = useState(false)
   // Crear nueva familia desde el modal de curso
@@ -134,11 +134,11 @@ export default function Cursos() {
         categoria: form.categoria || 'B',
         familia_id: familiaId, clave_interna,
         modalidad: form.modalidad, aval_institucion: form.aval_institucion,
-        nombre_aval: form.nombre_aval, activo: true, es_publico: true
+        nombre_aval: form.nombre_aval, activo: true, es_publico: true, cotizacion_especial: !!form.cotizacion_especial
       })
       await cargar()
       setModal(false)
-      setForm({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '' })
+      setForm({ nombre: '', duracion: '', categoria: 'B', familia_id: '', modalidad: 'online', aval_institucion: false, nombre_aval: '', cotizacion_especial: false })
       setNuevaFamilia(false); setNombreNuevaFamilia('')
     } catch (e) {
       alert('No se pudo crear: ' + (e.message || ''))
@@ -247,6 +247,12 @@ export default function Cursos() {
       alert(`✅ Importación terminada.\nCursos creados: ${creados}${errores ? `\nCon error: ${errores}` : ''}`)
     } catch (e) { alert('Error al leer el Excel: ' + (e.message || '')) }
     setImportando(false)
+  }
+
+  async function toggleCotizacionEspecial(c) {
+    const { error } = await supabase.from('cursos').update({ cotizacion_especial: !c.cotizacion_especial }).eq('id', c.id)
+    if (error) { alert('No se pudo actualizar: ' + error.message); return }
+    await cargar()
   }
 
   async function subirManual(c, file) {
@@ -453,6 +459,10 @@ export default function Cursos() {
                       ) : (
                         <label style={{ ...btnSecondary, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>⬆️ Manual<input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => subirManual(c, e.target.files[0])} /></label>
                       )}
+                      <button onClick={() => toggleCotizacionEspecial(c)} title="Si se activa, en el cotizador este curso solo se cotiza por WhatsApp (sin cotización automática)"
+                        style={{ ...btnSecondary, cursor: 'pointer', background: c.cotizacion_especial ? '#25D366' : '#f1f5f9', color: c.cotizacion_especial ? '#fff' : '#475569', borderColor: c.cotizacion_especial ? '#25D366' : '#e2e8f0' }}>
+                        {c.cotizacion_especial ? '💬 Solo WhatsApp ✓' : '💬 Cotización especial'}
+                      </button>
                     </div>
                   </div>
                 )
@@ -542,6 +552,11 @@ export default function Cursos() {
             {form.aval_institucion && (
               <Field label="Nombre del aval" value={form.nombre_aval} onChange={f('nombre_aval')} placeholder="ej. STPS, Universidad X" />
             )}
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 14 }}>
+              <input type="checkbox" checked={form.cotizacion_especial} onChange={e => f('cotizacion_especial')(e.target.checked)} style={{ accentColor: '#25D366', width: 16, height: 16 }} />
+              <span style={{ color: '#374151', fontSize: 13 }}>Requiere cotización especial (solo WhatsApp en el cotizador)</span>
+            </label>
 
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
               <button onClick={() => { setModal(false); setNuevaFamilia(false); setNombreNuevaFamilia('') }} style={btnGhost}>Cancelar</button>
