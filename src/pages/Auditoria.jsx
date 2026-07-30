@@ -73,6 +73,18 @@ export default function Auditoria() {
     } finally { setLoading(false) }
   }
 
+  async function eliminarAvance(participanteId, cursoId, nombre) {
+    if (!participanteId || !cursoId) { alert('No se pudo identificar al alumno o al curso.'); return }
+    if (!window.confirm(`¿Eliminar el resultado de examen Y el certificado de ${nombre || 'este alumno'} para este curso?\n\nEsto limpiará su avance para que pueda volver a presentar. No se puede deshacer.`)) return
+    try {
+      try { await supabase.from('resultados_examen').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
+      try { await supabase.from('certificados').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
+      try { await supabase.from('asignaciones').update({ estado: 'inscrito' }).eq('empleado_id', participanteId).eq('curso_id', cursoId).eq('estado', 'completado') } catch (_) {}
+      await buscar()
+      alert('✅ Avance eliminado. El alumno ya puede repetir el examen.')
+    } catch (e) { alert('Error al eliminar: ' + (e.message || '')) }
+  }
+
   async function generarZIP() {
     if (!datos) return
     setGenerando(true)
@@ -245,7 +257,12 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
                         {c.modalidad === 'presencial' ? 'Presencial' : 'Online'}
                       </span>
                     </td>
-                    <td style={{ padding: '10px 16px', color: '#94a3b8', fontSize: 12 }}>{new Date(c.fecha_emision).toLocaleDateString('es-MX')}</td>
+                    <td style={{ padding: '10px 16px', color: '#94a3b8', fontSize: 12 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <span>{new Date(c.fecha_emision).toLocaleDateString('es-MX')}</span>
+                        <button onClick={() => eliminarAvance(c.participante_id, c.curso_id, c.nombre_participante)} title="Eliminar resultado y certificado (para repetir)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -282,7 +299,10 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
                     <td style={{ padding: '10px 16px', color: '#64748b', fontSize: 13 }}>#{r.intento || 1}</td>
                     <td style={{ padding: '10px 16px', color: '#94a3b8', fontSize: 12 }}>{new Date(r.created_at).toLocaleDateString('es-MX')}</td>
                     <td style={{ padding: '10px 16px' }}>
-                      <button onClick={() => verRespuestas(r)} disabled={cargandoResp} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁 Ver respuestas</button>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <button onClick={() => verRespuestas(r)} disabled={cargandoResp} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁 Ver respuestas</button>
+                        <button onClick={() => eliminarAvance(r.participante_id, r.curso_id, r.participante?.nombre)} title="Eliminar resultado y certificado (para repetir)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

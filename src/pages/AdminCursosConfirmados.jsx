@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
 import { supabase, siguienteNumeroCurso } from '../lib/supabase'
+import * as XLSX from 'xlsx'
+
+function exportarAExcel(filas, archivo, hoja = 'Datos') {
+  if (!filas || filas.length === 0) { alert('No hay datos para exportar.'); return }
+  const ws = XLSX.utils.json_to_sheet(filas)
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, hoja)
+  XLSX.writeFile(wb, archivo)
+}
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
@@ -234,6 +243,21 @@ export default function AdminCursosConfirmados() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setVista('calendario')} style={{ background: vista === 'calendario' ? '#8B1A1A' : '#f1f5f9', color: vista === 'calendario' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📅 Calendario</button>
           <button onClick={() => setVista('lista')} style={{ background: vista === 'lista' ? '#8B1A1A' : '#f1f5f9', color: vista === 'lista' ? '#fff' : '#475569', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>📋 Lista</button>
+          {vista === 'lista' && (
+            <button onClick={() => exportarAExcel(confirmados.map(c => ({
+              'Curso': c.curso_nombre || '',
+              'Número de curso': c.numero_curso || '',
+              'Empresa': c.empresa_nombre || '',
+              'Fecha inicio': c.fecha_inicio ? new Date(String(c.fecha_inicio).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : '',
+              'Fecha fin': c.fecha_fin ? new Date(String(c.fecha_fin).slice(0, 10) + 'T00:00:00').toLocaleDateString('es-MX') : '',
+              'Hora': c.hora || '',
+              'Días': c.num_dias || '',
+              'Participantes': c.num_participantes || 0,
+              'Modalidad': c.modalidad || '',
+              'Estado': c.estado || '',
+            })), `calendario_cursos_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Cursos')}
+              style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel</button>
+          )}
           <button onClick={() => setModalProgramar(true)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ Programar curso</button>
         </div>
       </div>
