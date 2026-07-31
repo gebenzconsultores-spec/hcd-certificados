@@ -937,14 +937,15 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
 
         {/* Cintillo: dónde se muestra */}
         <label style={lbl}>Mostrar en el cintillo</label>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-          {[['ambos', 'Ambos'], ['empresa', 'Solo empresas'], ['estudiante', 'Solo estudiantes']].map(([v, l]) => (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+          {[['ambos', 'Ambos'], ['empresa', 'Solo empresas'], ['estudiante', 'Solo estudiantes'], ['ninguno', '🚫 No aparecer']].map(([v, l]) => (
             <button key={v} type="button" onClick={() => setMostrarEn(v)}
-              style={{ flex: 1, padding: '9px', border: `2px solid ${mostrarEn === v ? '#1d4ed8' : '#e2e8f0'}`, borderRadius: 8, background: mostrarEn === v ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: mostrarEn === v ? '#1d4ed8' : '#475569' }}>
+              style={{ flex: '1 1 45%', padding: '9px', border: `2px solid ${mostrarEn === v ? '#1d4ed8' : '#e2e8f0'}`, borderRadius: 8, background: mostrarEn === v ? '#eff6ff' : '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: mostrarEn === v ? '#1d4ed8' : '#475569' }}>
               {l}
             </button>
           ))}
         </div>
+        <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8 }}>"No aparecer" lo oculta de todos los cintillos (útil para cursos privados de una empresa).</p>
 
         {/* Selección de alumnos */}
         <label style={lbl}>Inscribir alumnos <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional · {seleccionados.length} seleccionados)</span></label>
