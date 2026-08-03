@@ -291,7 +291,7 @@ export default function AdminCursosConfirmados() {
                         {cursos.slice(0, 3).map(c => (
                           <button key={c.id} onClick={() => verDetalle(c)}
                             style={{ background: `${COLORES_ESTADO[c.estado]}15`, color: COLORES_ESTADO[c.estado], border: 'none', borderRadius: 5, padding: '3px 6px', fontSize: 10, fontWeight: 600, cursor: 'pointer', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {c.curso_nombre}
+                            {c.numero_curso ? `#${c.numero_curso} ` : ''}{c.curso_nombre}
                           </button>
                         ))}
                         {cursos.length > 3 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{cursos.length - 3} más</span>}
@@ -320,7 +320,10 @@ export default function AdminCursosConfirmados() {
               {confirmados.map(c => (
                 <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{fmtFechaSegura(c.fecha_inicio)}</td>
-                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.curso_nombre}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>
+                    {c.numero_curso && <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '1px 6px', borderRadius: 4, fontSize: 11, marginRight: 6 }}>#{c.numero_curso}</code>}
+                    {c.curso_nombre}
+                  </td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.empresa_nombre || c.participante_nombre || '—'}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.num_participantes}</td>
                   <td style={{ padding: '11px 16px' }}>
@@ -347,7 +350,10 @@ export default function AdminCursosConfirmados() {
           <div style={{ background: '#fff', borderRadius: 16, padding: '28px 32px', width: 520, maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
-                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>{detalle.curso_nombre}</h3>
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b' }}>
+                  {detalle.numero_curso && <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 13, marginRight: 8 }}>#{detalle.numero_curso}</code>}
+                  {detalle.curso_nombre}
+                </h3>
                 <p style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>{detalle.empresa_nombre || detalle.participante_nombre}</p>
               </div>
               <button onClick={() => setDetalle(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 20 }}>✕</button>
