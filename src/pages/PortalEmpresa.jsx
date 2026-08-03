@@ -138,7 +138,6 @@ export function EmpresaDashboard() {
     { id: 'cursos', label: '📚 Catálogo de cursos' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
     { id: 'rutas', label: '🏢 Rutas de capacitación' },
-    { id: 'proximos', label: '📣 Convocatorias HCD' },
     { id: 'promociones', label: '🏷️ Promociones' },
     { id: 'renta', label: '💳 Renta de plataforma' },
     { id: 'consultoria', label: '🧩 Consultoría y auditoría' },
@@ -244,13 +243,12 @@ export function EmpresaDashboard() {
               ))}
             </div>
 
-            <BannerConvocatoria empresa={empresa} onIr={() => setTab('proximos')} />
+            <BannerConvocatoria empresa={empresa} />
 
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} empresa={empresa} recargar={() => cargar(empresa)} />}
-            {tab === 'proximos' && <TabProximos empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} irACotizaciones={() => setTab('cotizaciones')} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
             {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
@@ -299,7 +297,7 @@ export function EmpresaDashboard() {
 }
 
 // ─── TAB RESUMEN ──────────────────────────────────────────────
-function BannerConvocatoria({ empresa, onIr }) {
+function BannerConvocatoria({ empresa }) {
   const [convocatorias, setConvocatorias] = useState([])
   const [idx, setIdx] = useState(0)
 
