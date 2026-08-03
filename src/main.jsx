@@ -30,6 +30,7 @@ import AdminEquipo from './pages/AdminEquipo.jsx'
 import AdminPrecios from './pages/AdminPrecios.jsx'
 import AdminCompras from './pages/AdminCompras.jsx'
 import AdminCotizadorConfig from './pages/AdminCotizadorConfig.jsx'
+import CotizadorEspecial from './pages/CotizadorEspecial.jsx'
 import AdminProximosCursos from './pages/AdminProximosCursos.jsx'
 import AdminCursosConfirmados from './pages/AdminCursosConfirmados.jsx'
 import AdminCandidatos from './pages/AdminCandidatos.jsx'
@@ -71,6 +72,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="evaluaciones" element={<AdminEvaluaciones />} />
             <Route path="cotizaciones" element={<AdminCotizaciones />} />
             <Route path="cotizador-config" element={<AdminCotizadorConfig />} />
+            <Route path="cotizador-especial" element={<CotizadorEspecial />} />
             <Route path="ventas" element={<AdminVentas />} />
             <Route path="renta" element={<RentaPlataforma />} />
             <Route path="compras" element={<AdminCompras />} />

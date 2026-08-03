@@ -21,6 +21,7 @@ const NAV = [
   { to: '/admin/precios', label: 'Precios y catálogo', icon: '🏷️' },
   { to: '/admin/cotizaciones', label: 'Cotizaciones', icon: '💼' },
   { to: '/admin/cotizador-config', label: 'Config. cotizador', icon: '⚙️' },
+  { to: '/admin/cotizador-especial', label: 'Cotizador especial', icon: '✨' },
   { to: '/admin/compras', label: 'Compras y solicitudes', icon: '🎫' },
   { to: '/admin/seguimiento', label: 'Seguimiento comercial', icon: '🔭' },
   { to: '/admin/ventas', label: 'Ventas y cobranza', icon: '💰' },
