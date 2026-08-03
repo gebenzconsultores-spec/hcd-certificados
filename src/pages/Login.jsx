@@ -7,7 +7,7 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [showPwd, setShowPwd] = useState(false)
   const navigate = useNavigate()
   const { session } = useAuth()
 
@@ -18,9 +18,7 @@ export default function Login() {
     setLoading(true); setError('')
     try {
       await loginAdmin(email, password)
-      // Carga limpia para que la sesión de Supabase ya esté lista al entrar
-      // (evita el panel en blanco que obligaba a refrescar a mano).
-      window.location.assign('/admin')
+      navigate('/admin')
     } catch (e) {
       setError('Credenciales incorrectas. Verifica tu correo y contraseña.')
     } finally { setLoading(false) }
@@ -52,9 +50,16 @@ export default function Login() {
         </div>
         <div style={{ marginBottom: 24 }}>
           <label style={labelStyle}>Contraseña</label>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••" style={inputStyle}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          <div style={{ position: 'relative' }}>
+            <input type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••" style={{ ...inputStyle, paddingRight: 44 }}
+              onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+            <button type="button" onClick={() => setShowPwd(p => !p)} tabIndex={-1}
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8', padding: '4px' }}
+              title={showPwd ? 'Ocultar contraseña' : 'Ver contraseña'}>
+              {showPwd ? '🙈' : '👁️'}
+            </button>
+          </div>
         </div>
 
         <button onClick={handleLogin} disabled={loading} style={btnStyle}>

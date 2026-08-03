@@ -24,6 +24,8 @@ export default function Certificados() {
   const [participantes, setParticipantes] = useState([])
   const [modal, setModal] = useState(false)
   const [busqueda, setBusqueda] = useState('')
+  const [editando, setEditando] = useState(null)
+  const [editForm, setEditForm] = useState({})
   const [form, setForm] = useState({
     participante_id: '', curso_id: '', empresa_id: '',
     lugar: '', instructor_nombre: 'Néstor Daniel Reyes Díaz',
@@ -154,14 +156,44 @@ export default function Certificados() {
   }
 
   async function eliminarCertificado(cert) {
-    if (!window.confirm(`¿Eliminar el certificado de ${cert.nombre_participante} (${cert.id_unico})? No se puede deshacer.`)) return
+    if (!window.confirm(`¿Eliminar el certificado de ${cert.nombre_participante} (${cert.id_unico})?\n\nTambién se borrará su resultado de examen de ese curso y se limpiará su avance, para que ya NO aparezca como "aprobado" en el portal del alumno. No se puede deshacer.`)) return
     try {
       const { error } = await supabase.from('certificados').delete().eq('id', cert.id)
       if (error) { alert('No se pudo eliminar: ' + error.message); return }
+      // Limpieza: quitar el resultado de examen y reiniciar la asignación, para que
+      // el portal del alumno deje de mostrar el curso como tomado/aprobado.
+      if (cert.participante_id && cert.curso_id) {
+        try { await supabase.from('resultados_examen').delete().eq('participante_id', cert.participante_id).eq('curso_id', cert.curso_id) } catch (_) {}
+        try { await supabase.from('asignaciones').update({ estado: 'inscrito' }).eq('empleado_id', cert.participante_id).eq('curso_id', cert.curso_id).eq('estado', 'completado') } catch (_) {}
+      }
       await cargar()
     } catch (e) {
       alert('Error al eliminar: ' + (e.message || ''))
     }
+  }
+
+  async function guardarEdicion() {
+    if (!editando) return
+    const { error } = await supabase.from('certificados').update({
+      id_unico: editForm.id_unico, nombre_participante: editForm.nombre_participante,
+      nombre_curso: editForm.nombre_curso, lugar: editForm.lugar,
+      duracion: editForm.duracion, modalidad: editForm.modalidad,
+      fecha_curso: editForm.fecha_curso || null,
+    }).eq('id', editando.id)
+    if (error) { alert('Error: ' + error.message); return }
+    setEditando(null)
+    await cargar()
+    alert('✅ Certificado actualizado.')
+  }
+
+  function abrirEditar(c) {
+    setEditForm({
+      id_unico: c.id_unico || '', nombre_participante: c.nombre_participante || '',
+      nombre_curso: c.nombre_curso || '', lugar: c.lugar || '',
+      duracion: c.duracion || '', modalidad: c.modalidad || 'online',
+      fecha_curso: c.fecha_curso ? String(c.fecha_curso).slice(0, 10) : '',
+    })
+    setEditando(c)
   }
 
   const filtrados = certificados.filter(c =>
@@ -235,12 +267,9 @@ export default function Certificados() {
                 </td>
                 <td style={{ padding: '11px 18px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>
-                      🖨️ PDF
-                    </button>
-                    <button onClick={() => eliminarCertificado(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>
-                      🗑
-                    </button>
+                    <button onClick={() => abrirEditar(c)} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>✏️</button>
+                    <button onClick={() => generarYAbrirCertificado(c)} style={btnSecondary}>🖨️ PDF</button>
+                    <button onClick={() => eliminarCertificado(c)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>🗑</button>
                   </div>
                 </td>
               </tr>
@@ -248,6 +277,32 @@ export default function Certificados() {
           </tbody>
         </table>
       </div>
+
+      {/* Modal editar certificado */}
+      {editando && (
+        <div style={overlayStyle} onClick={() => setEditando(null)}>
+          <div style={{ ...modalStyle, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+            <h3 style={modalTitle}>Editar certificado</h3>
+            <div style={{ display: 'grid', gap: 12 }}>
+              <div><label style={labelStyle}>ID Único</label><input value={editForm.id_unico} onChange={e => setEditForm(p => ({ ...p, id_unico: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Nombre del participante</label><input value={editForm.nombre_participante} onChange={e => setEditForm(p => ({ ...p, nombre_participante: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Nombre del curso</label><input value={editForm.nombre_curso} onChange={e => setEditForm(p => ({ ...p, nombre_curso: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Lugar</label><input value={editForm.lugar} onChange={e => setEditForm(p => ({ ...p, lugar: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Duración (horas)</label><input value={editForm.duracion} onChange={e => setEditForm(p => ({ ...p, duracion: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Fecha de inicio del curso</label><input type="date" value={editForm.fecha_curso} onChange={e => setEditForm(p => ({ ...p, fecha_curso: e.target.value }))} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Modalidad</label>
+                <select value={editForm.modalidad} onChange={e => setEditForm(p => ({ ...p, modalidad: e.target.value }))} style={inputStyle}>
+                  <option value="online">Online</option><option value="presencial">Presencial</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button onClick={guardarEdicion} style={btnPrimary}>💾 Guardar cambios</button>
+              <button onClick={() => setEditando(null)} style={btnSecondary}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal emitir */}
       {modal && (
