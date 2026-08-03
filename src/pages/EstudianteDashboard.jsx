@@ -145,7 +145,7 @@ export default function EstudianteDashboard() {
         </div>
 
         {/* Banner convocatoria (todos los alumnos) */}
-        <BannerConvocatoriaEstudiante onIr={() => setTab('proximos')} />
+        <BannerConvocatoriaEstudiante />
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e2e8f0', marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -156,7 +156,6 @@ export default function EstudianteDashboard() {
             { id: 'cursos', label: '🎓 Mis cursos' },
             { id: 'vacantes', label: '👔 Vacantes' },
             ...(!esDeEmpresa ? [{ id: 'desbloquear', label: '🔑 Activar curso pagado' }] : []),
-            ...(!esDeEmpresa ? [{ id: 'proximos', label: '📣 Convocatorias HCD' }] : []),
             ...(!esDeEmpresa ? [{ id: 'cotizaciones', label: '💼 Mis cotizaciones' }] : []),
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
@@ -322,7 +321,7 @@ export default function EstudianteDashboard() {
                 {/* Individual: solo cursos que ha desbloqueado/pagado */}
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
                   <p style={{ color: '#1e40af', fontSize: 13 }}>
-                    ℹ️ Para presentar un examen, primero debes adquirir el curso. Cotiza en "Convocatorias HCD" o activa tu curso pagado con tu ID de compra.
+                    ℹ️ Para presentar un examen, primero debes adquirir el curso. Cotiza en el cintillo de convocatorias o activa tu curso pagado con tu ID de compra.
                   </p>
                 </div>
                 <MisCursosIndividual estudiante={estudiante} certificados={certificados} />
@@ -337,10 +336,6 @@ export default function EstudianteDashboard() {
         )}
 
         {/* TAB PRÓXIMOS CURSOS (solo individual) */}
-        {tab === 'proximos' && !esDeEmpresa && (
-          <ProximosEstudiante estudiante={estudiante} irACotizaciones={() => setTab('cotizaciones')} />
-        )}
-
         {/* TAB MIS COTIZACIONES (solo individual) */}
         {tab === 'cotizaciones' && !esDeEmpresa && (
           <MisCotizacionesEstudiante estudiante={estudiante} />
@@ -840,7 +835,7 @@ function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
 }
 
 // ─── Próximos cursos para estudiante individual ───────────────
-function BannerConvocatoriaEstudiante({ onIr }) {
+function BannerConvocatoriaEstudiante() {
   const [convocatorias, setConvocatorias] = useState([])
   const [idx, setIdx] = useState(0)
 
