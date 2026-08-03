@@ -347,9 +347,11 @@ function BannerConvocatoria({ empresa }) {
         </p>
         {convocatoria.codigo_promo && <div style={{ display: 'inline-block', background: 'rgba(255,255,255,.2)', color: '#fff', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, marginTop: 6 }}>🎟️ Código promo: {convocatoria.codigo_promo}</div>}
       </div>
-      <button onClick={onIr} style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        Inscribir alumnos →
-      </button>
+      <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, somos ' + (empresa?.nombre || '') + ' y nos interesa inscribir alumnos al curso "' + convocatoria.curso_nombre + '".')}`}
+        target="_blank" rel="noopener noreferrer"
+        style={{ background: '#25D366', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 24px', fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        💬 Inscribir alumnos →
+      </a>
       {/* Indicadores del carrusel */}
       {convocatorias.length > 1 && (
         <div style={{ position: 'absolute', bottom: 10, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 6 }}>
