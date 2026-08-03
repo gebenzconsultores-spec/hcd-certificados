@@ -117,7 +117,7 @@ ${d.notas ? `<div style="margin-bottom:16px;padding:12px;background:#fffbeb;bord
     try {
       const { error } = await supabase.from('cotizaciones').insert({
         folio, empresa_nombre: form.empresa_nombre,
-        contacto_nombre: form.contacto_nombre, contacto_correo: form.contacto_correo, contacto_telefono: form.contacto_tel,
+        contacto_nombre: form.contacto_nombre, contacto_email: form.contacto_correo, contacto_telefono: form.contacto_tel,
         curso_nombre: form.curso_nombre, num_personas: Number(form.num_personas) || 1, modalidad: form.modalidad,
         subtotal, iva, total, aplica_iva: form.aplica_iva, notas: form.notas,
         estado: 'enviada', es_especial: true, es_cliente_nuevo: false,
@@ -137,7 +137,7 @@ ${d.notas ? `<div style="margin-bottom:16px;padding:12px;background:#fffbeb;bord
     try {
       const { error } = await supabase.from('cotizaciones').insert({
         folio, empresa_nombre: form.empresa_nombre,
-        contacto_nombre: form.contacto_nombre, contacto_correo: form.contacto_correo, contacto_telefono: form.contacto_tel,
+        contacto_nombre: form.contacto_nombre, contacto_email: form.contacto_correo, contacto_telefono: form.contacto_tel,
         curso_nombre: form.curso_nombre, num_personas: Number(form.num_personas) || 1, modalidad: form.modalidad,
         subtotal, iva, total, aplica_iva: form.aplica_iva, notas: form.notas,
         estado: 'enviada', es_especial: true, es_cliente_nuevo: false,
@@ -274,7 +274,7 @@ ${d.notas ? `<div style="margin-bottom:16px;padding:12px;background:#fffbeb;bord
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #f1f5f9' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 8, fontSize: 12, color: '#475569', marginBottom: 12 }}>
                       <div>Contacto: {c.contacto_nombre || '—'}</div>
-                      <div>Correo: {c.contacto_correo || '—'}</div>
+                      <div>Correo: {c.contacto_email || '—'}</div>
                       <div>Personas: {c.num_personas || 1}</div>
                       <div>Fecha: {fLocal(c.created_at)}</div>
                       {c.notas && <div style={{ gridColumn: '1/-1' }}>Notas: {c.notas}</div>}
@@ -283,7 +283,7 @@ ${d.notas ? `<div style="margin-bottom:16px;padding:12px;background:#fffbeb;bord
                       <select value={c.estado} onChange={e => cambiarEstado(c.id, e.target.value)} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 10px', fontSize: 12, cursor: 'pointer' }}>
                         <option value="enviada">Enviada</option><option value="aceptada">Aceptada</option><option value="rechazada">Rechazada</option><option value="cancelada">Cancelada</option>
                       </select>
-                      <button onClick={() => abrirPDF(c.folio, { empresa_nombre: c.empresa_nombre, contacto_nombre: c.contacto_nombre, contacto_correo: c.contacto_correo, contacto_tel: c.contacto_telefono, curso_nombre: c.curso_nombre, num_personas: c.num_personas, modalidad: c.modalidad, precio_total: c.subtotal, aplica_iva: c.aplica_iva !== false, notas: c.notas, incluye_viaticos: false, viaticos: 0 })}
+                      <button onClick={() => abrirPDF(c.folio, { empresa_nombre: c.empresa_nombre, contacto_nombre: c.contacto_nombre, contacto_correo: c.contacto_email, contacto_tel: c.contacto_telefono, curso_nombre: c.curso_nombre, num_personas: c.num_personas, modalidad: c.modalidad, precio_total: c.subtotal, aplica_iva: c.aplica_iva !== false, notas: c.notas, incluye_viaticos: false, viaticos: 0 })}
                         style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>📄 PDF</button>
                       <label style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: subiendoOC ? 'wait' : 'pointer' }}>
                         {subiendoOC ? 'Subiendo...' : '📎 Subir OC'}
