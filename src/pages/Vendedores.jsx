@@ -23,7 +23,6 @@ export default function Vendedores() {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
-    setLoading(true)
     try {
       const { data: v } = await supabase.from('vendedores').select('*').order('created_at', { ascending: true })
       setVendedores(v || [])

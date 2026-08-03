@@ -56,7 +56,6 @@ export default function AdminCursosConfirmados() {
   }
 
   async function cargar() {
-    setLoading(true)
     const { data } = await supabase.from('cursos_confirmados').select('*').order('fecha_inicio', { ascending: true })
     const cursos = data || []
     // Calcular el número REAL de asistentes de cada curso (asignaciones vivas)

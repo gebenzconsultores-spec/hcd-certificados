@@ -40,7 +40,6 @@ export default function Participantes() {
   }, [])
 
   async function cargar() {
-    setLoading(true)
     // Traer TODOS los participantes (sin depender del join, que puede fallar)
     let parts = []
     const conJoin = await supabase

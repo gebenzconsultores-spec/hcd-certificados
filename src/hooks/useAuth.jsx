@@ -10,18 +10,21 @@ export function AuthProvider({ children }) {
     let mounted = true
 
     // 1) Suscripción primero: supabase-js dispara la sesión restaurada (INITIAL_SESSION)
-    //    y también los cambios (login, logout, refresh de token).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
       if (mounted) setSession(s ?? null)
     })
 
-    // 2) Respaldo: leemos la sesión persistida por si el evento inicial no llega.
-    //    Solo la aplicamos si aún no se ha cargado nada (no pisamos la del paso 1).
+    // 2) Respaldo inmediato: leemos la sesión persistida
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) setSession(prev => (prev === undefined ? (data.session ?? null) : prev))
     })
 
-    return () => { mounted = false; subscription.unsubscribe() }
+    // 3) Timeout de seguridad: si después de 2s sigue en undefined, forzamos null (no logueado)
+    const timeout = setTimeout(() => {
+      if (mounted) setSession(prev => prev === undefined ? null : prev)
+    }, 2000)
+
+    return () => { mounted = false; subscription.unsubscribe(); clearTimeout(timeout) }
   }, [])
 
   return (

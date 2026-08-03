@@ -27,7 +27,6 @@ export default function AdminCompras() {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
-    setLoading(true)
     setError('')
     try {
       // Cargar cada tabla por separado para que una falla no rompa todo
