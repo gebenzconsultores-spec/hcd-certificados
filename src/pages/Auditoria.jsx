@@ -73,30 +73,43 @@ export default function Auditoria() {
     } finally { setLoading(false) }
   }
 
-  async function eliminarAvance(participanteId, cursoId, nombre) {
-    if (!participanteId || !cursoId) { alert('No se pudo identificar al alumno o al curso.'); return }
-    if (!window.confirm(`¿Eliminar el resultado de examen Y el certificado de ${nombre || 'este alumno'} para este curso?\n\nEsto limpiará su avance para que pueda volver a presentar. No se puede deshacer.`)) return
+  async function eliminarAvance(row, tipo) {
+    const pid = row.participante_id, cid = row.curso_id
+    const nombre = row.participante?.nombre || row.nombre_participante || '(sin nombre)'
+    if (!window.confirm(`¿Eliminar el avance de ${nombre} para que pueda repetir?\nSe borra resultado + certificado, pero conserva su inscripción.`)) return
     try {
-      try { await supabase.from('resultados_examen').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
-      try { await supabase.from('certificados').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
-      try { await supabase.from('asignaciones').update({ estado: 'inscrito' }).eq('empleado_id', participanteId).eq('curso_id', cursoId).eq('estado', 'completado') } catch (_) {}
+      if (pid && cid) {
+        try { await supabase.from('resultados_examen').delete().eq('participante_id', pid).eq('curso_id', cid) } catch (_) {}
+        try { await supabase.from('certificados').delete().eq('participante_id', pid).eq('curso_id', cid) } catch (_) {}
+        try { await supabase.from('asignaciones').update({ estado: 'inscrito' }).eq('empleado_id', pid).eq('curso_id', cid).eq('estado', 'completado') } catch (_) {}
+      } else {
+        if (tipo === 'resultado') { try { await supabase.from('resultados_examen').delete().eq('id', row.id) } catch (_) {} }
+        if (tipo === 'certificado') { try { await supabase.from('certificados').delete().eq('id', row.id) } catch (_) {} }
+      }
       await buscar()
-      alert('✅ Avance eliminado. El alumno ya puede repetir el examen.')
-    } catch (e) { alert('Error al eliminar: ' + (e.message || '')) }
+      alert('✅ Avance eliminado.')
+    } catch (e) { alert('Error: ' + (e.message || '')) }
   }
 
-  async function borrarCompleto(participanteId, cursoId, nombre) {
-    if (!participanteId || !cursoId) { alert('No se pudo identificar al alumno o al curso.'); return }
-    if (!window.confirm(`¿Quitar POR COMPLETO el curso de ${nombre || 'este alumno'}?\n\nSe borrará su resultado, certificado, inscripción y compra de ese curso, y DESAPARECERÁ de su portal. No se puede deshacer.`)) return
+  async function borrarCompleto(row, tipo) {
+    const pid = row.participante_id, cid = row.curso_id
+    const nombre = row.participante?.nombre || row.nombre_participante || '(sin nombre)'
+    if (!window.confirm(`¿Quitar POR COMPLETO ${nombre} de este curso?\nSe borra resultado, certificado, inscripción y compra. DESAPARECERÁ de su portal.`)) return
     try {
-      try { await supabase.from('resultados_examen').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
-      try { await supabase.from('certificados').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
-      try { await supabase.from('asignaciones').delete().eq('empleado_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
-      try { await supabase.from('compras').delete().eq('participante_id', participanteId).eq('curso_id', cursoId) } catch (_) {}
+      if (pid && cid) {
+        try { await supabase.from('resultados_examen').delete().eq('participante_id', pid).eq('curso_id', cid) } catch (_) {}
+        try { await supabase.from('certificados').delete().eq('participante_id', pid).eq('curso_id', cid) } catch (_) {}
+        try { await supabase.from('asignaciones').delete().eq('empleado_id', pid).eq('curso_id', cid) } catch (_) {}
+        try { await supabase.from('compras').delete().eq('participante_id', pid).eq('curso_id', cid) } catch (_) {}
+      } else {
+        if (tipo === 'resultado') { try { await supabase.from('resultados_examen').delete().eq('id', row.id) } catch (_) {} }
+        if (tipo === 'certificado') { try { await supabase.from('certificados').delete().eq('id', row.id) } catch (_) {} }
+      }
       await buscar()
-      alert('✅ Curso quitado por completo. Ya no aparece en el portal del alumno.')
-    } catch (e) { alert('Error al quitar: ' + (e.message || '')) }
+      alert('✅ Registro eliminado.')
+    } catch (e) { alert('Error: ' + (e.message || '')) }
   }
+
 
   async function generarZIP() {
     if (!datos) return
@@ -273,8 +286,8 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
                     <td style={{ padding: '10px 16px', color: '#94a3b8', fontSize: 12 }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         <span>{new Date(c.fecha_emision).toLocaleDateString('es-MX')}</span>
-                        <button onClick={() => eliminarAvance(c.participante_id, c.curso_id, c.nombre_participante)} title="Borrar resultado y certificado, conservando su inscripción para repetir" style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer' }}>♻️</button>
-                        <button onClick={() => borrarCompleto(c.participante_id, c.curso_id, c.nombre_participante)} title="Quitar el curso por completo del portal del alumno (borra todo)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
+                        <button onClick={() => eliminarAvance(c, 'certificado')} title="Borrar resultado y certificado, conservando su inscripción para repetir" style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer' }}>♻️</button>
+                        <button onClick={() => borrarCompleto(c, 'certificado')} title="Quitar el curso por completo del portal del alumno (borra todo)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 7px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -315,8 +328,8 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
                     <td style={{ padding: '10px 16px' }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <button onClick={() => verRespuestas(r)} disabled={cargandoResp} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁 Ver respuestas</button>
-                        <button onClick={() => eliminarAvance(r.participante_id, r.curso_id, r.participante?.nombre)} title="Borrar resultado y certificado, pero conservar su inscripción para que pueda repetir" style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>♻️ Repetir</button>
-                        <button onClick={() => borrarCompleto(r.participante_id, r.curso_id, r.participante?.nombre)} title="Quitar el curso por completo del portal del alumno (borra todo)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑 Del portal</button>
+                        <button onClick={() => eliminarAvance(r, 'resultado')} title="Borrar resultado y certificado, conservar inscripción para repetir" style={{ background: '#fef9c3', color: '#92400e', border: '1px solid #fde047', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>♻️ Repetir</button>
+                        <button onClick={() => borrarCompleto(r, 'resultado')} title="Quitar por completo (borra todo, incluidos intentos sin nombre)" style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '4px 8px', fontSize: 11, cursor: 'pointer' }}>🗑 Del portal</button>
                       </div>
                     </td>
                   </tr>
