@@ -17,7 +17,10 @@ export function construirHTMLCertificado({ cert, qrBase64 }) {
     fecha_emision, fecha_curso, instructor_nombre, instructor_rfc, director_nombre,
   } = cert
 
-  const fechaFormateada = new Date(fecha_curso || fecha_emision).toLocaleDateString('es-MX', {
+  // Forzar la fecha como local (evita que UTC reste un día en zonas como México)
+  const rawFecha = fecha_curso || fecha_emision
+  const fechaLocal = rawFecha ? new Date(String(rawFecha).slice(0, 10) + 'T12:00:00') : new Date()
+  const fechaFormateada = fechaLocal.toLocaleDateString('es-MX', {
     day: '2-digit', month: 'long', year: 'numeric'
   })
 

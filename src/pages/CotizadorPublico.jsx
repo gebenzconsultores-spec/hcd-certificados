@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const WA_NUMBER = '522223549353'
-const EMAIL_CONTACTO = 'luisgomez@hablandocondatos.com.mx'
+const EMAIL_CONTACTO = 'ventas@hablandocondatos.com.mx'
 const IVA = 0.16
 const MIN_GRUPO = 10
 const DESC_GRUPO = 0.20
@@ -440,17 +440,22 @@ export default function CotizadorPublico() {
                   <h3 style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>{co.nombre}</h3>
                   {co.descripcion && <p style={{ color: '#64748b', fontSize: 12, marginBottom: 8 }}>{co.descripcion}</p>}
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-                    {!co.cotizacion_especial && (
-                      <button onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                        ⚡ Usar cotizador automático
-                      </button>
-                    )}
-                    <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '" con un asesor.')}`}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                      💬 {co.cotizacion_especial ? 'Cotizar por WhatsApp' : 'Cotizar con un asesor'}
-                    </a>
+                    {(() => {
+                      const esEspecial = co.cotizacion_especial || Number(co.duracion) > 24 || diasDelCurso(co) > 3
+                      return <>
+                        {!esEspecial && (
+                          <button onClick={() => { setCursoSel(co); setConfig(p => ({ ...p, dias: co.dias_grupo || 1 })); setPaso(2) }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                            ⚡ Usar cotizador automático
+                          </button>
+                        )}
+                        <a href={`https://wa.me/522223549353?text=${encodeURIComponent('Hola, quiero cotizar el curso "' + co.nombre + '"' + (esEspecial ? ` (${co.duracion}h). ¿Pueden apoyarme con una cotización especial?` : ' con un asesor.'))}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                          💬 {esEspecial ? 'Cotizar por WhatsApp' : 'Cotizar con un asesor'}
+                        </a>
+                      </>
+                    })()}
                   </div>
                 </div>
               ))}
@@ -769,7 +774,7 @@ td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;}
     <div class="folio-label">Cotización</div>
     <div class="folio-val">${folio}</div>
     <div class="fecha">Fecha: ${fecha}</div>
-    <div class="fecha">Vigencia: 30 días naturales</div>
+    <div class="fecha">Vigencia: 90 días naturales</div>
   </div>
 </div>
 <div class="seccion">
@@ -803,9 +808,10 @@ ${config.notas ? `<div class="seccion"><h3>Notas</h3><p style="font-size:13px;co
 <div class="seccion" style="background:#f8f9fb;border-radius:8px;padding:16px;">
   <h3 style="margin-bottom:8px">Condiciones</h3>
   <p style="font-size:12px;color:#475569;line-height:1.8">
-    • Cotización válida por 30 días naturales.<br/>
+    • Cotización válida por 90 días naturales.<br/>
     • Precios en pesos mexicanos (MXN). ${config.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.'}<br/>
-    • La capacitación se confirma contra anticipo del 50%.<br/>
+    • La capacitación se confirma contra anticipo del 20%.<br/>
+    • Contactar con ventas para renegociar precio especial por uso de plataforma.<br/>
     • Incluye material didáctico y constancias con folio único verificable.<br/>
     ${config.requiere_viaticos ? '• Los viáticos son estimados y quedan sujetos a confirmación por HCD.<br/>' : ''}
     • Contacto: WhatsApp 222 354 9353 · ${EMAIL_CONTACTO}
