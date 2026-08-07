@@ -743,7 +743,7 @@ function ModalCalificarCurso({ estudiante, curso, evaluacion, onClose, onDone })
       const payload = {
         participante_id: estudiante.id, participante_nombre: estudiante.nombre,
         curso_id: curso.curso_id || null, curso_nombre: curso.curso_nombre,
-        calificacion: promedio(),
+        calificacion: Math.round(promedio()),
         cal_contenido: r.cal_contenido, cal_instructor: r.cal_instructor,
         cal_expectativas: r.cal_expectativas, cal_material: r.cal_material,
         cal_recomendaria: r.cal_recomendaria,
