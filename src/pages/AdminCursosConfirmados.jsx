@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { supabase, siguienteNumeroCurso } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
@@ -29,6 +29,7 @@ export default function AdminCursosConfirmados() {
   const [vista, setVista] = useState('calendario')
   const [mesActual, setMesActual] = useState(new Date())
   const [detalle, setDetalle] = useState(null)
+  const [listaAsistentes, setListaAsistentes] = useState(null)
   const [modalProgramar, setModalProgramar] = useState(false)
   const [modalEditarDias, setModalEditarDias] = useState(null)
   const [cursos, setCursos] = useState([])
@@ -318,14 +319,24 @@ export default function AdminCursosConfirmados() {
                 <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>No hay cursos confirmados aún</td></tr>
               )}
               {confirmados.map(c => (
-                <tr key={c.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                <React.Fragment key={c.id}>
+                <tr style={{ borderTop: '1px solid #f1f5f9' }}>
                   <td style={{ padding: '11px 16px', color: '#1e293b', fontWeight: 600, fontSize: 13 }}>{fmtFechaSegura(c.fecha_inicio)}</td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>
                     {c.numero_curso && <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '1px 6px', borderRadius: 4, fontSize: 11, marginRight: 6 }}>#{c.numero_curso}</code>}
                     {c.curso_nombre}
                   </td>
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.empresa_nombre || c.participante_nombre || '—'}</td>
-                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>{c.num_participantes}</td>
+                  <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>
+                    <button onClick={async () => {
+                      if (listaAsistentes?.id === c.id) { setListaAsistentes(null); return }
+                      const q = c.id_compra
+                        ? await supabase.from('asignaciones').select('id, empleado_nombre, estado').eq('id_compra', c.id_compra)
+                        : await supabase.from('asignaciones').select('id, empleado_nombre, estado').eq('curso_nombre', c.curso_nombre).eq('fecha_programada', c.fecha_inicio)
+                      setListaAsistentes({ id: c.id, data: q.data || [] })
+                    }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', fontWeight: 700, fontSize: 13, textDecoration: 'underline' }}
+                    title="Ver inscritos">{c.num_participantes} 👥</button>
+                  </td>
                   <td style={{ padding: '11px 16px' }}>
                     <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>
                       {c.origen === 'orden_compra' ? 'Orden de compra' : c.origen === 'proximo_curso' ? 'Próximo curso' : 'Programado'}
@@ -338,6 +349,23 @@ export default function AdminCursosConfirmados() {
                     <button onClick={() => verDetalle(c)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 12px', fontSize: 11, cursor: 'pointer', color: '#475569' }}>Ver</button>
                   </td>
                 </tr>
+                {listaAsistentes?.id === c.id && (
+                  <tr><td colSpan={7} style={{ padding: '0 16px 12px', background: '#f8f9fb' }}>
+                    {listaAsistentes.data.length === 0 ? (
+                      <div style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>Sin asistentes inscritos aún.</div>
+                    ) : (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0' }}>
+                        {listaAsistentes.data.map(a => (
+                          <span key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 10px', fontSize: 12, color: '#1e293b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {a.empleado_nombre}
+                            <span style={{ fontSize: 10, color: a.estado === 'completado' ? '#059669' : '#94a3b8' }}>{a.estado === 'completado' ? '✓' : '○'}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td></tr>
+                )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
