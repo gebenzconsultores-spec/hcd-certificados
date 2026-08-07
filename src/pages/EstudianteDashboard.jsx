@@ -710,18 +710,46 @@ function MisCursosIndividual({ estudiante, certificados }) {
 
 // ─── Modal: el alumno califica el curso y sugiere mejoras ─────
 function ModalCalificarCurso({ estudiante, curso, evaluacion, onClose, onDone }) {
-  const [cal, setCal] = useState(evaluacion?.calificacion || 0)
-  const [mejoras, setMejoras] = useState(evaluacion?.mejoras || '')
+  const [r, setR] = useState({
+    cal_contenido: evaluacion?.cal_contenido || evaluacion?.calificacion || 0,
+    cal_instructor: evaluacion?.cal_instructor || 0,
+    cal_expectativas: evaluacion?.cal_expectativas || 0,
+    cal_material: evaluacion?.cal_material || 0,
+    cal_recomendaria: evaluacion?.cal_recomendaria || 0,
+    mejoras: evaluacion?.mejoras || '',
+    curso_deseado: evaluacion?.curso_deseado || '',
+    conoce_plataforma: evaluacion?.conoce_plataforma || '',
+  })
   const [saving, setSaving] = useState(false)
 
+  const Stars = ({ value, onChange }) => (
+    <div style={{ display: 'flex', gap: 4 }}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <button key={n} onClick={() => onChange(n)} type="button"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 26, lineHeight: 1, color: n <= value ? '#f59e0b' : '#e2e8f0', padding: 0 }}>★</button>
+      ))}
+    </div>
+  )
+
+  const promedio = () => {
+    const vals = [r.cal_contenido, r.cal_instructor, r.cal_expectativas, r.cal_material, r.cal_recomendaria].filter(v => v > 0)
+    return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : 0
+  }
+
   async function guardar() {
-    if (!cal) { alert('Elige una calificación de 1 a 5 estrellas.'); return }
+    if (!r.cal_contenido) { alert('Califica al menos el contenido del curso.'); return }
     setSaving(true)
     try {
       const payload = {
         participante_id: estudiante.id, participante_nombre: estudiante.nombre,
         curso_id: curso.curso_id || null, curso_nombre: curso.curso_nombre,
-        calificacion: cal, mejoras: mejoras.trim() || null
+        calificacion: promedio(),
+        cal_contenido: r.cal_contenido, cal_instructor: r.cal_instructor,
+        cal_expectativas: r.cal_expectativas, cal_material: r.cal_material,
+        cal_recomendaria: r.cal_recomendaria,
+        mejoras: r.mejoras.trim() || null,
+        curso_deseado: r.curso_deseado.trim() || null,
+        conoce_plataforma: r.conoce_plataforma.trim() || null,
       }
       if (evaluacion) {
         const { error } = await supabase.from('evaluaciones_curso').update(payload).eq('id', evaluacion.id)
@@ -731,30 +759,55 @@ function ModalCalificarCurso({ estudiante, curso, evaluacion, onClose, onDone })
         if (error) throw error
       }
       onDone()
-      alert('✅ ¡Gracias por tu opinión!')
+      alert('✅ ¡Gracias por tu opinión! Nos ayuda a mejorar.')
     } catch (e) { alert('Error al guardar: ' + (e.message || '')) } finally { setSaving(false) }
   }
 
+  const lbl = { display: 'block', fontSize: 13, fontWeight: 600, color: '#1e293b', marginBottom: 5, marginTop: 14 }
+  const ta = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 13, color: '#1e293b', boxSizing: 'border-box', resize: 'vertical' }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(440px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Califica el curso</h3>
-        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 18 }}>{curso.curso_nombre}</p>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(500px,94vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>Evalúa tu experiencia</h3>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 6 }}>{curso.curso_nombre}</p>
+        <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 12 }}>Tu opinión es confidencial y nos ayuda a mejorar.</p>
 
-        <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 18 }}>
-          {[1, 2, 3, 4, 5].map(n => (
-            <button key={n} onClick={() => setCal(n)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 34, lineHeight: 1, color: n <= cal ? '#f59e0b' : '#e2e8f0', padding: 0 }}>★</button>
-          ))}
+        <div style={{ background: '#f8f9fb', borderRadius: 10, padding: '12px 16px', marginBottom: 6 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#8B1A1A', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Sobre el curso</p>
+
+          <label style={lbl}>1. ¿Cómo calificarías el contenido del curso?</label>
+          <Stars value={r.cal_contenido} onChange={v => setR(p => ({ ...p, cal_contenido: v }))} />
+
+          <label style={lbl}>2. ¿Cómo calificarías al instructor / ponente?</label>
+          <Stars value={r.cal_instructor} onChange={v => setR(p => ({ ...p, cal_instructor: v }))} />
+
+          <label style={lbl}>3. ¿El curso cumplió con tus expectativas?</label>
+          <Stars value={r.cal_expectativas} onChange={v => setR(p => ({ ...p, cal_expectativas: v }))} />
+
+          <label style={lbl}>4. ¿Cómo calificarías el material didáctico?</label>
+          <Stars value={r.cal_material} onChange={v => setR(p => ({ ...p, cal_material: v }))} />
+
+          <label style={lbl}>5. ¿Recomendarías este curso a un colega?</label>
+          <Stars value={r.cal_recomendaria} onChange={v => setR(p => ({ ...p, cal_recomendaria: v }))} />
+
+          <label style={lbl}>¿Qué mejorarías del curso? (opcional)</label>
+          <textarea value={r.mejoras} onChange={e => setR(p => ({ ...p, mejoras: e.target.value }))} rows={2} placeholder="Tus sugerencias nos ayudan a mejorar…" style={ta} />
         </div>
 
-        <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 5 }}>¿Qué podríamos mejorar? (opcional)</label>
-        <textarea value={mejoras} onChange={e => setMejoras(e.target.value)} rows={4} placeholder="Tus sugerencias nos ayudan a mejorar…"
-          style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none', color: '#1e293b', boxSizing: 'border-box', resize: 'vertical' }} />
+        <div style={{ background: '#f0f9ff', borderRadius: 10, padding: '12px 16px', marginTop: 10 }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Ayúdanos a servirte mejor</p>
+
+          <label style={lbl}>6. ¿Qué curso o servicio te gustaría que HCD te ofreciera?</label>
+          <textarea value={r.curso_deseado} onChange={e => setR(p => ({ ...p, curso_deseado: e.target.value }))} rows={2} placeholder="Ej: Auditor líder ISO 45001, consultoría en Six Sigma, certificación Green Belt…" style={ta} />
+
+          <label style={lbl}>7. ¿Conoces nuestra plataforma web y servicios para seguir capacitándote?</label>
+          <textarea value={r.conoce_plataforma} onChange={e => setR(p => ({ ...p, conoce_plataforma: e.target.value }))} rows={2} placeholder="Ej: Sí, me interesaría un plan anual / No la conozco, me gustaría más información…" style={ta} />
+        </div>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
           <button onClick={onClose} style={{ background: 'transparent', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, padding: '9px 20px', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
-          <button onClick={guardar} disabled={saving || !cal} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Enviar'}</button>
+          <button onClick={guardar} disabled={saving || !r.cal_contenido} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{saving ? 'Guardando...' : 'Enviar evaluación'}</button>
         </div>
       </div>
     </div>

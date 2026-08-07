@@ -445,6 +445,14 @@ export default function ExamenPublico() {
                 </div>
               )}
             </div>
+
+            {/* Botón regresar al portal */}
+            <div style={{ marginTop: 20, textAlign: 'center' }}>
+              <a href="/estudiante"
+                style={{ display: 'inline-block', background: '#8B1A1A', color: '#fff', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, textDecoration: 'none', cursor: 'pointer' }}>
+                🏠 Regresar a mi portal
+              </a>
+            </div>
           </div>
         )}
       </div>

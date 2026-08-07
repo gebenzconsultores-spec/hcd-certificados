@@ -48,7 +48,12 @@ export default function AdminEvaluaciones() {
       'Alumno': e.participante_nombre || '',
       'Curso': e.curso_nombre || '',
       'Calificación': e.calificacion || 0,
+      'Contenido': e.cal_contenido || '', 'Instructor': e.cal_instructor || '',
+      'Expectativas': e.cal_expectativas || '', 'Material': e.cal_material || '',
+      'Recomendaría': e.cal_recomendaria || '',
       'Sugerencias de mejora': e.mejoras || '',
+      'Curso deseado': e.curso_deseado || '',
+      'Conoce plataforma': e.conoce_plataforma || '',
     }))
     exportarAExcel(filas, `evaluaciones_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Evaluaciones')
   }
@@ -100,7 +105,18 @@ export default function AdminEvaluaciones() {
                     <span style={{ color: '#1e293b', fontWeight: 700, fontSize: 14 }}>{e.curso_nombre}</span>
                   </div>
                   <div style={{ color: '#64748b', fontSize: 12 }}>👤 {e.participante_nombre || 'Alumno'} · {e.created_at ? new Date(e.created_at).toLocaleDateString('es-MX') : ''}</div>
+                  {(e.cal_contenido || e.cal_instructor) && (
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8, fontSize: 11, color: '#475569' }}>
+                      {e.cal_contenido > 0 && <span>Contenido: {estrellas(e.cal_contenido)}</span>}
+                      {e.cal_instructor > 0 && <span>Instructor: {estrellas(e.cal_instructor)}</span>}
+                      {e.cal_expectativas > 0 && <span>Expectativas: {estrellas(e.cal_expectativas)}</span>}
+                      {e.cal_material > 0 && <span>Material: {estrellas(e.cal_material)}</span>}
+                      {e.cal_recomendaria > 0 && <span>Recomendaría: {estrellas(e.cal_recomendaria)}</span>}
+                    </div>
+                  )}
                   {e.mejoras && <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '10px 14px', marginTop: 8, color: '#475569', fontSize: 13 }}>💡 {e.mejoras}</div>}
+                  {e.curso_deseado && <div style={{ background: '#f0f9ff', borderRadius: 8, padding: '10px 14px', marginTop: 6, color: '#1d4ed8', fontSize: 13 }}>🎯 Curso deseado: {e.curso_deseado}</div>}
+                  {e.conoce_plataforma && <div style={{ background: '#faf5ff', borderRadius: 8, padding: '10px 14px', marginTop: 6, color: '#7c3aed', fontSize: 13 }}>🖥 Plataforma: {e.conoce_plataforma}</div>}
                 </div>
                 <button onClick={() => eliminar(e)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 10px', fontSize: 11, cursor: 'pointer' }}>🗑</button>
               </div>
