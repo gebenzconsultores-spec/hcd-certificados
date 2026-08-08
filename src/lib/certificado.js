@@ -13,9 +13,11 @@ export async function generarQRBase64(idUnico) {
 
 export function construirHTMLCertificado({ cert, qrBase64 }) {
   const {
-    id_unico, nombre_participante, nombre_curso, lugar, duracion,
+    id_unico, nombre_participante, nombre_curso, lugar, duracion, modalidad,
     fecha_emision, fecha_curso, instructor_nombre, instructor_rfc, director_nombre,
   } = cert
+
+  const modalidadTexto = modalidad === 'presencial' ? 'Presencial' : modalidad === 'mixta' ? 'Mixta' : modalidad === 'online' ? 'Online' : modalidad || ''
 
   // Forzar la fecha como local (evita que UTC reste un día en zonas como México)
   const rawFecha = fecha_curso || fecha_emision
@@ -84,7 +86,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
     <div class="el-curso">el curso:</div>
     <div class="curso-nombre">${nombre_curso}</div>
   </div>
-  ${qrBase64 ? `<div class="qr-wrap"><img src="${qrBase64}" class="qr-img"/><div class="qr-label">Verificar autenticidad</div></div>` : ''}
+  ${qrBase64 ? `<div class="qr-wrap"><img src="${qrBase64}" class="qr-img"/><div class="qr-label">Verificar autenticidad</div>${modalidadTexto ? `<div class="qr-label">${modalidadTexto}</div>` : ''}</div>` : ''}
   <div class="inferior">
     <div class="firmas">
       <div class="firma">
@@ -103,6 +105,7 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
       <div class="dato-row"><span class="dato-label">IDúnico*:</span><span class="dato-valor">${id_unico}</span></div>
       <div class="dato-row"><span class="dato-label">Impartido en:</span><span class="dato-valor">${lugar}</span></div>
       <div class="dato-row"><span class="dato-label">Duración (equivalente):</span><span class="dato-valor">${duracion} Hrs</span></div>
+      <div class="dato-row"><span class="dato-label">Modalidad:</span><span class="dato-valor">${modalidadTexto}</span></div>
       <div class="dato-row"><span class="dato-label">Fecha de inicio:</span><span class="dato-valor">${fechaFormateada}</span></div>
     </div>
   </div>

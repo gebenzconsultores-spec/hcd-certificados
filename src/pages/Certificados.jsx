@@ -292,7 +292,7 @@ export default function Certificados() {
               <div><label style={labelStyle}>Fecha de inicio del curso</label><input type="date" value={editForm.fecha_curso} onChange={e => setEditForm(p => ({ ...p, fecha_curso: e.target.value }))} style={inputStyle} /></div>
               <div><label style={labelStyle}>Modalidad</label>
                 <select value={editForm.modalidad} onChange={e => setEditForm(p => ({ ...p, modalidad: e.target.value }))} style={inputStyle}>
-                  <option value="online">Online</option><option value="presencial">Presencial</option>
+                  <option value="online">Online</option><option value="presencial">Presencial</option><option value="mixta">Mixta</option>
                 </select>
               </div>
             </div>
@@ -340,6 +340,7 @@ export default function Certificados() {
               <select value={form.modalidad} onChange={e => cambiarModalidad(e.target.value)} style={inputStyle}>
                 <option value="presencial">Presencial</option>
                 <option value="online">Online</option>
+                <option value="mixta">Mixta</option>
               </select>
             </div>
 

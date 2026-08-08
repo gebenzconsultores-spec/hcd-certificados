@@ -521,6 +521,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
   const [precio, setPrecio] = useState(0)
   const [cupoMaximo, setCupoMaximo] = useState(20)
   const [linkZoom, setLinkZoom] = useState('')
+  const [modalidadCurso, setModalidadCurso] = useState('presencial')
   const [codigoPromo, setCodigoPromo] = useState('')
   const [numeroManual, setNumeroManual] = useState('')
   const [mostrarEn, setMostrarEn] = useState('ambos') // cintillo: 'ambos' | 'empresa' | 'estudiante'
@@ -700,7 +701,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         temario: temario || null,
         fecha: fechaInicio,
         hora,
-        modalidad: 'zoom',
+        modalidad: modalidadCurso,
         numero_certificado: numeroCert,
         tipo_costo: tipoCosto,
         precio: tipoCosto === 'con_costo' ? (esEspecial ? Number(precio) : precioAuto) : 0,
@@ -727,7 +728,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         num_participantes: seleccionados.length,
         tipo_fechas: tipoFechas, num_dias: dias.length,
         origen: 'programado_admin', id_compra: idCompra,
-        modalidad: 'zoom', estado: 'confirmado', numero_curso: numeroCert,
+        modalidad: modalidadCurso, estado: 'confirmado', numero_curso: numeroCert,
         clave_vendedor: vendedorClave, vendedor_nombre: vendedorNombre, tipo_venta: tipoVentaFinal,
         notas: tipo === 'abierto' ? 'Curso abierto creado por HCD' : null
       }).select().single()
@@ -753,7 +754,7 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
           empresa_id: tipo === 'empresa' ? empresaId : (p?.empresa_id || p?.registrado_por_empresa || null),
           empleado_id: pid, empleado_nombre: p?.nombre,
           curso_id: curso.id, curso_nombre: curso.nombre, tipo: 'curso',
-          modalidad_asignacion: 'zoom', fecha_programada: fechaInicio, fecha_fin: fechaFin,
+          modalidad_asignacion: modalidadCurso, fecha_programada: fechaInicio, fecha_fin: fechaFin,
           id_compra: idCompra,
           estado: 'asignado', notas: 'Inscrito manualmente por admin'
         })
@@ -955,8 +956,20 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         {/* Link Zoom + código promo */}
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}>
-            <label style={lbl}>Link de Zoom</label>
+            <label style={lbl}>Modalidad</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+              {[['presencial', '🏢 Presencial'], ['online', '💻 Online'], ['mixta', '🔀 Mixta']].map(([v, l]) => (
+                <button key={v} type="button" onClick={() => setModalidadCurso(v)}
+                  style={{ flex: '1 1 30%', padding: '9px', border: `2px solid ${modalidadCurso === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: modalidadCurso === v ? '#f9f0f0' : '#fff', color: modalidadCurso === v ? '#8B1A1A' : '#475569', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            {(modalidadCurso === 'online' || modalidadCurso === 'mixta') && <>
+            <label style={lbl}>Link de Zoom / plataforma</label>
             <input value={linkZoom} onChange={e => setLinkZoom(e.target.value)} placeholder="https://zoom.us/j/..." style={inp} />
+            </>}
           </div>
           <div style={{ flex: 1 }}>
             <label style={lbl}>Número de curso (manual)</label>
