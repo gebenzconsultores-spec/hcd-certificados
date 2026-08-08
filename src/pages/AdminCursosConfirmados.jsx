@@ -398,6 +398,23 @@ export default function AdminCursosConfirmados() {
               </div>
             </div>
 
+            {/* Modalidad (editable) */}
+            <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
+              <div style={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}>Modalidad</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['presencial', '🏢 Presencial'], ['online', '💻 Online'], ['mixta', '🔀 Mixta']].map(([v, l]) => (
+                  <button key={v} onClick={async () => {
+                    await supabase.from('cursos_confirmados').update({ modalidad: v }).eq('id', detalle.id)
+                    setDetalle({ ...detalle, modalidad: v })
+                    await cargar()
+                  }}
+                    style={{ flex: 1, padding: '7px', border: `2px solid ${detalle.modalidad === v ? '#8B1A1A' : '#e2e8f0'}`, borderRadius: 8, background: detalle.modalidad === v ? '#f9f0f0' : '#fff', color: detalle.modalidad === v ? '#8B1A1A' : '#475569', fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Días del curso */}
             {(() => {
               const dias = diasCurso.filter(d => d.curso_confirmado_id === detalle.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
