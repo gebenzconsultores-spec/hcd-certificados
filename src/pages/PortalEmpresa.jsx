@@ -8,6 +8,7 @@ import PoolCandidatos from './PoolCandidatos.jsx'
 import ConsultoriaEmpresa from './ConsultoriaEmpresa.jsx'
 import PromocionesEmpresa from './PromocionesEmpresa.jsx'
 import RentaEmpresa from './RentaEmpresa.jsx'
+import PuestosEmpresa from './PuestosEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -143,6 +144,7 @@ export function EmpresaDashboard() {
     { id: 'consultoria', label: '🧩 Consultoría y auditoría' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
     { id: 'auditoria', label: '📦 Constancias y auditoría' },
+    { id: 'puestos', label: '📊 Puestos y organigrama' },
     { id: 'bolsa', label: '👔 Bolsa de trabajo' },
     { id: 'candidatos', label: '🧑‍💼 Pool de candidatos' },
   ]
@@ -252,6 +254,7 @@ export function EmpresaDashboard() {
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
             {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
+            {tab === 'puestos' && <PuestosEmpresa empresa={empresa} />}
             {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
             {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
             {tab === 'consultoria' && <ConsultoriaEmpresa empresa={empresa} />}
