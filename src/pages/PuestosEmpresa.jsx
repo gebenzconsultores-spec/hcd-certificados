@@ -14,6 +14,18 @@ const nivelLabel = v => (NIVELES.find(n => n.v === v) || NIVELES[4]).l
 const parseList = t => { try { return JSON.parse(t) } catch (_) { return t ? t.split('\n').filter(Boolean) : [] } }
 const toJSON = arr => JSON.stringify(arr.filter(Boolean))
 
+const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
+const btnSmall = { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }
+const card = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
+const emptyBox = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }
+const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
+const modalBox = { background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px)', width: 'min(520px,94vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
+const lbl = { display: 'block', fontWeight: 600, fontSize: 12, color: '#475569', marginBottom: 4, marginTop: 12 }
+const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }
+const chipStyle = { background: '#f9f0f0', color: '#8B1A1A', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11 }
+const thStyle = { padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: 11, color: '#64748b', fontWeight: 700 }
+const tdStyle = { padding: '8px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12, color: '#1e293b' }
+
 // Componente de lista dinámica (agregar, quitar items)
 function ListaItems({ items, setItems, placeholder, botonTexto }) {
   const [nuevo, setNuevo] = useState('')
@@ -70,20 +82,22 @@ export default function PuestosEmpresa({ empresa }) {
   useEffect(() => { cargar() }, [])
 
   async function cargar() {
-    const [p, r, c, pc, d, e] = await Promise.all([
-      supabase.from('puestos').select('*').eq('empresa_id', empresa.id).order('nombre'),
-      supabase.from('puesto_relaciones').select('*').eq('empresa_id', empresa.id),
-      supabase.from('cursos').select('id, nombre, duracion, categoria').eq('activo', true).order('nombre'),
-      supabase.from('puesto_cursos').select('*').eq('empresa_id', empresa.id),
-      supabase.from('diagnostico_empleado').select('*').eq('empresa_id', empresa.id),
-      supabase.from('participantes').select('id, nombre, correo').eq('empresa_id', empresa.id),
-    ])
-    setPuestos(p.data || [])
-    setRelaciones(r.data || [])
-    setCursos(c.data || [])
-    setPuestoCursos(pc.data || [])
-    setDiagnosticos(d.data || [])
-    setEmpleados(e.data || [])
+    try {
+      const [p, r, c, pc, d, e] = await Promise.all([
+        supabase.from('puestos').select('*').eq('empresa_id', empresa.id).order('nombre'),
+        supabase.from('puesto_relaciones').select('*').eq('empresa_id', empresa.id),
+        supabase.from('cursos').select('id, nombre, duracion, categoria').eq('activo', true).order('nombre'),
+        supabase.from('puesto_cursos').select('*').eq('empresa_id', empresa.id),
+        supabase.from('diagnostico_empleado').select('*').eq('empresa_id', empresa.id),
+        supabase.from('participantes').select('id, nombre, correo').eq('empresa_id', empresa.id),
+      ])
+      setPuestos(p.data || [])
+      setRelaciones(r.data || [])
+      setCursos(c.data || [])
+      setPuestoCursos(pc.data || [])
+      setDiagnosticos(d.data || [])
+      setEmpleados(e.data || [])
+    } catch (_) {}
     setLoading(false)
   }
 
@@ -394,14 +408,3 @@ function OrgTree({ puestos, relaciones, quitarRelacion }) {
   )
 }
 
-const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
-const btnSmall = { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }
-const card = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
-const emptyBox = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
-const modalBox = { background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px)', width: 'min(520px,94vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
-const lbl = { display: 'block', fontWeight: 600, fontSize: 12, color: '#475569', marginBottom: 4, marginTop: 12 }
-const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }
-const chipStyle = { background: '#f9f0f0', color: '#8B1A1A', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11 }
-const thStyle = { padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: 11, color: '#64748b', fontWeight: 700 }
-const tdStyle = { padding: '8px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12, color: '#1e293b' }
