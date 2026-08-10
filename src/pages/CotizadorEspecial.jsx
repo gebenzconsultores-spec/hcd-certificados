@@ -24,25 +24,29 @@ export default function CotizadorEspecial() {
   const iva = form.aplica_iva ? subtotal * 0.16 : 0
   const total = subtotal + iva
   const [folioContador, setFolioContador] = useState(53)
+  const [folioManual, setFolioManual] = useState('')
 
   useEffect(() => {
-    // Obtener el último folio usado del localStorage para mantener la secuencia
     const ultimo = localStorage.getItem('hcd_esp_folio_contador')
-    if (ultimo) setFolioContador(Math.max(53, parseInt(ultimo, 10) + 1))
-  }, [])
-
-  function generarFolio() {
-    const num = folioContador
+    const num = ultimo ? Math.max(53, parseInt(ultimo, 10) + 1) : 53
+    setFolioContador(num)
     const yr = String(new Date().getFullYear()).slice(-2)
-    const f = `${yr}-${String(num).padStart(3, '0')}`
-    localStorage.setItem('hcd_esp_folio_contador', String(num))
-    setFolioContador(num + 1)
-    return f
-  }
+    setFolioManual(`${yr}-${String(num).padStart(3, '0')}`)
+  }, [])
 
   function generarPDF() {
     if (!form.empresa_nombre || !form.curso_nombre) { alert('Escribe empresa y curso.'); return }
-    const folio = generarFolio()
+    if (!folioManual.trim()) { alert('Escribe un folio.'); return }
+    const folio = folioManual.trim()
+    // Guardar el número más alto usado para el siguiente
+    const match = folio.match(/\d+-(\d+)/)
+    if (match) {
+      const num = parseInt(match[1], 10)
+      localStorage.setItem('hcd_esp_folio_contador', String(num))
+      const yr = String(new Date().getFullYear()).slice(-2)
+      setFolioContador(num + 1)
+      setFolioManual(`${yr}-${String(num + 1).padStart(3, '0')}`)
+    }
     const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cotización ${folio}</title>
 <style>@page{size:letter;margin:20mm}body{font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;color:#1e293b;line-height:1.5}
@@ -104,6 +108,13 @@ ${form.notas ? `<div style="margin-bottom:16px;padding:12px;background:#fffbeb;b
 
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: 'clamp(18px,4vw,28px)' }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: '#8B1A1A', marginBottom: 16 }}>Nueva cotización</h2>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', marginBottom: 14, flexWrap: 'wrap' }}>
+          <div>
+            <label style={lbl}>Folio (editable)</label>
+            <input value={folioManual} onChange={e => setFolioManual(e.target.value)} placeholder="26-053" style={{ ...inp, width: 140, fontWeight: 700, fontSize: 16, color: '#8B1A1A', textAlign: 'center' }} />
+          </div>
+          <div style={{ color: '#94a3b8', fontSize: 11, paddingBottom: 10 }}>Se sugiere automáticamente el siguiente. Puedes editarlo.</div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 14 }}>
           <div><label style={lbl}>Empresa</label><input value={form.empresa_nombre} onChange={f('empresa_nombre')} placeholder="Nombre de la empresa" style={inp} /></div>
           <div><label style={lbl}>Contacto</label><input value={form.contacto_nombre} onChange={f('contacto_nombre')} placeholder="Nombre del contacto" style={inp} /></div>
