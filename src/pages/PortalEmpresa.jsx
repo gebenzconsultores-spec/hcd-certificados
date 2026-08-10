@@ -8,6 +8,7 @@ import PoolCandidatos from './PoolCandidatos.jsx'
 import ConsultoriaEmpresa from './ConsultoriaEmpresa.jsx'
 import PromocionesEmpresa from './PromocionesEmpresa.jsx'
 import RentaEmpresa from './RentaEmpresa.jsx'
+import { LinkTerminos } from './TerminosPrivacidad.jsx'
 import PuestosEmpresa from './PuestosEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
@@ -260,6 +261,11 @@ export function EmpresaDashboard() {
             {tab === 'consultoria' && <ConsultoriaEmpresa empresa={empresa} />}
             {tab === 'promociones' && <PromocionesEmpresa empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
             {tab === 'renta' && <RentaEmpresa empresa={empresa} />}
+
+            {/* Footer con términos */}
+            <div style={{ textAlign: 'center', padding: '20px 0 10px', borderTop: '1px solid #f1f5f9', marginTop: 24 }}>
+              <LinkTerminos />
+            </div>
           </>
         )}
       </div>
