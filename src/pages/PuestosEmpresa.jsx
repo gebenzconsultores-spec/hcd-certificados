@@ -1,197 +1,139 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const NIVELES = [
-  { v: 'direccion', l: '🏛 Dirección' },
-  { v: 'gerencia', l: '👔 Gerencia' },
-  { v: 'jefatura', l: '📋 Jefatura' },
-  { v: 'supervision', l: '🔧 Supervisión/Coordinación' },
-  { v: 'operativo', l: '⚙️ Operativo' },
-]
-const nivelLabel = v => (NIVELES.find(n => n.v === v) || NIVELES[4]).l
+const BTN = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
+const BTN2 = { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }
+const INP = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }
+const LBL = { display: 'block', fontWeight: 600, fontSize: 12, color: '#475569', marginBottom: 4, marginTop: 12 }
+const CHIP = { background: '#f9f0f0', color: '#8B1A1A', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11 }
+const NIVELES = ['Dirección', 'Gerencia', 'Jefatura', 'Supervisión', 'Operativo']
 
-// Helper: guarda listas como JSON en texto
-const parseList = t => { try { return JSON.parse(t) } catch (_) { return t ? t.split('\n').filter(Boolean) : [] } }
-const toJSON = arr => JSON.stringify(arr.filter(Boolean))
+function parseList(t) { try { const r = JSON.parse(t); return Array.isArray(r) ? r : [] } catch (e) { return t ? String(t).split('\n').filter(Boolean) : [] } }
 
-const btnPrimary = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }
-const btnSmall = { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }
-const card = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }
-const emptyBox = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }
-const overlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }
-const modalBox = { background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px)', width: 'min(520px,94vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }
-const lbl = { display: 'block', fontWeight: 600, fontSize: 12, color: '#475569', marginBottom: 4, marginTop: 12 }
-const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }
-const chipStyle = { background: '#f9f0f0', color: '#8B1A1A', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 8px', fontSize: 11 }
-const thStyle = { padding: '8px 10px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontSize: 11, color: '#64748b', fontWeight: 700 }
-const tdStyle = { padding: '8px 10px', borderBottom: '1px solid #f1f5f9', fontSize: 12, color: '#1e293b' }
-
-// Componente de lista dinámica (agregar, quitar items)
-function ListaItems({ items, setItems, placeholder, botonTexto }) {
-  const [nuevo, setNuevo] = useState('')
-  function agregar() {
-    const v = nuevo.trim()
-    if (!v) return
-    setItems([...items, v])
-    setNuevo('')
-  }
+function ListaDinamica({ items, onChange, placeholder, boton }) {
+  const [val, setVal] = useState('')
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <input value={nuevo} onChange={e => setNuevo(e.target.value)} placeholder={placeholder}
-          onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), agregar())}
-          style={{ ...inp, flex: 1 }} />
-        <button type="button" onClick={agregar} style={{ ...btnPrimary, padding: '8px 14px', fontSize: 12 }}>+ {botonTexto}</button>
+        <input value={val} onChange={function(e){setVal(e.target.value)}} placeholder={placeholder}
+          onKeyDown={function(e){ if(e.key==='Enter'){e.preventDefault(); if(val.trim()){onChange([].concat(items,[val.trim()])); setVal('')}} }}
+          style={Object.assign({}, INP, { flex: 1 })} />
+        <button type="button" onClick={function(){ if(val.trim()){onChange([].concat(items,[val.trim()])); setVal('')} }}
+          style={Object.assign({}, BTN, { padding: '8px 14px', fontSize: 12 })}>+ {boton}</button>
       </div>
-      {items.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {items.map((item, i) => (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.map(function(item, i) {
+          return (
             <span key={i} style={{ background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 10px', fontSize: 12, color: '#1e293b', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               {item}
-              <button type="button" onClick={() => setItems(items.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+              <button type="button" onClick={function(){ onChange(items.filter(function(x,j){return j!==i})) }}
+                style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14, padding: 0 }}>×</button>
             </span>
-          ))}
-        </div>
-      )}
+          )
+        })}
+      </div>
     </div>
   )
 }
 
 export default function PuestosEmpresa({ empresa }) {
-  const [puestos, setPuestos] = useState([])
-  const [relaciones, setRelaciones] = useState([])
-  const [cursos, setCursos] = useState([])
-  const [puestoCursos, setPuestoCursos] = useState([])
-  const [diagnosticos, setDiagnosticos] = useState([])
-  const [empleados, setEmpleados] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [vista, setVista] = useState('puestos')
-  const [modal, setModal] = useState(null)
-  const [tabForm, setTabForm] = useState('datos')
+  var _a = useState([]), puestos = _a[0], setPuestos = _a[1]
+  var _b = useState([]), relaciones = _b[0], setRelaciones = _b[1]
+  var _c = useState([]), cursosCat = _c[0], setCursosCat = _c[1]
+  var _d = useState([]), puestoCursos = _d[0], setPuestoCursos = _d[1]
+  var _e = useState([]), diagnosticos = _e[0], setDiagnosticos = _e[1]
+  var _f = useState([]), empleados = _f[0], setEmpleados = _f[1]
+  var _g = useState(true), loading = _g[0], setLoading = _g[1]
+  var _h = useState('puestos'), vista = _h[0], setVista = _h[1]
+  var _i = useState(null), modal = _i[0], setModal = _i[1]
+  var _j = useState('datos'), tabForm = _j[0], setTabForm = _j[1]
 
-  // Form con listas
-  const [formNombre, setFormNombre] = useState('')
-  const [formArea, setFormArea] = useState('')
-  const [formNivel, setFormNivel] = useState('operativo')
-  const [formConocimientos, setFormConocimientos] = useState([])
-  const [formHabilidades, setFormHabilidades] = useState([])
-  const [formExperiencia, setFormExperiencia] = useState([])
-  const [formAnios, setFormAnios] = useState(0)
-  const [formCertificaciones, setFormCertificaciones] = useState([])
+  var _k = useState(''), fNombre = _k[0], setFNombre = _k[1]
+  var _l = useState(''), fArea = _l[0], setFArea = _l[1]
+  var _m = useState('Operativo'), fNivel = _m[0], setFNivel = _m[1]
+  var _n = useState([]), fConocimientos = _n[0], setFConocimientos = _n[1]
+  var _o = useState([]), fHabilidades = _o[0], setFHabilidades = _o[1]
+  var _p = useState([]), fExperiencia = _p[0], setFExperiencia = _p[1]
+  var _q = useState(0), fAnios = _q[0], setFAnios = _q[1]
+  var _r = useState([]), fCerts = _r[0], setFCerts = _r[1]
 
-  useEffect(() => { cargar() }, [])
+  useEffect(function() { cargar() }, [])
 
-  async function cargar() {
-    try {
-      const [p, r, c, pc, d, e] = await Promise.all([
-        supabase.from('puestos').select('*').eq('empresa_id', empresa.id).order('nombre'),
-        supabase.from('puesto_relaciones').select('*').eq('empresa_id', empresa.id),
-        supabase.from('cursos').select('id, nombre, duracion, categoria').eq('activo', true).order('nombre'),
-        supabase.from('puesto_cursos').select('*').eq('empresa_id', empresa.id),
-        supabase.from('diagnostico_empleado').select('*').eq('empresa_id', empresa.id),
-        supabase.from('participantes').select('id, nombre, correo').eq('empresa_id', empresa.id),
-      ])
-      setPuestos(p.data || [])
-      setRelaciones(r.data || [])
-      setCursos(c.data || [])
-      setPuestoCursos(pc.data || [])
-      setDiagnosticos(d.data || [])
-      setEmpleados(e.data || [])
-    } catch (_) {}
-    setLoading(false)
+  function cargar() {
+    setLoading(true)
+    Promise.all([
+      supabase.from('puestos').select('*').eq('empresa_id', empresa.id).order('nombre'),
+      supabase.from('puesto_relaciones').select('*').eq('empresa_id', empresa.id),
+      supabase.from('cursos').select('id, nombre, duracion').eq('activo', true).order('nombre'),
+      supabase.from('puesto_cursos').select('*').eq('empresa_id', empresa.id),
+      supabase.from('diagnostico_empleado').select('*').eq('empresa_id', empresa.id),
+      supabase.from('participantes').select('id, nombre').eq('empresa_id', empresa.id),
+    ]).then(function(res) {
+      setPuestos((res[0].data) || [])
+      setRelaciones((res[1].data) || [])
+      setCursosCat((res[2].data) || [])
+      setPuestoCursos((res[3].data) || [])
+      setDiagnosticos((res[4].data) || [])
+      setEmpleados((res[5].data) || [])
+      setLoading(false)
+    }).catch(function() { setLoading(false) })
   }
 
-  function resetForm() {
-    setFormNombre(''); setFormArea(''); setFormNivel('operativo')
-    setFormConocimientos([]); setFormHabilidades([]); setFormExperiencia([])
-    setFormAnios(0); setFormCertificaciones([])
-  }
+  function resetForm() { setFNombre(''); setFArea(''); setFNivel('Operativo'); setFConocimientos([]); setFHabilidades([]); setFExperiencia([]); setFAnios(0); setFCerts([]) }
   function abrirNuevo() { resetForm(); setTabForm('datos'); setModal({ tipo: 'nuevo' }) }
   function abrirEditar(p) {
-    setFormNombre(p.nombre || ''); setFormArea(p.area || ''); setFormNivel(p.nivel || 'operativo')
-    setFormConocimientos(parseList(p.conocimientos)); setFormHabilidades(parseList(p.habilidades))
-    setFormExperiencia(parseList(p.experiencia)); setFormAnios(p.experiencia_anios || 0)
-    setFormCertificaciones(parseList(p.certificaciones))
+    setFNombre(p.nombre||''); setFArea(p.area||''); setFNivel(p.nivel||'Operativo')
+    setFConocimientos(parseList(p.conocimientos)); setFHabilidades(parseList(p.habilidades))
+    setFExperiencia(parseList(p.experiencia)); setFAnios(p.experiencia_anios||0); setFCerts(parseList(p.certificaciones))
     setTabForm('datos'); setModal({ tipo: 'editar', id: p.id })
   }
 
-  async function guardarPuesto() {
-    if (!formNombre.trim()) { alert('Escribe el nombre del puesto.'); return }
-    const payload = {
-      empresa_id: empresa.id, nombre: formNombre.trim(), area: formArea.trim(), nivel: formNivel,
-      conocimientos: toJSON(formConocimientos), habilidades: toJSON(formHabilidades),
-      experiencia: toJSON(formExperiencia), experiencia_anios: Number(formAnios) || 0,
-      certificaciones: toJSON(formCertificaciones),
-    }
-    if (modal.tipo === 'nuevo') {
-      const { error } = await supabase.from('puestos').insert(payload)
-      if (error) { alert('Error: ' + error.message); return }
-    } else {
-      const { error } = await supabase.from('puestos').update(payload).eq('id', modal.id)
-      if (error) { alert('Error: ' + error.message); return }
-    }
-    setModal(null); await cargar()
+  function guardarPuesto() {
+    if (!fNombre.trim()) { alert('Escribe el nombre del puesto.'); return }
+    var payload = { empresa_id: empresa.id, nombre: fNombre.trim(), area: fArea.trim(), nivel: fNivel, conocimientos: JSON.stringify(fConocimientos), habilidades: JSON.stringify(fHabilidades), experiencia: JSON.stringify(fExperiencia), experiencia_anios: Number(fAnios)||0, certificaciones: JSON.stringify(fCerts) }
+    var prom = modal.tipo === 'nuevo' ? supabase.from('puestos').insert(payload) : supabase.from('puestos').update(payload).eq('id', modal.id)
+    prom.then(function(r) { if(r.error){alert('Error: '+r.error.message);return}; setModal(null); cargar() })
   }
 
-  async function eliminarPuesto(p) {
-    if (!window.confirm(`¿Eliminar el puesto "${p.nombre}"?`)) return
-    try { await supabase.from('puesto_relaciones').delete().or(`puesto_id.eq.${p.id},puesto_padre_id.eq.${p.id}`) } catch (_) {}
-    try { await supabase.from('puesto_cursos').delete().eq('puesto_id', p.id) } catch (_) {}
-    try { await supabase.from('diagnostico_empleado').delete().eq('puesto_id', p.id) } catch (_) {}
-    await supabase.from('puestos').delete().eq('id', p.id); await cargar()
+  function eliminarPuesto(p) {
+    if (!window.confirm('¿Eliminar "'+p.nombre+'"?')) return
+    supabase.from('puesto_relaciones').delete().or('puesto_id.eq.'+p.id+',puesto_padre_id.eq.'+p.id).then(function(){})
+    supabase.from('puesto_cursos').delete().eq('puesto_id', p.id).then(function(){})
+    supabase.from('diagnostico_empleado').delete().eq('puesto_id', p.id).then(function(){})
+    supabase.from('puestos').delete().eq('id', p.id).then(function(){ cargar() })
   }
 
-  async function agregarRelacion(puestoId, padreId) {
-    if (!puestoId || !padreId || puestoId === padreId) return
-    if (relaciones.find(r => r.puesto_id === puestoId && r.puesto_padre_id === padreId)) return
-    await supabase.from('puesto_relaciones').insert({ empresa_id: empresa.id, puesto_id: puestoId, puesto_padre_id: padreId, tipo: 'reporta' })
-    await cargar()
+  function agregarRelacion() {
+    var h = document.getElementById('rel-hijo')
+    var p = document.getElementById('rel-padre')
+    if(!h||!p||!h.value||!p.value||h.value===p.value) return
+    if(relaciones.find(function(r){return r.puesto_id===h.value && r.puesto_padre_id===p.value})) return
+    supabase.from('puesto_relaciones').insert({ empresa_id: empresa.id, puesto_id: h.value, puesto_padre_id: p.value, tipo: 'reporta' }).then(function(){ cargar() })
   }
-  async function quitarRelacion(relId) { await supabase.from('puesto_relaciones').delete().eq('id', relId); await cargar() }
+  function quitarRelacion(id) { supabase.from('puesto_relaciones').delete().eq('id', id).then(function(){ cargar() }) }
 
-  async function toggleCurso(puestoId, curso) {
-    const existe = puestoCursos.find(pc => pc.puesto_id === puestoId && pc.curso_id === curso.id)
-    if (existe) {
-      await supabase.from('puesto_cursos').delete().eq('id', existe.id)
-      try { await supabase.from('diagnostico_empleado').delete().eq('puesto_id', puestoId).eq('curso_id', curso.id) } catch (_) {}
-    } else {
-      await supabase.from('puesto_cursos').insert({ empresa_id: empresa.id, puesto_id: puestoId, curso_id: curso.id, curso_nombre: curso.nombre })
-    }
-    await cargar()
+  function toggleCurso(puestoId, curso) {
+    var existe = puestoCursos.find(function(pc){return pc.puesto_id===puestoId && pc.curso_id===curso.id})
+    if (existe) { supabase.from('puesto_cursos').delete().eq('id', existe.id).then(function(){ cargar() }) }
+    else { supabase.from('puesto_cursos').insert({ empresa_id: empresa.id, puesto_id: puestoId, curso_id: curso.id, curso_nombre: curso.nombre }).then(function(){ cargar() }) }
   }
-  async function toggleCapacitado(puestoId, empleado, curso) {
-    const existe = diagnosticos.find(d => d.puesto_id === puestoId && d.empleado_id === empleado.id && d.curso_id === curso.id)
-    if (existe) {
-      await supabase.from('diagnostico_empleado').update({ capacitado: !existe.capacitado }).eq('id', existe.id)
-    } else {
-      await supabase.from('diagnostico_empleado').insert({ empresa_id: empresa.id, puesto_id: puestoId, empleado_id: empleado.id, empleado_nombre: empleado.nombre, curso_id: curso.id, curso_nombre: curso.nombre, capacitado: true })
-    }
-    await cargar()
+  function toggleCapacitado(puestoId, emp, curso) {
+    var existe = diagnosticos.find(function(d){return d.puesto_id===puestoId && d.empleado_id===emp.id && d.curso_id===curso.id})
+    if (existe) { supabase.from('diagnostico_empleado').update({ capacitado: !existe.capacitado }).eq('id', existe.id).then(function(){ cargar() }) }
+    else { supabase.from('diagnostico_empleado').insert({ empresa_id: empresa.id, puesto_id: puestoId, empleado_id: emp.id, empleado_nombre: emp.nombre, curso_id: curso.id, curso_nombre: curso.nombre, capacitado: true }).then(function(){ cargar() }) }
   }
 
   function imprimirOrganigrama() {
-    const raices = puestos.filter(p => !relaciones.find(r => r.puesto_id === p.id))
-    function buildTree(puesto, depth = 0) {
-      const hijos = relaciones.filter(r => r.puesto_padre_id === puesto.id).map(r => puestos.find(p => p.id === r.puesto_id)).filter(Boolean)
-      const indent = depth * 40
-      let html = `<div style="margin-left:${indent}px;margin-bottom:8px;">
-        <div style="display:inline-block;background:${depth === 0 ? '#8B1A1A' : '#fff'};color:${depth === 0 ? '#fff' : '#1e293b'};border:2px solid #8B1A1A;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;">
-          ${puesto.nombre}<div style="font-size:10px;font-weight:400;color:${depth === 0 ? '#f9d0d0' : '#64748b'}">${puesto.area || ''} · ${nivelLabel(puesto.nivel)}</div>
-        </div></div>`
-      hijos.forEach(h => { html += buildTree(h, depth + 1) })
+    function buildTree(puesto, depth) {
+      var hijos = relaciones.filter(function(r){return r.puesto_padre_id===puesto.id}).map(function(r){return puestos.find(function(p){return p.id===r.puesto_id})}).filter(Boolean)
+      var html = '<div style="margin-left:'+depth*40+'px;margin-bottom:8px;"><div style="display:inline-block;background:'+(depth===0?'#8B1A1A':'#fff')+';color:'+(depth===0?'#fff':'#1e293b')+';border:2px solid #8B1A1A;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;">'+puesto.nombre+'<div style="font-size:10px;font-weight:400;color:'+(depth===0?'#f9d0d0':'#64748b')+'">'+( puesto.area||'')+' · '+(puesto.nivel||'')+'</div></div></div>'
+      hijos.forEach(function(h){ html += buildTree(h, depth+1) })
       return html
     }
-    let body = ''; (raices.length ? raices : puestos).forEach(p => { body += buildTree(p, 0) })
-    const w = window.open('', '_blank')
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Organigrama - ${empresa.nombre}</title>
-<style>@page{size:landscape;margin:15mm}body{font-family:'Segoe UI',sans-serif;padding:20px}
-h1{color:#8B1A1A;font-size:22px;margin-bottom:4px}h2{color:#64748b;font-size:14px;font-weight:400;margin-bottom:20px}
-</style></head><body>
-<h1>Organigrama — ${empresa.nombre}</h1>
-<h2>Generado el ${new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}</h2>
-${body || '<p style="color:#94a3b8">No hay puestos registrados.</p>'}
-<div style="margin-top:30px;border-top:1px solid #e2e8f0;padding-top:10px;font-size:10px;color:#94a3b8;text-align:center">Hablando con Datos — Consultoría y Capacitación</div>
-<script>window.onload=()=>{window.print()}</script></body></html>`)
+    var raices = puestos.filter(function(p){return !relaciones.find(function(r){return r.puesto_id===p.id})})
+    var body = ''; (raices.length ? raices : puestos).forEach(function(p){ body += buildTree(p, 0) })
+    var w = window.open('','_blank')
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Organigrama</title><style>@page{size:landscape;margin:15mm}body{font-family:Segoe UI,sans-serif;padding:20px}</style></head><body><h1 style="color:#8B1A1A">Organigrama — '+empresa.nombre+'</h1><h2 style="color:#64748b;font-size:14px;font-weight:400">'+new Date().toLocaleDateString('es-MX')+'</h2>'+(body||'<p>No hay puestos.</p>')+'<script>window.onload=function(){window.print()}<\/script></body></html>')
     w.document.close()
   }
 
@@ -199,212 +141,125 @@ ${body || '<p style="color:#94a3b8">No hay puestos registrados.</p>'}
 
   return (
     <div>
-      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Define los puestos de tu organización, diagnostica necesidades de capacitación y construye tu organigrama.</p>
-
+      <p style={{ color: '#64748b', fontSize: 14, marginBottom: 16 }}>Define los puestos, diagnostica capacitación y construye tu organigrama.</p>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {[['puestos', `📋 Puestos (${puestos.length})`], ['diagnostico', '🎯 Diagnóstico'], ['organigrama', '🏗 Organigrama']].map(([v, l]) => (
-          <button key={v} onClick={() => setVista(v)} style={{ padding: '9px 18px', borderRadius: 10, border: `1px solid ${vista === v ? '#8B1A1A' : '#e2e8f0'}`, background: vista === v ? '#8B1A1A' : '#fff', color: vista === v ? '#fff' : '#475569', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
-        ))}
+        {[['puestos','📋 Puestos ('+puestos.length+')'],['diagnostico','🎯 Diagnóstico'],['organigrama','🏗 Organigrama']].map(function(t){
+          return <button key={t[0]} onClick={function(){setVista(t[0])}} style={{ padding:'9px 18px', borderRadius:10, border:'1px solid '+(vista===t[0]?'#8B1A1A':'#e2e8f0'), background:vista===t[0]?'#8B1A1A':'#fff', color:vista===t[0]?'#fff':'#475569', fontSize:13, fontWeight:600, cursor:'pointer' }}>{t[1]}</button>
+        })}
       </div>
 
-      {/* ═══ PUESTOS ═══ */}
-      {vista === 'puestos' && <>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
-          <button onClick={abrirNuevo} style={btnPrimary}>+ Agregar puesto</button>
-        </div>
-        {puestos.length === 0 ? <div style={emptyBox}>Aún no has definido puestos. Empieza con "Agregar puesto".</div> : (
-          <div style={{ display: 'grid', gap: 10 }}>
-            {puestos.map(p => {
-              const cono = parseList(p.conocimientos), hab = parseList(p.habilidades)
-              return (
-                <div key={p.id} style={card}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, color: '#1e293b', fontSize: 15 }}>{p.nombre}</div>
-                    <div style={{ color: '#64748b', fontSize: 12, marginTop: 2 }}>{p.area || 'Sin área'} · {nivelLabel(p.nivel)}</div>
-                    {cono.length > 0 && <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>{cono.map((c, i) => <span key={i} style={chipStyle}>📚 {c}</span>)}</div>}
-                    {hab.length > 0 && <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>{hab.map((h, i) => <span key={i} style={{ ...chipStyle, background: '#eff6ff', color: '#1d4ed8', borderColor: '#bfdbfe' }}>🛠 {h}</span>)}</div>}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => abrirEditar(p)} style={btnSmall}>✏️</button>
-                    <button onClick={() => eliminarPuesto(p)} style={{ ...btnSmall, color: '#dc2626', borderColor: '#fecaca' }}>🗑</button>
-                  </div>
+      {vista === 'puestos' && <div>
+        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:14 }}><button onClick={abrirNuevo} style={BTN}>+ Agregar puesto</button></div>
+        {puestos.length === 0 ? <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, padding:40, textAlign:'center', color:'#94a3b8' }}>Aún no has definido puestos.</div> :
+          <div style={{ display:'grid', gap:10 }}>{puestos.map(function(p){
+            var con = parseList(p.conocimientos), hab = parseList(p.habilidades)
+            return <div key={p.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:800, color:'#1e293b', fontSize:15 }}>{p.nombre}</div>
+                <div style={{ color:'#64748b', fontSize:12, marginTop:2 }}>{p.area||'Sin área'} · {p.nivel||'Operativo'}</div>
+                {con.length > 0 && <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:6 }}>{con.map(function(c,i){return <span key={i} style={CHIP}>📚 {c}</span>})}</div>}
+                {hab.length > 0 && <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>{hab.map(function(h,i){return <span key={i} style={Object.assign({},CHIP,{background:'#eff6ff',color:'#1d4ed8',borderColor:'#bfdbfe'})}>🛠 {h}</span>})}</div>}
+              </div>
+              <div style={{ display:'flex', gap:6 }}>
+                <button onClick={function(){abrirEditar(p)}} style={BTN2}>✏️</button>
+                <button onClick={function(){eliminarPuesto(p)}} style={Object.assign({},BTN2,{color:'#dc2626',borderColor:'#fecaca'})}>🗑</button>
+              </div>
+            </div>
+          })}</div>
+        }
+      </div>}
+
+      {vista === 'diagnostico' && <div>
+        {puestos.length === 0 ? <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, padding:40, textAlign:'center', color:'#94a3b8' }}>Primero define tus puestos.</div> :
+          puestos.map(function(puesto){
+            var curs = puestoCursos.filter(function(pc){return pc.puesto_id===puesto.id})
+            return <div key={puesto.id} style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'14px 18px', marginBottom:16 }}>
+              <div style={{ fontWeight:800, color:'#8B1A1A', fontSize:15, marginBottom:10 }}>🎯 {puesto.nombre}</div>
+              <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>Cursos requeridos:</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
+                {cursosCat.map(function(c){ var act=curs.find(function(pc){return pc.curso_id===c.id}); return <button key={c.id} onClick={function(){toggleCurso(puesto.id,c)}} style={{ padding:'5px 12px', borderRadius:20, border:'1px solid '+(act?'#059669':'#e2e8f0'), background:act?'#f0fdf4':'#fff', color:act?'#059669':'#475569', fontSize:11, fontWeight:act?700:400, cursor:'pointer' }}>{act?'✓ ':''}{c.nombre}</button> })}
+              </div>
+              {curs.length > 0 && empleados.length > 0 && <div>
+                <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>Estado:</div>
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                    <thead><tr style={{ background:'#f8f9fb' }}><th style={{ padding:'8px 10px', textAlign:'left', borderBottom:'1px solid #e2e8f0', fontSize:11 }}>Empleado</th>{curs.map(function(pc){return <th key={pc.id} style={{ padding:'8px 10px', textAlign:'left', borderBottom:'1px solid #e2e8f0', fontSize:11 }}>{pc.curso_nombre}</th>})}</tr></thead>
+                    <tbody>{empleados.map(function(emp){return <tr key={emp.id}><td style={{ padding:'8px 10px', borderBottom:'1px solid #f1f5f9' }}>{emp.nombre}</td>{curs.map(function(pc){ var d=diagnosticos.find(function(x){return x.puesto_id===puesto.id&&x.empleado_id===emp.id&&x.curso_id===pc.curso_id}); return <td key={pc.id} style={{ padding:'8px 10px', borderBottom:'1px solid #f1f5f9', textAlign:'center' }}><button onClick={function(){toggleCapacitado(puesto.id,emp,{id:pc.curso_id,nombre:pc.curso_nombre})}} style={{ background:d&&d.capacitado?'#f0fdf4':'#fef2f2', color:d&&d.capacitado?'#059669':'#dc2626', border:'none', borderRadius:6, padding:'4px 10px', fontSize:11, cursor:'pointer', fontWeight:700 }}>{d&&d.capacitado?'✓ Sí':'✗ No'}</button></td> })}</tr>})}</tbody>
+                  </table>
                 </div>
-              )
+              </div>}
+            </div>
+          })
+        }
+      </div>}
+
+      {vista === 'organigrama' && <div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, flexWrap:'wrap', gap:10 }}>
+          <p style={{ color:'#64748b', fontSize:13 }}>Define quién reporta a quién.</p>
+          <button onClick={imprimirOrganigrama} style={BTN}>📄 Imprimir PDF</button>
+        </div>
+        {puestos.length < 2 ? <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, padding:40, textAlign:'center', color:'#94a3b8' }}>Necesitas al menos 2 puestos.</div> : <div>
+          <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:12, padding:'16px 18px', marginBottom:20 }}>
+            <div style={{ display:'flex', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+              <select id="rel-hijo" style={INP}><option value="">— Puesto —</option>{puestos.map(function(p){return <option key={p.id} value={p.id}>{p.nombre}</option>})}</select>
+              <span style={{ color:'#64748b', fontSize:13 }}>reporta a →</span>
+              <select id="rel-padre" style={INP}><option value="">— Superior —</option>{puestos.map(function(p){return <option key={p.id} value={p.id}>{p.nombre}</option>})}</select>
+              <button onClick={agregarRelacion} style={BTN}>Conectar</button>
+            </div>
+          </div>
+          {relaciones.length > 0 && <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+            {relaciones.map(function(r){ var h=puestos.find(function(p){return p.id===r.puesto_id}); var pa=puestos.find(function(p){return p.id===r.puesto_padre_id}); return h&&pa ? <span key={r.id} style={{ background:'#f8f9fb', border:'1px solid #e2e8f0', borderRadius:8, padding:'4px 10px', fontSize:11, display:'inline-flex', alignItems:'center', gap:4 }}>{h.nombre} → {pa.nombre} <button onClick={function(){quitarRelacion(r.id)}} style={{ background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:12, padding:0 }}>×</button></span> : null })}
+          </div>}
+        </div>}
+      </div>}
+
+      {modal && <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={function(){setModal(null)}}>
+        <div style={{ background:'#fff', borderRadius:16, padding:'24px', width:'min(520px,94vw)', maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,.15)' }} onClick={function(e){e.stopPropagation()}}>
+          <h3 style={{ fontSize:18, fontWeight:800, color:'#1e293b', marginBottom:16 }}>{modal.tipo==='nuevo' ? '+ Agregar puesto' : '✏️ Editar puesto'}</h3>
+          <div style={{ display:'flex', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+            {[['datos','📋 Datos'],['conocimientos','📚 Conocimientos'],['habilidades','🛠 Habilidades'],['experiencia','🎓 Experiencia']].map(function(t){
+              return <button key={t[0]} onClick={function(){setTabForm(t[0])}} style={{ padding:'7px 14px', borderRadius:8, border:'1px solid '+(tabForm===t[0]?'#8B1A1A':'#e2e8f0'), background:tabForm===t[0]?'#8B1A1A':'#fff', color:tabForm===t[0]?'#fff':'#475569', fontSize:12, fontWeight:600, cursor:'pointer' }}>{t[1]}</button>
             })}
           </div>
-        )}
-      </>}
 
-      {/* ═══ DIAGNÓSTICO ═══ */}
-      {vista === 'diagnostico' && <>
-        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 14 }}>Selecciona los cursos que requiere cada puesto y marca el estado de capacitación de tus empleados.</p>
-        {puestos.length === 0 ? <div style={emptyBox}>Primero define tus puestos.</div> : puestos.map(puesto => {
-          const cursosDelPuesto = puestoCursos.filter(pc => pc.puesto_id === puesto.id)
-          return (
-            <div key={puesto.id} style={{ ...card, flexDirection: 'column', marginBottom: 16 }}>
-              <div style={{ fontWeight: 800, color: '#8B1A1A', fontSize: 15, marginBottom: 10 }}>🎯 {puesto.nombre}</div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>Cursos requeridos:</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {cursos.map(c => {
-                    const activo = cursosDelPuesto.find(pc => pc.curso_id === c.id)
-                    return <button key={c.id} onClick={() => toggleCurso(puesto.id, c)} style={{ padding: '5px 12px', borderRadius: 20, border: `1px solid ${activo ? '#059669' : '#e2e8f0'}`, background: activo ? '#f0fdf4' : '#fff', color: activo ? '#059669' : '#475569', fontSize: 11, fontWeight: activo ? 700 : 400, cursor: 'pointer' }}>{activo ? '✓ ' : ''}{c.nombre}</button>
-                  })}
-                </div>
-              </div>
-              {cursosDelPuesto.length > 0 && empleados.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>Estado de capacitación:</div>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                      <thead><tr style={{ background: '#f8f9fb' }}><th style={thStyle}>Empleado</th>{cursosDelPuesto.map(pc => <th key={pc.id} style={thStyle}>{pc.curso_nombre}</th>)}</tr></thead>
-                      <tbody>{empleados.map(emp => (
-                        <tr key={emp.id}><td style={tdStyle}>{emp.nombre}</td>
-                          {cursosDelPuesto.map(pc => {
-                            const diag = diagnosticos.find(d => d.puesto_id === puesto.id && d.empleado_id === emp.id && d.curso_id === pc.curso_id)
-                            return <td key={pc.id} style={{ ...tdStyle, textAlign: 'center' }}>
-                              <button onClick={() => toggleCapacitado(puesto.id, emp, { id: pc.curso_id, nombre: pc.curso_nombre })} style={{ background: diag?.capacitado ? '#f0fdf4' : '#fef2f2', color: diag?.capacitado ? '#059669' : '#dc2626', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>{diag?.capacitado ? '✓ Sí' : '✗ No'}</button>
-                            </td>
-                          })}
-                        </tr>
-                      ))}</tbody>
-                    </table>
-                  </div>
-                  {(() => {
-                    const total = cursosDelPuesto.length * empleados.length
-                    const cap = diagnosticos.filter(d => d.puesto_id === puesto.id && d.capacitado).length
-                    const pct = total > 0 ? Math.round((cap / total) * 100) : 0
-                    return <div style={{ marginTop: 10, background: '#f8f9fb', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
-                      <strong>Cobertura:</strong> {cap}/{total} ({pct}%) — {pct >= 80 ? '🟢 Bien capacitado' : pct >= 50 ? '🟡 Necesita refuerzo' : '🔴 Requiere capacitación urgente'}
-                    </div>
-                  })()}
-                </div>
-              )}
+          {tabForm === 'datos' && <div>
+            <label style={LBL}>Nombre del puesto *</label>
+            <input value={fNombre} onChange={function(e){setFNombre(e.target.value)}} placeholder="Ej: Gerente de Calidad" style={INP} />
+            <label style={LBL}>Área / Departamento</label>
+            <input value={fArea} onChange={function(e){setFArea(e.target.value)}} placeholder="Ej: Calidad" style={INP} />
+            <label style={LBL}>Jefatura</label>
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+              {NIVELES.map(function(n){ return <button key={n} type="button" onClick={function(){setFNivel(n)}} style={{ padding:'7px 14px', borderRadius:8, border:'2px solid '+(fNivel===n?'#8B1A1A':'#e2e8f0'), background:fNivel===n?'#f9f0f0':'#fff', color:fNivel===n?'#8B1A1A':'#475569', fontSize:12, fontWeight:600, cursor:'pointer' }}>{n}</button> })}
             </div>
-          )
-        })}
-      </>}
+          </div>}
 
-      {/* ═══ ORGANIGRAMA ═══ */}
-      {vista === 'organigrama' && <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-          <p style={{ color: '#64748b', fontSize: 13 }}>Define quién reporta a quién.</p>
-          <button onClick={imprimirOrganigrama} style={btnPrimary}>📄 Imprimir organigrama (PDF)</button>
-        </div>
-        {puestos.length < 2 ? <div style={emptyBox}>Necesitas al menos 2 puestos.</div> : <>
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '16px 18px', marginBottom: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Agregar relación</div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <select id="rel-hijo" style={inp}><option value="">— Puesto —</option>{puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
-              <span style={{ color: '#64748b', fontSize: 13 }}>reporta a →</span>
-              <select id="rel-padre" style={inp}><option value="">— Superior —</option>{puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}</select>
-              <button onClick={() => agregarRelacion(document.getElementById('rel-hijo').value, document.getElementById('rel-padre').value)} style={btnPrimary}>Conectar</button>
-            </div>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '20px' }}>
-            <OrgTree puestos={puestos} relaciones={relaciones} quitarRelacion={quitarRelacion} />
-          </div>
+          {tabForm === 'conocimientos' && <div>
+            <label style={LBL}>Conocimientos requeridos</label>
+            <p style={{ color:'#94a3b8', fontSize:11, marginBottom:8 }}>Agrega uno por uno.</p>
+            <ListaDinamica items={fConocimientos} onChange={setFConocimientos} placeholder="Ej: Normas ISO 9001" boton="Agregar conocimiento" />
+          </div>}
 
-          {/* Relaciones existentes */}
-          {relaciones.length > 0 && (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>Relaciones definidas:</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {relaciones.map(r => {
-                  const hijo = puestos.find(p => p.id === r.puesto_id)
-                  const padre = puestos.find(p => p.id === r.puesto_padre_id)
-                  return hijo && padre ? (
-                    <span key={r.id} style={{ background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      {hijo.nombre} → {padre.nombre}
-                      <button onClick={() => quitarRelacion(r.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: 0 }}>×</button>
-                    </span>
-                  ) : null
-                })}
-              </div>
-            </div>
-          )}
-        </>}
-      </>}
+          {tabForm === 'habilidades' && <div>
+            <label style={LBL}>Habilidades requeridas</label>
+            <p style={{ color:'#94a3b8', fontSize:11, marginBottom:8 }}>Agrega una por una.</p>
+            <ListaDinamica items={fHabilidades} onChange={setFHabilidades} placeholder="Ej: Auditorías internas" boton="Agregar habilidad" />
+          </div>}
 
-      {/* ═══ MODAL PUESTO ═══ */}
-      {modal && (
-        <div style={overlay} onClick={() => setModal(null)}>
-          <div style={modalBox} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 16 }}>{modal.tipo === 'nuevo' ? '+ Agregar puesto' : '✏️ Editar puesto'}</h3>
+          {tabForm === 'experiencia' && <div>
+            <label style={LBL}>Años de experiencia mínimos</label>
+            <input type="number" min="0" value={fAnios} onChange={function(e){setFAnios(e.target.value)}} style={Object.assign({},INP,{width:120})} />
+            <label style={LBL}>Experiencia requerida</label>
+            <ListaDinamica items={fExperiencia} onChange={setFExperiencia} placeholder="Ej: 3 años en automotriz" boton="Agregar experiencia" />
+            <label style={Object.assign({},LBL,{marginTop:16})}>Certificaciones previas</label>
+            <ListaDinamica items={fCerts} onChange={setFCerts} placeholder="Ej: Green Belt Six Sigma" boton="Agregar certificación" />
+          </div>}
 
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-              {[['datos', '📋 Datos'], ['conocimientos', '📚 Conocimientos'], ['habilidades', '🛠 Habilidades'], ['experiencia', '🎓 Experiencia']].map(([v, l]) => (
-                <button key={v} onClick={() => setTabForm(v)} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${tabForm === v ? '#8B1A1A' : '#e2e8f0'}`, background: tabForm === v ? '#8B1A1A' : '#fff', color: tabForm === v ? '#fff' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{l}</button>
-              ))}
-            </div>
-
-            {tabForm === 'datos' && <>
-              <label style={lbl}>Nombre del puesto *</label>
-              <input value={formNombre} onChange={e => setFormNombre(e.target.value)} placeholder="Ej: Gerente de Calidad" style={inp} />
-              <label style={lbl}>Área / Departamento</label>
-              <input value={formArea} onChange={e => setFormArea(e.target.value)} placeholder="Ej: Calidad, Producción, RH" style={inp} />
-              <label style={lbl}>Jefatura</label>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-                {NIVELES.map(n => (
-                  <button key={n.v} type="button" onClick={() => setFormNivel(n.v)} style={{ padding: '7px 14px', borderRadius: 8, border: `2px solid ${formNivel === n.v ? '#8B1A1A' : '#e2e8f0'}`, background: formNivel === n.v ? '#f9f0f0' : '#fff', color: formNivel === n.v ? '#8B1A1A' : '#475569', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{n.l}</button>
-                ))}
-              </div>
-            </>}
-
-            {tabForm === 'conocimientos' && <>
-              <label style={lbl}>Conocimientos requeridos</label>
-              <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8 }}>Agrega uno por uno los conocimientos que requiere el puesto.</p>
-              <ListaItems items={formConocimientos} setItems={setFormConocimientos} placeholder="Ej: Normas ISO 9001" botonTexto="Agregar conocimiento" />
-            </>}
-
-            {tabForm === 'habilidades' && <>
-              <label style={lbl}>Habilidades requeridas</label>
-              <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 8 }}>Agrega una por una las habilidades del puesto.</p>
-              <ListaItems items={formHabilidades} setItems={setFormHabilidades} placeholder="Ej: Auditorías internas" botonTexto="Agregar habilidad" />
-            </>}
-
-            {tabForm === 'experiencia' && <>
-              <label style={lbl}>Años de experiencia mínimos</label>
-              <input type="number" min={0} value={formAnios} onChange={e => setFormAnios(e.target.value)} style={{ ...inp, width: 120 }} />
-              <label style={lbl}>Experiencia requerida</label>
-              <ListaItems items={formExperiencia} setItems={setFormExperiencia} placeholder="Ej: 3 años en industria automotriz" botonTexto="Agregar experiencia" />
-              <label style={{ ...lbl, marginTop: 16 }}>Certificaciones previas</label>
-              <ListaItems items={formCertificaciones} setItems={setFormCertificaciones} placeholder="Ej: Auditor líder ISO 9001" botonTexto="Agregar certificación" />
-            </>}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button onClick={guardarPuesto} style={btnPrimary}>💾 Guardar puesto</button>
-              <button onClick={() => setModal(null)} style={{ ...btnSmall, padding: '9px 20px' }}>Cancelar</button>
-            </div>
+          <div style={{ display:'flex', gap:10, marginTop:20 }}>
+            <button onClick={guardarPuesto} style={BTN}>💾 Guardar puesto</button>
+            <button onClick={function(){setModal(null)}} style={Object.assign({},BTN2,{padding:'9px 20px'})}>Cancelar</button>
           </div>
         </div>
-      )}
+      </div>}
     </div>
   )
 }
-
-function OrgTree({ puestos, relaciones, quitarRelacion }) {
-  const raices = puestos.filter(p => !relaciones.find(r => r.puesto_id === p.id))
-  const huerfanos = puestos.filter(p => !relaciones.find(r => r.puesto_id === p.id) && !relaciones.find(r => r.puesto_padre_id === p.id))
-  function Nodo({ puesto, depth = 0 }) {
-    const hijos = relaciones.filter(r => r.puesto_padre_id === puesto.id)
-    return (
-      <div style={{ marginLeft: depth * 32, marginBottom: 8 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: depth === 0 ? '#8B1A1A' : '#fff', color: depth === 0 ? '#fff' : '#1e293b', border: '2px solid #8B1A1A', borderRadius: 10, padding: '8px 16px' }}>
-          <div><div style={{ fontWeight: 700, fontSize: 13 }}>{puesto.nombre}</div><div style={{ fontSize: 10, color: depth === 0 ? '#f9d0d0' : '#64748b' }}>{puesto.area || ''} · {nivelLabel(puesto.nivel)}</div></div>
-        </div>
-        {depth > 0 && (() => { const rel = relaciones.find(r => r.puesto_id === puesto.id); return rel ? <button onClick={() => quitarRelacion(rel.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 10, marginLeft: 4 }} title="Quitar">×</button> : null })()}
-        {hijos.map(r => { const hijo = puestos.find(p => p.id === r.puesto_id); return hijo ? <Nodo key={r.id} puesto={hijo} depth={depth + 1} /> : null })}
-      </div>
-    )
-  }
-  const conPadre = raices.filter(p => relaciones.find(r => r.puesto_padre_id === p.id))
-  return (
-    <div>
-      {conPadre.length > 0 ? conPadre.map(p => <Nodo key={p.id} puesto={p} depth={0} />) : null}
-      {huerfanos.length > 0 && <div style={{ marginTop: 16 }}><div style={{ color: '#94a3b8', fontSize: 11, marginBottom: 6 }}>Puestos sin conexión:</div>{huerfanos.map(p => <Nodo key={p.id} puesto={p} depth={0} />)}</div>}
-      {puestos.length === 0 && <div style={{ color: '#94a3b8' }}>No hay puestos.</div>}
-    </div>
-  )
-}
-

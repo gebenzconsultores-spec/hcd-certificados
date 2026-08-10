@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Suspense, lazy } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AuditoriaEmpresa from './AuditoriaEmpresa.jsx'
@@ -8,7 +8,7 @@ import PoolCandidatos from './PoolCandidatos.jsx'
 import ConsultoriaEmpresa from './ConsultoriaEmpresa.jsx'
 import PromocionesEmpresa from './PromocionesEmpresa.jsx'
 import RentaEmpresa from './RentaEmpresa.jsx'
-const PuestosEmpresa = lazy(() => import('./PuestosEmpresa.jsx'))
+import PuestosEmpresa from './PuestosEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -254,7 +254,7 @@ export function EmpresaDashboard() {
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
             {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
-            {tab === 'puestos' && <Suspense fallback={<div style={{ color: '#64748b', padding: 40, textAlign: 'center' }}>Cargando puestos...</div>}><PuestosEmpresa empresa={empresa} /></Suspense>}
+            {tab === 'puestos' && <PuestosEmpresa empresa={empresa} />}
             {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
             {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
             {tab === 'consultoria' && <ConsultoriaEmpresa empresa={empresa} />}
