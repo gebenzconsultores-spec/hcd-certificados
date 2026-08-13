@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
 const BTN = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }
 const BTN2 = { background: '#fff', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer' }
@@ -95,6 +96,40 @@ export default function PuestosEmpresa({ empresa }) {
     prom.then(function(r) { if(r.error){alert('Error: '+r.error.message);return}; setModal(null); cargar() })
   }
 
+  function exportarExcelPuestos() {
+    if (!puestos.length) { alert('No hay puestos.'); return }
+    var filas = puestos.map(function(p) { return { Nombre: p.nombre, Area: p.area, Nivel: p.nivel, Conocimientos: parseList(p.conocimientos).join(', '), Habilidades: parseList(p.habilidades).join(', '), Experiencia: parseList(p.experiencia).join(', '), Anios: p.experiencia_anios, Certificaciones: parseList(p.certificaciones).join(', ') } })
+    var ws = XLSX.utils.json_to_sheet(filas); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Puestos')
+    XLSX.writeFile(wb, 'puestos_' + new Date().toISOString().slice(0,10) + '.xlsx')
+  }
+
+  function importarExcelPuestos(file) {
+    if (!file) return
+    var reader = new FileReader()
+    reader.onload = function(e) {
+      var wb = XLSX.read(e.target.result, { type: 'array' })
+      var filas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' })
+      var creados = 0, chain = Promise.resolve()
+      filas.forEach(function(f) {
+        var nombre = String(f.Nombre || f.nombre || '').trim()
+        if (!nombre) return
+        chain = chain.then(function() {
+          return supabase.from('puestos').insert({
+            empresa_id: empresa.id, nombre: nombre, area: String(f.Area || f.area || '').trim(),
+            nivel: String(f.Nivel || f.nivel || 'Operativo').trim(),
+            conocimientos: JSON.stringify(String(f.Conocimientos || f.conocimientos || '').split(',').map(function(s){return s.trim()}).filter(Boolean)),
+            habilidades: JSON.stringify(String(f.Habilidades || f.habilidades || '').split(',').map(function(s){return s.trim()}).filter(Boolean)),
+            experiencia: JSON.stringify(String(f.Experiencia || f.experiencia || '').split(',').map(function(s){return s.trim()}).filter(Boolean)),
+            experiencia_anios: Number(f.Anios || f.anios || 0) || 0,
+            certificaciones: JSON.stringify(String(f.Certificaciones || f.certificaciones || '').split(',').map(function(s){return s.trim()}).filter(Boolean)),
+          }).then(function(r) { if(!r.error) creados++ })
+        })
+      })
+      chain.then(function() { cargar(); alert('✅ Puestos importados: ' + creados) })
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
   function eliminarPuesto(p) {
     if (!window.confirm('¿Eliminar "'+p.nombre+'"?')) return
     supabase.from('puesto_relaciones').delete().or('puesto_id.eq.'+p.id+',puesto_padre_id.eq.'+p.id).then(function(){})
@@ -149,7 +184,11 @@ export default function PuestosEmpresa({ empresa }) {
       </div>
 
       {vista === 'puestos' && <div>
-        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:14 }}><button onClick={abrirNuevo} style={BTN}>+ Agregar puesto</button></div>
+        <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:14, gap:8, flexWrap:'wrap' }}>
+          <button onClick={exportarExcelPuestos} style={{ background:'#fff', color:'#059669', border:'1px solid #a7f3d0', borderRadius:8, padding:'9px 14px', fontSize:12, fontWeight:700, cursor:'pointer' }}>⬇️ Excel</button>
+          <label style={{ background:'#fff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:8, padding:'9px 14px', fontSize:12, fontWeight:700, cursor:'pointer' }}>⬆️ Importar Excel<input type="file" accept=".xlsx,.xls" style={{ display:'none' }} onChange={function(e){importarExcelPuestos(e.target.files[0]);e.target.value=''}} /></label>
+          <button onClick={abrirNuevo} style={BTN}>+ Agregar puesto</button>
+        </div>
         {puestos.length === 0 ? <div style={{ background:'#fff', border:'1px solid #e2e8f0', borderRadius:14, padding:40, textAlign:'center', color:'#94a3b8' }}>Aún no has definido puestos.</div> :
           <div style={{ display:'grid', gap:10 }}>{puestos.map(function(p){
             var con = parseList(p.conocimientos), hab = parseList(p.habilidades)

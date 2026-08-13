@@ -13,6 +13,8 @@ export default function EmpresaAcceso() {
   const [modo, setModo] = useState('elegir') // elegir | registro | login | exito
   const [credenciales, setCredenciales] = useState(null) // {id_empresa, password, empData}
   const [error, setError] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
+  const [showPwdReg, setShowPwdReg] = useState(false)
   const [loading, setLoading] = useState(false)
 
   // Login con ID
@@ -50,16 +52,6 @@ export default function EmpresaAcceso() {
       }
       if (emp.activo === false) {
         setError('Esta cuenta está inactiva. Contacta a Hablando con Datos.')
-        setLoading(false)
-        return
-      }
-      if (emp.estado_acceso === 'pendiente') {
-        setError('Tu cuenta está en revisión. Te avisaremos en cuanto autoricemos el acceso a la plataforma.')
-        setLoading(false)
-        return
-      }
-      if (emp.estado_acceso === 'negado') {
-        setError('Tu solicitud de acceso no fue aprobada. Si crees que es un error, contacta a soporte.')
         setLoading(false)
         return
       }
@@ -111,7 +103,6 @@ export default function EmpresaAcceso() {
         id_empresa,
         tipo_acceso: 'invitado',
         tipo_cliente: 'nuevo',
-        estado_acceso: 'pendiente',
         fecha_registro: new Date().toISOString(),
         fecha_fin_prueba: fechaFin.toISOString(),
         activo: true,
@@ -130,9 +121,9 @@ export default function EmpresaAcceso() {
         })
       } catch (_) { /* ignorar si falla la notificación */ }
 
-      // Guardar credenciales y mostrar pantalla de "en revisión"
+      // Guardar credenciales para mostrar pantalla de éxito
       setCredenciales({ id_empresa, password: reg.password, empData: emp })
-      setModo('pendiente')
+      setModo('exito')
     } catch (e) {
       console.error('Error registro:', e)
       setError('No se pudo completar el registro: ' + (e.message || 'error desconocido') + '. Intenta de nuevo.')
@@ -201,8 +192,14 @@ export default function EmpresaAcceso() {
               <input value={idEmpresa} onChange={e => setIdEmpresa(e.target.value)} placeholder="EMP-0001" style={inp}
                 onKeyDown={e => e.key === 'Enter' && loginConID()} />
               <label style={lbl}>Contraseña</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={inp}
-                onKeyDown={e => e.key === 'Enter' && loginConID()} />
+              <div style={{ position: 'relative' }}>
+                <input type={showPwd ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={{ ...inp, paddingRight: 44 }}
+                  onKeyDown={e => e.key === 'Enter' && loginConID()} />
+                <button type="button" onClick={() => setShowPwd(p => !p)} tabIndex={-1}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8', padding: '4px' }}>
+                  {showPwd ? '🙈' : '👁️'}
+                </button>
+              </div>
 
               <button onClick={loginConID} disabled={loading} style={btnPrimary}>
                 {loading ? 'Entrando...' : 'Entrar'}
@@ -251,7 +248,14 @@ export default function EmpresaAcceso() {
               </select>
 
               <label style={lbl}>Crea una contraseña *</label>
-              <input type="password" value={reg.password} onChange={e => r('password')(e.target.value)} placeholder="Para futuros accesos" style={inp} />
+              <label style={lbl}>Contraseña para el portal</label>
+              <div style={{ position: 'relative' }}>
+                <input type={showPwdReg ? 'text' : 'password'} value={reg.password} onChange={e => r('password')(e.target.value)} placeholder="Para futuros accesos" style={{ ...inp, paddingRight: 44 }} />
+                <button type="button" onClick={() => setShowPwdReg(p => !p)} tabIndex={-1}
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8', padding: '4px' }}>
+                  {showPwdReg ? '🙈' : '👁️'}
+                </button>
+              </div>
 
               <button onClick={registrarInvitado}
                 disabled={loading || !reg.nombre || !reg.contacto_email || !reg.password}
@@ -262,38 +266,6 @@ export default function EmpresaAcceso() {
               <p style={{ color: '#94a3b8', fontSize: 11, textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
                 Al registrarte obtienes 30 días de acceso completo. Después podrás seguir usando el cotizador siempre gratis.
               </p>
-            </div>
-          )}
-
-          {/* PANTALLA EN REVISIÓN (registro pendiente de autorización) */}
-          {modo === 'pendiente' && credenciales && (
-            <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 18, padding: '36px 40px', textAlign: 'center' }}>
-              <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
-              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>¡Registro recibido!</h1>
-              <p style={{ color: '#64748b', fontSize: 14, marginBottom: 24 }}>Tu cuenta está <strong>en revisión</strong>. Te avisaremos en cuanto autoricemos tu acceso a la plataforma.</p>
-
-              <div style={{ background: '#f9f0f0', border: '2px solid #8B1A1A', borderRadius: 14, padding: '24px', marginBottom: 16 }}>
-                <p style={{ color: '#8B1A1A', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 14 }}>⚠️ Guarda estos datos para cuando se autorice</p>
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>Tu ID de empresa</div>
-                  <div style={{ color: '#8B1A1A', fontSize: 26, fontWeight: 800, letterSpacing: 1 }}>{credenciales.id_empresa}</div>
-                </div>
-                <div>
-                  <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>Tu contraseña</div>
-                  <div style={{ color: '#1e293b', fontSize: 18, fontWeight: 700 }}>{credenciales.password}</div>
-                </div>
-              </div>
-
-              <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 16px', marginBottom: 20 }}>
-                <p style={{ color: '#1e40af', fontSize: 12, lineHeight: 1.5 }}>
-                  📌 Cuando autoricemos tu cuenta, entra con la opción <strong>"Ya soy cliente"</strong> usando tu ID y contraseña.
-                </p>
-              </div>
-
-              <a href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent('Hola, acabo de registrar mi empresa (' + credenciales.id_empresa + ') y quiero saber sobre la autorización de acceso.')}`}
-                target="_blank" style={{ display: 'inline-block', background: '#25D366', color: '#fff', borderRadius: 12, padding: '13px 20px', fontSize: 14, fontWeight: 700, textDecoration: 'none' }}>
-                💬 Escríbenos por WhatsApp
-              </a>
             </div>
           )}
 

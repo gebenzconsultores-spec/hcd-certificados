@@ -130,8 +130,10 @@ export default function CotizadorEspecial() {
       '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
       '• Cotización válida por 90 días naturales.<br/>' +
       '• Precios en pesos mexicanos (MXN). ' + (d.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.') + '<br/>' +
-      '• Incluye material didáctico y constancias con folio único verificable.<br/>' +
-      '• La empresa deberá proporcionar y/o gestionar: aula, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional).<br/>' +
+      '• Incluye constancias con folio único verificable.<br/>' +
+      (d.modalidad === 'online'
+        ? '• El monto total deberá liquidarse un día antes de que comience el curso.<br/>'
+        : '• Incluye material didáctico.<br/>• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>') +
       '• Contacto: WhatsApp 222 354 9353 · ' + EMAIL + '</div>' +
       '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">' +
       '<p>Hablando con Datos — Consultoría y Capacitación · Puebla, México</p>' +

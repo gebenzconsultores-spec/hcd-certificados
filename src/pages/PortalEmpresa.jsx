@@ -90,25 +90,22 @@ export function EmpresaDashboard() {
   }
 
   // La empresa cambia su propia contraseña del portal
+  const [modalPassword, setModalPassword] = useState(false)
+  const [pwdActual, setPwdActual] = useState('')
+  const [pwdNueva, setPwdNueva] = useState('')
+  const [showPwdPortal, setShowPwdPortal] = useState(false)
+  const [showPwdNueva, setShowPwdNueva] = useState(false)
   async function cambiarMiPassword() {
-    const actual = window.prompt('Para cambiar tu contraseña, confirma tu contraseña ACTUAL:')
-    if (actual === null) return
-    if ((actual || '').trim() !== (empresa.portal_password || '')) {
-      alert('La contraseña actual no es correcta.')
-      return
-    }
-    const nueva = window.prompt('Escribe tu NUEVA contraseña (mínimo 4 caracteres):')
-    if (nueva === null) return
-    if ((nueva || '').trim().length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return }
+    if ((pwdActual || '').trim() !== (empresa.portal_password || '')) { alert('La contraseña actual no es correcta.'); return }
+    if ((pwdNueva || '').trim().length < 4) { alert('La contraseña debe tener al menos 4 caracteres.'); return }
     try {
-      const { error } = await supabase.from('empresas').update({ portal_password: nueva.trim() }).eq('id', empresa.id)
+      const { error } = await supabase.from('empresas').update({ portal_password: pwdNueva.trim() }).eq('id', empresa.id)
       if (error) { alert('No se pudo cambiar: ' + error.message); return }
-      const actualizada = { ...empresa, portal_password: nueva.trim() }
+      const actualizada = { ...empresa, portal_password: pwdNueva.trim() }
       sessionStorage.setItem('empresa_portal', JSON.stringify(actualizada))
-      alert('✅ Contraseña actualizada correctamente. Úsala la próxima vez que entres.')
-    } catch (e) {
-      alert('Error: ' + (e.message || ''))
-    }
+      setModalPassword(false); setPwdActual(''); setPwdNueva('')
+      alert('✅ Contraseña actualizada correctamente.')
+    } catch (e) { alert('Error: ' + (e.message || '')) }
   }
 
   // La empresa evalúa a HCD y sugiere mejoras
@@ -171,7 +168,7 @@ export function EmpresaDashboard() {
             <button onClick={() => setModalEval(true)} style={{ background: '#fff', border: '1px solid #fde047', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#a16207', cursor: 'pointer', fontWeight: 600 }}>
               ⭐ Evaluar HCD
             </button>
-            <button onClick={cambiarMiPassword} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#8B1A1A', cursor: 'pointer', fontWeight: 600 }}>
+            <button onClick={() => setModalPassword(true)} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#8B1A1A', cursor: 'pointer', fontWeight: 600 }}>
               🔑 Mi contraseña
             </button>
             <button onClick={salir} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 16px', fontSize: 13, color: '#475569', cursor: 'pointer' }}>
@@ -266,6 +263,29 @@ export function EmpresaDashboard() {
             <div style={{ textAlign: 'center', padding: '20px 0 10px', borderTop: '1px solid #f1f5f9', marginTop: 24 }}>
               <LinkTerminos />
             </div>
+
+      {/* Modal cambiar contraseña */}
+      {modalPassword && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setModalPassword(false)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: '28px', width: 'min(400px,94vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 16 }}>🔑 Cambiar contraseña</h3>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Contraseña actual</label>
+            <div style={{ position: 'relative', marginBottom: 14 }}>
+              <input type={showPwdPortal ? 'text' : 'password'} value={pwdActual} onChange={e => setPwdActual(e.target.value)} placeholder="Tu contraseña actual" style={{ width: '100%', padding: '9px 44px 9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => setShowPwdPortal(p => !p)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8' }}>{showPwdPortal ? '🙈' : '👁️'}</button>
+            </div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Nueva contraseña</label>
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <input type={showPwdNueva ? 'text' : 'password'} value={pwdNueva} onChange={e => setPwdNueva(e.target.value)} placeholder="Mínimo 4 caracteres" style={{ width: '100%', padding: '9px 44px 9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => setShowPwdNueva(p => !p)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#94a3b8' }}>{showPwdNueva ? '🙈' : '👁️'}</button>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={cambiarMiPassword} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Cambiar contraseña</button>
+              <button onClick={() => setModalPassword(false)} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '10px 22px', fontSize: 14, color: '#475569', cursor: 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
           </>
         )}
       </div>
