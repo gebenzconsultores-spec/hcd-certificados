@@ -105,7 +105,6 @@ html,body{width:297mm;height:210mm;overflow:hidden;background:#fff;-webkit-print
       <div class="dato-row"><span class="dato-label">IDúnico*:</span><span class="dato-valor">${id_unico}</span></div>
       <div class="dato-row"><span class="dato-label">Impartido en:</span><span class="dato-valor">${lugar}</span></div>
       <div class="dato-row"><span class="dato-label">Duración (equivalente):</span><span class="dato-valor">${duracion} Hrs</span></div>
-      <div class="dato-row"><span class="dato-label">Modalidad:</span><span class="dato-valor">${modalidadTexto}</span></div>
       <div class="dato-row"><span class="dato-label">Fecha de inicio:</span><span class="dato-valor">${fechaFormateada}</span></div>
     </div>
   </div>

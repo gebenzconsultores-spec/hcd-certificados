@@ -136,13 +136,13 @@ export function EmpresaDashboard() {
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '📚 Catálogo de cursos' },
     { id: 'asignaciones', label: '📋 Asignaciones' },
-    { id: 'rutas', label: '🏢 Rutas de capacitación' },
+    
     { id: 'promociones', label: '🏷️ Promociones' },
     { id: 'renta', label: '💳 Renta de plataforma' },
     { id: 'consultoria', label: '🧩 Consultoría y auditoría' },
     { id: 'cotizaciones', label: '💼 Mis cotizaciones' },
     { id: 'auditoria', label: '📦 Constancias y auditoría' },
-    { id: 'puestos', label: '📊 Puestos y organigrama' },
+    { id: 'puestos', label: '📊 Puestos y capacitación' },
     { id: 'bolsa', label: '👔 Bolsa de trabajo' },
     { id: 'candidatos', label: '🧑‍💼 Pool de candidatos' },
   ]
@@ -251,7 +251,7 @@ export function EmpresaDashboard() {
             {tab === 'asignaciones' && <TabAsignaciones asignaciones={asignaciones} empleados={empleados} empresa={empresa} recargar={() => cargar(empresa)} />}
             {tab === 'cotizaciones' && <TabCotizaciones empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'auditoria' && <AuditoriaEmpresa empresa={empresa} />}
-            {tab === 'rutas' && <RutasCapacitacion empresa={empresa} irACotizaciones={() => setTab('cotizaciones')} />}
+            
             {tab === 'puestos' && <PuestosEmpresa empresa={empresa} />}
             {tab === 'bolsa' && <BolsaTrabajo empresa={empresa} />}
             {tab === 'candidatos' && <PoolCandidatos empresa={empresa} />}
@@ -430,6 +430,7 @@ function TabEmpleados({ empresa, empleados, recargar }) {
   const [cursosPorEmpleado, setCursosPorEmpleado] = useState({})
   const [modalEstatus, setModalEstatus] = useState(null)
   const [modalEditar, setModalEditar] = useState(null)
+  const [busquedaEmp, setBusquedaEmp] = useState('')
 
   useEffect(() => {
     cargarCursos()
@@ -610,6 +611,10 @@ function TabEmpleados({ empresa, empleados, recargar }) {
         </div>
       </div>
 
+      <div style={{ marginBottom: 12 }}>
+        <input value={busquedaEmp} onChange={function(e){setBusquedaEmp(e.target.value)}} placeholder="🔍 Buscar empleado por nombre o correo..." style={{ width: '100%', padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: 10, fontSize: 13, boxSizing: 'border-box' }} />
+      </div>
+
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -623,7 +628,7 @@ function TabEmpleados({ empresa, empleados, recargar }) {
             {empleados.length === 0 && (
               <tr><td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#94a3b8' }}>Aún no has registrado empleados</td></tr>
             )}
-            {empleados.map(e => {
+            {empleados.filter(function(e){ return !busquedaEmp || (e.nombre||'').toLowerCase().includes(busquedaEmp.toLowerCase()) || (e.correo||'').toLowerCase().includes(busquedaEmp.toLowerCase()) }).map(e => {
               const cursos = cursosPorEmpleado[e.id] || { tomados: [], porTomar: [] }
               const totalTomados = cursos.tomados.length
               const totalPorTomar = cursos.porTomar.length

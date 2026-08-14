@@ -929,8 +929,6 @@ function ModalProgramarCurso({ cursos, empresas, participantes, vendedores, onCl
         <div style={{ borderTop: '1px solid #f1f5f9', margin: '18px 0 4px' }} />
 
         {/* Temario */}
-        <label style={lbl}>Temario <span style={{ color: '#94a3b8', fontWeight: 400 }}>(se autollena del curso, editable)</span></label>
-        <textarea value={temario} onChange={e => setTemario(e.target.value)} rows={3} placeholder="Puntos que cubre el curso..." style={{ ...inp, resize: 'vertical' }} />
 
         {/* Costo */}
         <label style={lbl}>¿El curso tiene costo?</label>
