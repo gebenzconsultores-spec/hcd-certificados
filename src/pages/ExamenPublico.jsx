@@ -349,6 +349,11 @@ export default function ExamenPublico() {
                   <p style={{ fontWeight: 600, color: '#1e293b', fontSize: 15, marginBottom: 14 }}>
                     <span style={{ color: '#8B1A1A', marginRight: 8 }}>{idx + 1}.</span>{p.pregunta}
                   </p>
+                  {p.imagen_url && (
+                    <div style={{ marginBottom: 14, textAlign: 'center' }}>
+                      <img src={p.imagen_url} alt={'Imagen pregunta ' + (idx + 1)} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 10, border: '1px solid #e2e8f0' }} />
+                    </div>
+                  )}
                   {opciones.map((op, oidx) => (
                     <label key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', background: respuestas[p.id] === oidx ? '#f9f0f0' : '#f8f9fb', border: `1.5px solid ${respuestas[p.id] === oidx ? '#8B1A1A' : '#e2e8f0'}` }}>
                       <input type="radio" name={`q_${p.id}`} checked={respuestas[p.id] === oidx}

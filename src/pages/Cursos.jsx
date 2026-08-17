@@ -288,11 +288,22 @@ export default function Cursos() {
     setModalVer(curso)
   }
   function preguntaVacia() {
-    return { pregunta: '', tipo: 'opcion_multiple', opciones: ['', '', '', ''], respuesta_correcta: 0 }
+    return { pregunta: '', tipo: 'opcion_multiple', opciones: ['', '', '', ''], respuesta_correcta: 0, imagen_url: '' }
   }
   function agregarPregunta() { setPreguntas(p => [...p, preguntaVacia()]) }
   function actualizarPregunta(idx, campo, valor) {
     setPreguntas(p => p.map((q, i) => i === idx ? { ...q, [campo]: valor } : q))
+  }
+  async function subirImagenPregunta(idx, file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Solo archivos de imagen (JPG, PNG, etc).'); return }
+    try {
+      const nombre = `preg_${modalExamen.id}_${idx}_${Date.now()}.${file.name.split('.').pop()}`
+      const { error } = await supabase.storage.from('examenes').upload(nombre, file, { upsert: true })
+      if (error) { alert('Error al subir imagen: ' + error.message); return }
+      const { data } = supabase.storage.from('examenes').getPublicUrl(nombre)
+      actualizarPregunta(idx, 'imagen_url', data.publicUrl)
+    } catch (e) { alert('Error: ' + (e.message || '')) }
   }
   function actualizarOpcion(idx, oidx, valor) {
     setPreguntas(p => p.map((q, i) => {
@@ -308,7 +319,8 @@ export default function Cursos() {
       const rows = preguntas.filter(p => p.pregunta.trim()).map(p => ({
         pregunta: p.pregunta, tipo: p.tipo,
         opciones: p.tipo === 'opcion_multiple' ? p.opciones : null,
-        respuesta_correcta: p.respuesta_correcta
+        respuesta_correcta: p.respuesta_correcta,
+        imagen_url: p.imagen_url || null
       }))
       await guardarPreguntas(modalExamen.id, rows)
       setModalExamen(null)
@@ -641,6 +653,20 @@ export default function Cursos() {
                   <button onClick={() => setPreguntas(p => p.filter((_, i) => i !== idx))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}>Eliminar</button>
                 </div>
                 <input value={q.pregunta} onChange={e => actualizarPregunta(idx, 'pregunta', e.target.value)} placeholder="Escribe la pregunta" style={{ ...inp, marginBottom: 10 }} />
+                {/* Imagen de la pregunta */}
+                <div style={{ marginBottom: 10 }}>
+                  {q.imagen_url ? (
+                    <div style={{ position: 'relative', display: 'inline-block' }}>
+                      <img src={q.imagen_url} alt="Imagen" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                      <button onClick={() => actualizarPregunta(idx, 'imagen_url', '')} style={{ position: 'absolute', top: 4, right: 4, background: '#dc2626', color: '#fff', border: 'none', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 12, lineHeight: 1 }}>✕</button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', color: '#475569' }}>
+                      🖼 Subir imagen (plano, gráfica, diagrama)
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => subirImagenPregunta(idx, e.target.files[0])} />
+                    </label>
+                  )}
+                </div>
                 {q.opciones.map((op, oidx) => (
                   <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <input type="radio" checked={q.respuesta_correcta === oidx} onChange={() => actualizarPregunta(idx, 'respuesta_correcta', oidx)} style={{ accentColor: '#059669' }} />
