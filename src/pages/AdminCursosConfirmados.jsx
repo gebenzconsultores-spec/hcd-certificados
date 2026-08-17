@@ -59,17 +59,21 @@ export default function AdminCursosConfirmados() {
   async function cargar() {
     const { data } = await supabase.from('cursos_confirmados').select('*').order('fecha_inicio', { ascending: true })
     const cursos = data || []
-    // Calcular el número REAL de asistentes de cada curso (asignaciones vivas)
-    const { data: todasAsigs } = await supabase.from('asignaciones').select('id_compra, curso_nombre, fecha_programada')
+    // Calcular el número REAL de asistentes de cada curso: asignaciones (inscritos por admin)
+    // + inscripciones (autoinscritos vía convocatoria, empresa o individual), sin duplicar
+    const [{ data: todasAsigs }, { data: todasInsc }] = await Promise.all([
+      supabase.from('asignaciones').select('id_compra, curso_nombre, fecha_programada, empleado_id'),
+      supabase.from('inscripciones').select('curso_nombre, fecha, participante_id')
+    ])
     const asigs = todasAsigs || []
+    const inscs = todasInsc || []
     const conConteo = cursos.map(c => {
-      let real
-      if (c.id_compra) {
-        real = asigs.filter(a => a.id_compra === c.id_compra).length
-      } else {
-        real = asigs.filter(a => a.curso_nombre === c.curso_nombre && a.fecha_programada === c.fecha_inicio).length
-      }
-      return { ...c, num_participantes: real }
+      const idsAsig = c.id_compra
+        ? asigs.filter(a => a.id_compra === c.id_compra).map(a => a.empleado_id)
+        : asigs.filter(a => a.curso_nombre === c.curso_nombre && a.fecha_programada === c.fecha_inicio).map(a => a.empleado_id)
+      const idsInsc = inscs.filter(i => i.curso_nombre === c.curso_nombre && i.fecha === c.fecha_inicio).map(i => i.participante_id)
+      const unicos = new Set([...idsAsig, ...idsInsc].filter(Boolean))
+      return { ...c, num_participantes: unicos.size }
     })
     setConfirmados(conConteo)
     // Cargar los días de cada curso (para mostrarlos en el calendario)
@@ -85,16 +89,34 @@ export default function AdminCursosConfirmados() {
     await cargarAsistentes(curso)
   }
 
-  async function cargarAsistentes(curso) {
-    let data = []
+  // Fusiona 'asignaciones' (inscritos por admin / con orden de compra) con 'inscripciones'
+  // (autoinscritos por el alumno vía convocatoria, sea empresa o individual), evitando duplicados
+  async function obtenerAsistentesMerge(curso) {
+    let asigData = []
     if (curso.id_compra) {
       const r = await supabase.from('asignaciones').select('*').eq('id_compra', curso.id_compra)
-      data = r.data || []
+      asigData = r.data || []
     } else {
-      // Por curso + fecha (convocatorias y programados manual)
       const r = await supabase.from('asignaciones').select('*').eq('curso_nombre', curso.curso_nombre).eq('fecha_programada', curso.fecha_inicio)
-      data = r.data || []
+      asigData = r.data || []
     }
+    const { data: inscData } = await supabase.from('inscripciones').select('*').eq('curso_nombre', curso.curso_nombre).eq('fecha', curso.fecha_inicio)
+    const yaAsignados = new Set(asigData.map(a => a.empleado_id).filter(Boolean))
+    const desdeAsig = asigData.map(a => ({
+      id: a.id, fuente: 'asignacion', empleado_id: a.empleado_id, empleado_nombre: a.empleado_nombre,
+      estado: a.estado, origen: a.empresa_id ? 'empresa' : 'individual'
+    }))
+    const desdeInsc = (inscData || [])
+      .filter(i => !yaAsignados.has(i.participante_id))
+      .map(i => ({
+        id: i.id, fuente: 'inscripcion', empleado_id: i.participante_id, empleado_nombre: i.participante_nombre,
+        estado: i.estado, origen: i.empresa_id ? 'empresa' : 'individual'
+      }))
+    return [...desdeAsig, ...desdeInsc]
+  }
+
+  async function cargarAsistentes(curso) {
+    const data = await obtenerAsistentesMerge(curso)
     setAsistentes(data)
   }
 
@@ -143,12 +165,16 @@ export default function AdminCursosConfirmados() {
   async function darDeBaja(curso, asistente) {
     if (!window.confirm(`¿Dar de baja a "${asistente.empleado_nombre}" de este curso?`)) return
     try {
-      // 1. Borrar la asignación
-      await supabase.from('asignaciones').delete().eq('id', asistente.id)
+      // 1. Borrar el registro de inscripción (asignación admin o autoinscripción vía convocatoria)
+      if (asistente.fuente === 'inscripcion') {
+        await supabase.from('inscripciones').delete().eq('id', asistente.id)
+      } else {
+        await supabase.from('asignaciones').delete().eq('id', asistente.id)
+      }
       // 2. Quitar acceso al examen
       if (asistente.empleado_id) {
         await supabase.from('participantes').update({ acceso_examen: false }).eq('id', asistente.empleado_id)
-        // 3. Borrar su inscripción a la convocatoria
+        // 3. Borrar cualquier inscripción restante a la convocatoria (por si quedó en las dos tablas)
         await supabase.from('inscripciones').delete().eq('participante_id', asistente.empleado_id).eq('curso_nombre', curso.curso_nombre)
       }
       // 4. Reducir el contador de participantes y liberar cupo
@@ -330,10 +356,8 @@ export default function AdminCursosConfirmados() {
                   <td style={{ padding: '11px 16px', color: '#475569', fontSize: 13 }}>
                     <button onClick={async () => {
                       if (listaAsistentes?.id === c.id) { setListaAsistentes(null); return }
-                      const q = c.id_compra
-                        ? await supabase.from('asignaciones').select('id, empleado_nombre, estado').eq('id_compra', c.id_compra)
-                        : await supabase.from('asignaciones').select('id, empleado_nombre, estado').eq('curso_nombre', c.curso_nombre).eq('fecha_programada', c.fecha_inicio)
-                      setListaAsistentes({ id: c.id, data: q.data || [] })
+                      const data = await obtenerAsistentesMerge(c)
+                      setListaAsistentes({ id: c.id, data })
                     }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1d4ed8', fontWeight: 700, fontSize: 13, textDecoration: 'underline' }}
                     title="Ver inscritos">{c.num_participantes} 👥</button>
                   </td>
@@ -356,8 +380,11 @@ export default function AdminCursosConfirmados() {
                     ) : (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 0' }}>
                         {listaAsistentes.data.map(a => (
-                          <span key={a.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 10px', fontSize: 12, color: '#1e293b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span key={`${a.fuente}-${a.id}`} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '4px 10px', fontSize: 12, color: '#1e293b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             {a.empleado_nombre}
+                            <span style={{ fontSize: 9, fontWeight: 700, color: a.origen === 'empresa' ? '#1d4ed8' : '#8B1A1A', background: a.origen === 'empresa' ? '#eff6ff' : '#f9f0f0', padding: '1px 6px', borderRadius: 20 }}>
+                              {a.origen === 'empresa' ? 'Empresa' : 'Individual'}
+                            </span>
                             <span style={{ fontSize: 10, color: a.estado === 'completado' ? '#059669' : '#94a3b8' }}>{a.estado === 'completado' ? '✓' : '○'}</span>
                           </span>
                         ))}
@@ -452,8 +479,11 @@ export default function AdminCursosConfirmados() {
                 <h4 style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>👥 Asistentes inscritos ({asistentes.length})</h4>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
                   {asistentes.map(a => (
-                    <div key={a.id} style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div key={`${a.fuente}-${a.id}`} style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
                       <span style={{ color: '#1e293b', fontSize: 13, fontWeight: 500, flex: 1 }}>{a.empleado_nombre}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: a.origen === 'empresa' ? '#1d4ed8' : '#8B1A1A', background: a.origen === 'empresa' ? '#eff6ff' : '#f9f0f0', padding: '2px 8px', borderRadius: 20 }}>
+                        {a.origen === 'empresa' ? 'Empresa' : 'Individual'}
+                      </span>
                       <span style={{ background: a.estado === 'completado' ? '#f0fdf4' : '#fef9c3', color: a.estado === 'completado' ? '#059669' : '#92400e', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600 }}>{a.estado}</span>
                       <button onClick={() => darDeBaja(detalle, a)} style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '3px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>Dar de baja</button>
                     </div>
