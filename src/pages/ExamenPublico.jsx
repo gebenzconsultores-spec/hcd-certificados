@@ -45,8 +45,10 @@ export default function ExamenPublico() {
         const { data: alu } = await supabase.from('participantes').select('*').eq('id', sesion.id).maybeSingle()
         const registro = alu || sesion
 
-        // Validar acceso al examen
-        if (registro.acceso_examen === false) {
+        // Validar acceso al examen (examen_sin_fecha salta todo)
+        const tienePermisoLibre = registro.examen_sin_fecha === true
+
+        if (!tienePermisoLibre && registro.acceso_examen === false) {
           setMensajeBloqueo('Tu empresa o el administrador aún no te ha habilitado el acceso a este examen. Solicita que te asignen al curso.')
           setFase('bloqueado')
           return
@@ -57,7 +59,7 @@ export default function ExamenPublico() {
           .select('id, estado, fecha_programada').eq('empleado_id', registro.id).eq('curso_id', cursoId)
         const asignado = (asigs || []).some(a => a.estado !== 'baja' && a.estado !== 'cancelado')
 
-        if (!asignado && registro.tipo !== 'individual') {
+        if (!tienePermisoLibre && !asignado && registro.tipo !== 'individual') {
           setMensajeBloqueo('No estás asignado a este curso. Pide a tu empresa que te inscriba antes de presentar el examen.')
           setFase('bloqueado')
           return
