@@ -811,7 +811,9 @@ ${config.notas ? `<div class="seccion"><h3>Notas</h3><p style="font-size:13px;co
     • Cotización válida por 90 días naturales.<br/>
     • Precios en pesos mexicanos (MXN). ${config.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.'}<br/>
     • Incluye material didáctico y constancias con folio único verificable.<br/>
-    • La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>
+    ${config.modalidad === 'online'
+      ? '• El monto total deberá liquidarse un día antes de que comience el curso.<br/>'
+      : '• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>'}
     ${config.requiere_viaticos ? '• Los viáticos son estimados y quedan sujetos a confirmación por HCD.<br/>' : ''}
     • Contacto: WhatsApp 222 354 9353 · ${EMAIL_CONTACTO}
   </p>
