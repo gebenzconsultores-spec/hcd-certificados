@@ -79,6 +79,21 @@ export default function CotizadorPublico() {
   const [ocSubida, setOcSubida] = useState(null)
   const [subiendoOC, setSubiendoOC] = useState(false)
   const [empresaPortal, setEmpresaPortal] = useState(null)
+  const [refCodigo, setRefCodigo] = useState(null)
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const ref = params.get('ref')
+      if (ref) {
+        setRefCodigo(ref)
+        sessionStorage.setItem('hcd_ref_codigo', ref)
+      } else {
+        const guardado = sessionStorage.getItem('hcd_ref_codigo')
+        if (guardado) setRefCodigo(guardado)
+      }
+    } catch (_) {}
+  }, [])
 
   useEffect(() => {
     supabase.from('familias').select('*').order('orden').then(({ data }) => setFamilias(data || []))
@@ -275,7 +290,8 @@ export default function CotizadorPublico() {
         fecha_deseada: config.fecha_deseada || null,
         empresa_id: empresaPortal?.id || null,
         empresa_registrada: !!empresaPortal,
-        estado: 'enviada'
+        estado: 'enviada',
+        referido_codigo: refCodigo || null
       }
       let { data: cotCreada, error: errCot } = await supabase.from('cotizaciones').insert(payload).select('id').single()
 

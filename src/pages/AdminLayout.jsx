@@ -24,6 +24,7 @@ const NAV = [
   { to: '/admin/cotizador-especial', label: 'Cotizador especial', icon: '✨' },
   { to: '/admin/compras', label: 'Compras y solicitudes', icon: '🎫' },
   { to: '/admin/seguimiento', label: 'Seguimiento comercial', icon: '🔭' },
+  { to: '/admin/recompensas', label: 'Recompensas y Membresías', icon: '🎁' },
   { to: '/admin/ventas', label: 'Ventas y cobranza', icon: '💰' },
   { to: '/admin/renta', label: 'Renta plataforma', icon: '💳' },
   { sep: 'Configuración' },

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { LinkTerminos } from './TerminosPrivacidad.jsx'
 import { generarYAbrirCertificado } from '../lib/certificado'
+import { asegurarCodigoReferido, linkReferido, canjearItem, CATEGORIAS_CANJE, ESTADOS_CANJE, ESTADOS_MEMBRESIA } from '../lib/tokens'
 
 const WA_SOPORTE = '522223549353'
 
@@ -69,7 +70,7 @@ export default function EstudianteDashboard() {
     setAsignaciones(asig)
     // Refrescar el consentimiento de oportunidades desde la BD (por si cambió)
     try {
-      const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades, perfil_profesional, habilidades_profesional, experiencia_profesional, linkedin_url, cv_url').eq('id', est.id).maybeSingle()
+      const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades, perfil_profesional, habilidades_profesional, experiencia_profesional, linkedin_url, cv_url, codigo_referido, tokens_balance').eq('id', est.id).maybeSingle()
       if (yo) {
         setEstudiante(prev => ({ ...(prev || est), ...yo }))
         try {
@@ -175,6 +176,7 @@ export default function EstudianteDashboard() {
             { id: 'vacantes', label: '👔 Vacantes' },
             ...(!esDeEmpresa ? [{ id: 'desbloquear', label: '🔑 Activar curso pagado' }] : []),
             ...(!esDeEmpresa ? [{ id: 'cotizaciones', label: '💼 Mis cotizaciones' }] : []),
+            { id: 'recompensas', label: '🎁 Recompensas y Membresía' },
           ].map(t => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ background: 'none', border: 'none', borderBottom: `2px solid ${tab === t.id ? '#1d4ed8' : 'transparent'}`, padding: '10px 18px', fontSize: 13, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? '#1d4ed8' : '#64748b', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -362,6 +364,11 @@ export default function EstudianteDashboard() {
         {tab === 'cotizaciones' && !esDeEmpresa && (
           <MisCotizacionesEstudiante estudiante={estudiante} />
         )}
+
+        {/* TAB RECOMPENSAS Y MEMBRESÍA */}
+        {tab === 'recompensas' && (
+          <RecompensasTab estudiante={estudiante} onActualizado={(nuevos) => setEstudiante(e => ({ ...e, ...nuevos }))} />
+        )}
       </div>
 
       {modalDatos && (
@@ -371,6 +378,234 @@ export default function EstudianteDashboard() {
       {/* Footer con términos */}
       <div style={{ textAlign: 'center', padding: '20px 0 10px', borderTop: '1px solid #f1f5f9', marginTop: 24 }}>
         <LinkTerminos />
+      </div>
+    </div>
+  )
+}
+
+// ─── TAB: Recompensas y Membresía (Tokens HCD, referidos, canje, membresías) ─────────────
+function RecompensasTab({ estudiante, onActualizado }) {
+  const [codigo, setCodigo] = useState(estudiante.codigo_referido || '')
+  const [copiado, setCopiado] = useState(false)
+  const [movimientos, setMovimientos] = useState([])
+  const [catalogo, setCatalogo] = useState([])
+  const [canjes, setCanjes] = useState([])
+  const [planes, setPlanes] = useState([])
+  const [membresia, setMembresia] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [filtroCategoria, setFiltroCategoria] = useState('todas')
+  const [canjeando, setCanjeando] = useState(null)
+  const [modalMembresia, setModalMembresia] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  async function cargar() {
+    setLoading(true)
+    try {
+      if (!estudiante.codigo_referido) {
+        const nuevo = await asegurarCodigoReferido(estudiante)
+        setCodigo(nuevo)
+        onActualizado({ codigo_referido: nuevo })
+      }
+    } catch (_) {}
+    const [{ data: movs }, { data: cat }, { data: mis }, { data: pls }, { data: mem }] = await Promise.all([
+      supabase.from('tokens_movimientos').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }).limit(30),
+      supabase.from('catalogo_canje').select('*').eq('activo', true).order('orden'),
+      supabase.from('canjes').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }),
+      supabase.from('membresias_planes').select('*').eq('activo', true).order('orden'),
+      supabase.from('membresias_alumno').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ])
+    setMovimientos(movs || [])
+    setCatalogo(cat || [])
+    setCanjes(mis || [])
+    setPlanes(pls || [])
+    setMembresia(mem || null)
+    setLoading(false)
+  }
+
+  function copiarLink() {
+    navigator.clipboard.writeText(linkReferido(codigo)).then(() => {
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2000)
+    })
+  }
+
+  async function canjear(item) {
+    const saldo = estudiante.tokens_balance || 0
+    if (saldo < item.costo_tokens) { alert('No tienes suficientes tokens para este canje.'); return }
+    if (!confirm(`¿Confirmas el canje de "${item.nombre}" por ${item.costo_tokens} tokens? Nuestro equipo se pondrá en contacto contigo para coordinar la entrega.`)) return
+    setCanjeando(item.id)
+    try {
+      await canjearItem(estudiante.id, item)
+      const nuevoSaldo = saldo - item.costo_tokens
+      onActualizado({ tokens_balance: nuevoSaldo })
+      await cargar()
+      alert('¡Canje solicitado! Nuestro equipo te contactará para coordinar la entrega.')
+    } catch (e) {
+      alert('No se pudo completar el canje: ' + (e.message || ''))
+    } finally {
+      setCanjeando(null)
+    }
+  }
+
+  const saldo = estudiante.tokens_balance || 0
+  const itemsFiltrados = filtroCategoria === 'todas' ? catalogo : catalogo.filter(i => i.categoria === filtroCategoria)
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Cargando...</div>
+
+  return (
+    <div>
+      {/* Saldo + referidos */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 14, marginBottom: 24 }}>
+        <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#b91c1c)', borderRadius: 14, padding: '22px 24px', color: '#fff' }}>
+          <div style={{ fontSize: 12, opacity: .85, fontWeight: 600 }}>Tu saldo de Tokens HCD</div>
+          <div style={{ fontSize: 36, fontWeight: 800, marginTop: 4 }}>{saldo} <span style={{ fontSize: 16, fontWeight: 600 }}>tokens</span></div>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>🔗 Tu link de referido</div>
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>Comparte tu link. Cuando alguien que refieras pague su primer curso, ganas <b>150 tokens</b>.</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input readOnly value={codigo ? linkReferido(codigo) : 'Generando...'} style={{ flex: 1, fontSize: 11, padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569' }} />
+            <button onClick={copiarLink} disabled={!codigo} style={{ background: copiado ? '#059669' : '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {copiado ? '✓ Copiado' : 'Copiar'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Historial de movimientos */}
+      <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', marginBottom: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Movimientos recientes</div>
+        {movimientos.length === 0 ? (
+          <div style={{ color: '#94a3b8', fontSize: 12 }}>Aún no tienes movimientos de tokens.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {movimientos.map(m => (
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                <span style={{ color: '#475569' }}>{m.concepto || m.tipo}</span>
+                <span style={{ fontWeight: 700, color: m.tipo === 'canjeado' ? '#dc2626' : '#059669' }}>{m.tipo === 'canjeado' ? '−' : '+'}{m.monto}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Catálogo de canje */}
+      <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>🎁 Catálogo de canje</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['todas', ...Object.keys(CATEGORIAS_CANJE)].map(c => (
+            <button key={c} onClick={() => setFiltroCategoria(c)}
+              style={{ background: filtroCategoria === c ? '#8B1A1A' : '#f1f5f9', color: filtroCategoria === c ? '#fff' : '#475569', border: 'none', borderRadius: 20, padding: '5px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>
+              {c === 'todas' ? 'Todas' : CATEGORIAS_CANJE[c]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 14, marginBottom: 28 }}>
+        {itemsFiltrados.map(item => {
+          const alcanza = saldo >= item.costo_tokens
+          return (
+            <div key={item.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', opacity: alcanza ? 1 : .6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>{CATEGORIAS_CANJE[item.categoria]}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b', marginBottom: 4 }}>{item.nombre}</div>
+              {item.descripcion && <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>{item.descripcion}</div>}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                <span style={{ fontWeight: 800, color: '#8B1A1A', fontSize: 15 }}>{item.costo_tokens} tokens</span>
+                <button onClick={() => canjear(item)} disabled={!alcanza || canjeando === item.id}
+                  style={{ background: alcanza ? '#8B1A1A' : '#e2e8f0', color: alcanza ? '#fff' : '#94a3b8', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: alcanza ? 'pointer' : 'not-allowed' }}>
+                  {canjeando === item.id ? 'Canjeando...' : 'Canjear'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Mis canjes */}
+      {canjes.length > 0 && (
+        <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', marginBottom: 28 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Mis canjes</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {canjes.map(c => {
+              const est = ESTADOS_CANJE[c.estado] || ESTADOS_CANJE.solicitado
+              return (
+                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span style={{ color: '#475569' }}>{c.item_nombre} <span style={{ color: '#94a3b8' }}>· {c.costo_tokens} tokens</span></span>
+                  <span style={{ background: est.bg, color: est.color, padding: '2px 10px', borderRadius: 20, fontWeight: 700, fontSize: 10 }}>{est.label}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Membresías */}
+      <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>💳 Membresías</div>
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Cursos recurrentes cada mes. Activación manual: sube tu comprobante de pago y nuestro equipo la activa.</div>
+      {membresia && membresia.estado !== 'cancelada' && (
+        <div style={{ background: (ESTADOS_MEMBRESIA[membresia.estado] || {}).bg || '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#1e293b' }}>Tu membresía <b>{(planes.find(p => p.clave === membresia.plan_clave) || {}).nombre || membresia.plan_clave}</b></div>
+          <span style={{ background: '#fff', color: (ESTADOS_MEMBRESIA[membresia.estado] || {}).color, padding: '3px 12px', borderRadius: 20, fontWeight: 700, fontSize: 11 }}>{(ESTADOS_MEMBRESIA[membresia.estado] || {}).label}</span>
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 14 }}>
+        {planes.map(plan => (
+          <div key={plan.clave} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#8B1A1A' }}>{plan.nombre}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: '#1e293b', margin: '6px 0' }}>${Number(plan.precio_mxn).toLocaleString('es-MX')} <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8' }}>MXN/mes</span></div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{plan.descripcion}</div>
+            <button onClick={() => setModalMembresia(plan)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              Solicitar membresía
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {modalMembresia && (
+        <ModalSolicitarMembresia estudiante={estudiante} plan={modalMembresia} onClose={() => setModalMembresia(null)} onDone={() => { setModalMembresia(null); cargar() }} />
+      )}
+    </div>
+  )
+}
+
+function ModalSolicitarMembresia({ estudiante, plan, onClose, onDone }) {
+  const [archivo, setArchivo] = useState(null)
+  const [subiendo, setSubiendo] = useState(false)
+
+  async function solicitar() {
+    if (!archivo) { alert('Adjunta tu comprobante de pago (PDF o imagen).'); return }
+    setSubiendo(true)
+    try {
+      const nombreArchivo = `${estudiante.id}_${plan.clave}_${Date.now()}_${archivo.name}`
+      const { error: upErr } = await supabase.storage.from('comprobantes-membresia').upload(nombreArchivo, archivo, { upsert: true })
+      if (upErr) { alert('No se pudo subir el comprobante: ' + (upErr.message || '')); setSubiendo(false); return }
+      const { data: urlData } = supabase.storage.from('comprobantes-membresia').getPublicUrl(nombreArchivo)
+      const { error: insErr } = await supabase.from('membresias_alumno').insert({
+        participante_id: estudiante.id, plan_clave: plan.clave, estado: 'pendiente_pago', comprobante_url: urlData.publicUrl,
+      })
+      if (insErr) { alert('No se pudo registrar la solicitud: ' + (insErr.message || '')); setSubiendo(false); return }
+      alert('¡Solicitud enviada! Confirmaremos tu pago y activaremos tu membresía en breve.')
+      onDone()
+    } catch (e) {
+      alert('Error: ' + (e.message || ''))
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 420, width: '100%' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Solicitar membresía {plan.nombre}</div>
+        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>${Number(plan.precio_mxn).toLocaleString('es-MX')} MXN/mes · Sube tu comprobante de pago y nuestro equipo activará tu membresía.</div>
+        <input type="file" accept="application/pdf,image/*" onChange={e => setArchivo(e.target.files[0])} style={{ width: '100%', fontSize: 12, marginBottom: 18 }} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#475569' }}>Cancelar</button>
+          <button onClick={solicitar} disabled={subiendo} style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            {subiendo ? 'Enviando...' : 'Enviar solicitud'}
+          </button>
+        </div>
       </div>
     </div>
   )
