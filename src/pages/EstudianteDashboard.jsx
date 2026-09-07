@@ -554,7 +554,10 @@ function RecompensasTab({ estudiante, onActualizado }) {
           <div key={plan.clave} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '20px 22px' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#8B1A1A' }}>{plan.nombre}</div>
             <div style={{ fontSize: 24, fontWeight: 800, color: '#1e293b', margin: '6px 0' }}>${Number(plan.precio_mxn).toLocaleString('es-MX')} <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8' }}>MXN/mes</span></div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{plan.descripcion}</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>• {plan.descripcion}</div>
+            {plan.beneficios_extra && (
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, whiteSpace: 'pre-line' }}>{plan.beneficios_extra}</div>
+            )}
             <button onClick={() => setModalMembresia(plan)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               Solicitar membresía
             </button>

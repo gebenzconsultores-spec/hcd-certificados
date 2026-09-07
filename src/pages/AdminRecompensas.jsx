@@ -353,10 +353,14 @@ function ModalActivarMembresia({ membresia, onClose, onDone }) {
 }
 
 // ── Catálogo (canje + planes) ──────────────────────────────────────────
+const ITEM_VACIO = { categoria: 'merchandising', nombre: '', descripcion: '', costo_tokens: '', costo_real_mxn: '' }
+
 function TabCatalogo() {
   const [items, setItems] = useState([])
   const [planes, setPlanes] = useState([])
   const [loading, setLoading] = useState(true)
+  const [nuevoItem, setNuevoItem] = useState(null)
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
 
   useEffect(() => { cargar() }, [])
 
@@ -377,17 +381,94 @@ function TabCatalogo() {
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, [campo]: valor } : i))
   }
 
+  async function eliminarItem(item) {
+    if (!confirm(`¿Eliminar "${item.nombre}" del catálogo de canje? Los canjes ya realizados con este ítem no se ven afectados.`)) return
+    const { error } = await supabase.from('catalogo_canje').delete().eq('id', item.id)
+    if (error) { alert('Error: ' + error.message); return }
+    setItems(prev => prev.filter(i => i.id !== item.id))
+  }
+
+  async function crearItem() {
+    if (!nuevoItem.nombre.trim()) { alert('Ponle un nombre al ítem.'); return }
+    const costo = parseInt(nuevoItem.costo_tokens, 10)
+    if (!costo || costo <= 0) { alert('El costo en tokens debe ser mayor a 0.'); return }
+    setGuardandoNuevo(true)
+    const { data, error } = await supabase.from('catalogo_canje').insert({
+      categoria: nuevoItem.categoria,
+      nombre: nuevoItem.nombre.trim(),
+      descripcion: nuevoItem.descripcion.trim() || null,
+      costo_tokens: costo,
+      costo_real_mxn: nuevoItem.costo_real_mxn ? parseFloat(nuevoItem.costo_real_mxn) : null,
+      orden: items.length + 1,
+    }).select().single()
+    setGuardandoNuevo(false)
+    if (error) { alert('Error: ' + error.message); return }
+    setItems(prev => [...prev, data])
+    setNuevoItem(null)
+  }
+
   async function guardarPlan(plan, campo, valor) {
     const { error } = await supabase.from('membresias_planes').update({ [campo]: valor }).eq('id', plan.id)
     if (error) { alert('Error: ' + error.message); return }
     setPlanes(prev => prev.map(p => p.id === plan.id ? { ...p, [campo]: valor } : p))
   }
 
+  async function eliminarPlan(plan) {
+    if (!confirm(`¿Eliminar el plan "${plan.nombre}"? Si ya tiene alumnos suscritos, en su lugar se recomienda solo desactivarlo (checkbox "Activo").`)) return
+    const { error } = await supabase.from('membresias_planes').delete().eq('id', plan.id)
+    if (error) {
+      alert('No se pudo eliminar (probablemente porque ya hay alumnos suscritos a este plan). Desactívalo en su lugar con el checkbox "Activo".\n\nDetalle: ' + error.message)
+      return
+    }
+    setPlanes(prev => prev.filter(p => p.id !== plan.id))
+  }
+
   if (loading) return <div style={{ color: '#94a3b8', padding: 20 }}>Cargando...</div>
 
   return (
     <div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Catálogo de canje</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>Catálogo de canje</div>
+        {!nuevoItem && (
+          <button onClick={() => setNuevoItem(ITEM_VACIO)} style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            + Nuevo ítem
+          </button>
+        )}
+      </div>
+
+      {nuevoItem && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', marginBottom: 14, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Categoría</label><br />
+            <select value={nuevoItem.categoria} onChange={e => setNuevoItem({ ...nuevoItem, categoria: e.target.value })} style={{ padding: '7px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}>
+              {Object.entries(CATEGORIAS_CANJE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </div>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Nombre</label><br />
+            <input value={nuevoItem.nombre} onChange={e => setNuevoItem({ ...nuevoItem, nombre: e.target.value })} style={{ width: '100%', padding: '7px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Descripción (opcional)</label><br />
+            <input value={nuevoItem.descripcion} onChange={e => setNuevoItem({ ...nuevoItem, descripcion: e.target.value })} style={{ width: '100%', padding: '7px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Costo tokens</label><br />
+            <input type="number" value={nuevoItem.costo_tokens} onChange={e => setNuevoItem({ ...nuevoItem, costo_tokens: e.target.value })} style={{ width: 80, padding: '7px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Costo real MXN</label><br />
+            <input type="number" value={nuevoItem.costo_real_mxn} onChange={e => setNuevoItem({ ...nuevoItem, costo_real_mxn: e.target.value })} style={{ width: 90, padding: '7px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }} />
+          </div>
+          <button onClick={crearItem} disabled={guardandoNuevo} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            {guardandoNuevo ? 'Guardando...' : 'Guardar'}
+          </button>
+          <button onClick={() => setNuevoItem(null)} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
       <div style={{ overflowX: 'auto', marginBottom: 28 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead>
@@ -397,6 +478,7 @@ function TabCatalogo() {
               <th style={{ padding: '8px 6px' }}>Costo tokens</th>
               <th style={{ padding: '8px 6px' }}>Costo real MXN</th>
               <th style={{ padding: '8px 6px' }}>Activo</th>
+              <th style={{ padding: '8px 6px' }}></th>
             </tr>
           </thead>
           <tbody>
@@ -413,48 +495,54 @@ function TabCatalogo() {
                 <td style={{ padding: '8px 6px' }}>
                   <input type="checkbox" checked={i.activo} onChange={e => guardarItem(i, 'activo', e.target.checked)} />
                 </td>
+                <td style={{ padding: '8px 6px' }}>
+                  <button onClick={() => eliminarItem(i)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>🗑 Eliminar</button>
+                </td>
               </tr>
             ))}
+            {items.length === 0 && <tr><td colSpan={6} style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Sin ítems todavía. Corre el SQL de recompensas o agrega uno con "+ Nuevo ítem".</td></tr>}
           </tbody>
         </table>
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Planes de membresía</div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: '#94a3b8', borderBottom: '1px solid #e2e8f0' }}>
-              <th style={{ padding: '8px 6px' }}>Plan</th>
-              <th style={{ padding: '8px 6px' }}>Precio MXN/mes</th>
-              <th style={{ padding: '8px 6px' }}>Cursos A</th>
-              <th style={{ padding: '8px 6px' }}>Cursos B</th>
-              <th style={{ padding: '8px 6px' }}>Cursos C</th>
-              <th style={{ padding: '8px 6px' }}>Activo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {planes.map(p => (
-              <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '8px 6px', fontWeight: 700, color: '#1e293b' }}>{p.nombre}</td>
-                <td style={{ padding: '8px 6px' }}>
-                  <input type="number" defaultValue={p.precio_mxn} onBlur={e => { const v = parseFloat(e.target.value); if (v !== p.precio_mxn) guardarPlan(p, 'precio_mxn', v) }} style={{ width: 80, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
-                </td>
-                <td style={{ padding: '8px 6px' }}>
-                  <input type="number" defaultValue={p.cursos_tipo_a} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_a) guardarPlan(p, 'cursos_tipo_a', v) }} style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
-                </td>
-                <td style={{ padding: '8px 6px' }}>
-                  <input type="number" defaultValue={p.cursos_tipo_b} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_b) guardarPlan(p, 'cursos_tipo_b', v) }} style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
-                </td>
-                <td style={{ padding: '8px 6px' }}>
-                  <input type="number" defaultValue={p.cursos_tipo_c} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_c) guardarPlan(p, 'cursos_tipo_c', v) }} style={{ width: 60, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
-                </td>
-                <td style={{ padding: '8px 6px' }}>
-                  <input type="checkbox" checked={p.activo} onChange={e => guardarPlan(p, 'activo', e.target.checked)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {planes.map(p => (
+          <div key={p.id} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontWeight: 800, color: '#8B1A1A', fontSize: 14 }}>{p.nombre} <code style={{ fontSize: 10, color: '#94a3b8', fontWeight: 400 }}>({p.clave})</code></div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <input type="checkbox" checked={p.activo} onChange={e => guardarPlan(p, 'activo', e.target.checked)} /> Activo
+                </label>
+                <button onClick={() => eliminarPlan(p)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>🗑 Eliminar</button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Precio MXN/mes</label>
+                <input type="number" defaultValue={p.precio_mxn} onBlur={e => { const v = parseFloat(e.target.value); if (v !== p.precio_mxn) guardarPlan(p, 'precio_mxn', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Cursos Tipo A/mes</label>
+                <input type="number" defaultValue={p.cursos_tipo_a} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_a) guardarPlan(p, 'cursos_tipo_a', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Cursos Tipo B/mes</label>
+                <input type="number" defaultValue={p.cursos_tipo_b} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_b) guardarPlan(p, 'cursos_tipo_b', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Cursos Tipo C/mes</label>
+                <input type="number" defaultValue={p.cursos_tipo_c} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_c) guardarPlan(p, 'cursos_tipo_c', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
+              </div>
+            </div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Descripción (cursos incluidos)</label>
+            <textarea defaultValue={p.descripcion || ''} onBlur={e => { if (e.target.value !== p.descripcion) guardarPlan(p, 'descripcion', e.target.value) }} rows={2} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, marginTop: 3, marginBottom: 10, fontFamily: 'inherit', resize: 'vertical' }} />
+            <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Beneficios extra (uno por línea, ej. "• Acceso a bolsa de trabajo prioritaria.")</label>
+            <textarea defaultValue={p.beneficios_extra || ''} onBlur={e => { if (e.target.value !== p.beneficios_extra) guardarPlan(p, 'beneficios_extra', e.target.value) }} rows={3} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, marginTop: 3, fontFamily: 'inherit', resize: 'vertical' }} />
+          </div>
+        ))}
+        {planes.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Sin planes todavía. Corre el SQL de recompensas para sembrar Lite/Pro/Master.</div>}
       </div>
     </div>
   )
