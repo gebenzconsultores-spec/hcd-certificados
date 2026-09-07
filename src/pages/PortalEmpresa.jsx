@@ -829,6 +829,16 @@ function ModalEditarEmpleado({ empleado, onGuardar, onClose }) {
         <label style={{ ...lbl, marginTop: 12 }}>Puesto</label>
         <input value={datos.puesto} onChange={e => d('puesto')(e.target.value)} style={inp} />
 
+        {(empleado.perfil_profesional || empleado.habilidades_profesional || empleado.experiencia_profesional || empleado.linkedin_url) && (
+          <div style={{ marginTop: 18, background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#1e293b', marginBottom: 8 }}>Perfil profesional (lo llena el propio empleado)</div>
+            {empleado.perfil_profesional && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Perfil</div><div style={{ fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>{empleado.perfil_profesional}</div></div>}
+            {empleado.habilidades_profesional && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Habilidades</div><div style={{ fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>{empleado.habilidades_profesional}</div></div>}
+            {empleado.experiencia_profesional && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Experiencia</div><div style={{ fontSize: 13, color: '#475569', whiteSpace: 'pre-wrap' }}>{empleado.experiencia_profesional}</div></div>}
+            {empleado.linkedin_url && <div><div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>LinkedIn</div><a href={empleado.linkedin_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#1d4ed8' }}>{empleado.linkedin_url}</a></div>}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
           <button onClick={guardar} disabled={saving} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>

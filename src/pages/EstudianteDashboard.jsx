@@ -6,6 +6,23 @@ import { generarYAbrirCertificado } from '../lib/certificado'
 
 const WA_SOPORTE = '522223549353'
 
+// Link oficial de LinkedIn "Agregar a mi perfil" (sin necesidad de API/OAuth propio):
+// https://www.linkedin.com/help/linkedin/answer/a566217
+function linkedInAddUrl(cert) {
+  const fecha = cert.fecha_emision ? new Date(cert.fecha_emision) : new Date()
+  const verifyUrl = window.location.origin + '/verificar/' + cert.id_unico
+  const params = new URLSearchParams({
+    startTask: 'CERTIFICATION_NAME',
+    name: cert.nombre_curso || '',
+    organizationName: 'Hablando con Datos',
+    issueYear: String(fecha.getFullYear()),
+    issueMonth: String(fecha.getMonth() + 1),
+    certUrl: verifyUrl,
+    certId: cert.id_unico || '',
+  })
+  return 'https://www.linkedin.com/profile/add?' + params.toString()
+}
+
 export default function EstudianteDashboard() {
   const navigate = useNavigate()
   const [estudiante, setEstudiante] = useState(null)
@@ -52,12 +69,12 @@ export default function EstudianteDashboard() {
     setAsignaciones(asig)
     // Refrescar el consentimiento de oportunidades desde la BD (por si cambió)
     try {
-      const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades').eq('id', est.id).maybeSingle()
+      const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades, perfil_profesional, habilidades_profesional, experiencia_profesional, linkedin_url, cv_url').eq('id', est.id).maybeSingle()
       if (yo) {
-        setEstudiante(prev => ({ ...(prev || est), disponible_oportunidades: yo.disponible_oportunidades }))
+        setEstudiante(prev => ({ ...(prev || est), ...yo }))
         try {
           const sesion = JSON.parse(sessionStorage.getItem('estudiante_portal') || '{}')
-          sessionStorage.setItem('estudiante_portal', JSON.stringify({ ...sesion, disponible_oportunidades: yo.disponible_oportunidades }))
+          sessionStorage.setItem('estudiante_portal', JSON.stringify({ ...sesion, ...yo }))
         } catch (_) {}
       }
     } catch (_) {}
@@ -266,6 +283,10 @@ export default function EstudianteDashboard() {
                       <a href={`/verificar/${cert.id_unico}`} target="_blank" style={{ color: '#64748b', fontSize: 11, textDecoration: 'none' }}>
                         🔗 Ver verificación
                       </a>
+                      <a href={linkedInAddUrl(cert)} target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#fff', background: '#0A66C2', padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
+                        in Agregar a LinkedIn
+                      </a>
                     </div>
                   </div>
                 )
@@ -362,9 +383,30 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
     correo: estudiante.correo || '',
     whatsapp: estudiante.whatsapp || '',
     disponible_oportunidades: estudiante.disponible_oportunidades || false,
+    perfil_profesional: estudiante.perfil_profesional || '',
+    habilidades_profesional: estudiante.habilidades_profesional || '',
+    experiencia_profesional: estudiante.experiencia_profesional || '',
+    linkedin_url: estudiante.linkedin_url || '',
+    cv_url: estudiante.cv_url || '',
   })
   const [saving, setSaving] = useState(false)
+  const [subiendoCV, setSubiendoCV] = useState(false)
   const d = k => v => setDatos(p => ({ ...p, [k]: v }))
+
+  async function subirCV(file) {
+    if (!file) return
+    if (file.type !== 'application/pdf') { alert('Solo se permiten archivos PDF'); return }
+    setSubiendoCV(true)
+    try {
+      const nombreArchivo = `${estudiante.id}_${Date.now()}.pdf`
+      const { error: upErr } = await supabase.storage.from('cv-alumnos').upload(nombreArchivo, file, { upsert: true })
+      if (upErr) { alert('No se pudo subir tu CV. Verifica el bucket "cv-alumnos" en Supabase.\n\nDetalle: ' + (upErr.message || '')); setSubiendoCV(false); return }
+      const { data: urlData } = supabase.storage.from('cv-alumnos').getPublicUrl(nombreArchivo)
+      d('cv_url')(urlData.publicUrl)
+    } catch (e) {
+      alert('Error al subir el CV: ' + (e.message || ''))
+    } finally { setSubiendoCV(false) }
+  }
 
   async function guardar() {
     if (!datos.nombre) { alert('El nombre es obligatorio'); return }
@@ -372,7 +414,12 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
     try {
       const { error } = await supabase.from('participantes').update({
         nombre: datos.nombre, correo: datos.correo, whatsapp: datos.whatsapp,
-        disponible_oportunidades: datos.disponible_oportunidades
+        disponible_oportunidades: datos.disponible_oportunidades,
+        perfil_profesional: datos.perfil_profesional || null,
+        habilidades_profesional: datos.habilidades_profesional || null,
+        experiencia_profesional: datos.experiencia_profesional || null,
+        linkedin_url: datos.linkedin_url || null,
+        cv_url: datos.cv_url || null,
       }).eq('id', estudiante.id)
       if (error) { alert('No se pudo guardar: ' + error.message); setSaving(false); return }
       // Sincronizar el nombre denormalizado en asignaciones (para que "Asignados" no quede viejo)
@@ -413,6 +460,33 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
             <strong>Quiero recibir nuevas oportunidades laborales</strong><br />
             <span style={{ color: '#15803d', fontSize: 12 }}>Autorizo a Hablando con Datos a compartir mi perfil profesional con empresas. Puedes desactivarlo cuando quieras.</span>
           </span>
+        </label>
+
+        <h4 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', marginTop: 22, marginBottom: 4 }}>Mi perfil profesional</h4>
+        <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 10 }}>Tu empresa y Hablando con Datos pueden verlo. Úsalo para que te tomen en cuenta en nuevas oportunidades.</p>
+
+        <label style={estLbl}>Perfil / resumen</label>
+        <textarea value={datos.perfil_profesional} onChange={e => d('perfil_profesional')(e.target.value)} rows={3} placeholder="Cuéntanos brevemente quién eres profesionalmente" style={{ ...estInp, resize: 'vertical' }} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>Habilidades</label>
+        <textarea value={datos.habilidades_profesional} onChange={e => d('habilidades_profesional')(e.target.value)} rows={2} placeholder="Ej: Excel avanzado, Auditorías ISO 9001, Power BI" style={{ ...estInp, resize: 'vertical' }} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>Experiencia</label>
+        <textarea value={datos.experiencia_profesional} onChange={e => d('experiencia_profesional')(e.target.value)} rows={2} placeholder="Ej: 3 años como analista de calidad en industria automotriz" style={{ ...estInp, resize: 'vertical' }} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>LinkedIn (opcional)</label>
+        <input value={datos.linkedin_url} onChange={e => d('linkedin_url')(e.target.value)} placeholder="https://www.linkedin.com/in/tu-usuario" style={estInp} />
+
+        <label style={{ ...estLbl, marginTop: 12 }}>Mi CV (PDF)</label>
+        {datos.cv_url && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <a href={datos.cv_url} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: 12, fontWeight: 600 }}>📎 Ver mi CV actual</a>
+          </div>
+        )}
+        <label style={{ display: 'inline-block', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 8, padding: '8px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          {subiendoCV ? 'Subiendo...' : datos.cv_url ? '📄 Reemplazar CV (PDF)' : '📄 Subir mi CV (PDF)'}
+          <input type="file" accept="application/pdf" style={{ display: 'none' }} disabled={subiendoCV}
+            onChange={e => { subirCV(e.target.files[0]); e.target.value = '' }} />
         </label>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>

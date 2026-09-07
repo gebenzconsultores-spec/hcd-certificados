@@ -137,6 +137,7 @@ export default function PoolCandidatos({ empresa }) {
                       {c.correo && <span style={{ color: '#475569' }}>✉️ {c.correo}</span>}
                       {c.telefono && <span style={{ color: '#475569' }}>📞 {c.telefono}</span>}
                       {c.cv_url && <a href={c.cv_url} target="_blank" style={{ color: '#1d4ed8', textDecoration: 'none', fontWeight: 600 }}>📎 Ver CV</a>}
+                      {c.linkedin_url && <a href={c.linkedin_url} target="_blank" style={{ color: '#0A66C2', textDecoration: 'none', fontWeight: 600 }}>🔗 LinkedIn</a>}
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

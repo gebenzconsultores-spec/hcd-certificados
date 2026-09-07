@@ -17,9 +17,12 @@ export default function CotizadorEspecial() {
   var [contacto, setContacto] = useState('')
   var [correo, setCorreo] = useState('')
   var [telefono, setTelefono] = useState('')
+  var [tipo, setTipo] = useState('curso') // 'curso' | 'servicio'
   var [curso, setCurso] = useState('')
   var [participantes, setParticipantes] = useState(1)
   var [modalidad, setModalidad] = useState('online')
+  var [detalleServicio, setDetalleServicio] = useState('')
+  var [condicionesManual, setCondicionesManual] = useState('')
   var [precio, setPrecio] = useState(0)
   var [aplicaIva, setAplicaIva] = useState(true)
   var [viaticos, setViaticos] = useState(0)
@@ -52,23 +55,29 @@ export default function CotizadorEspecial() {
 
   function limpiarForm() {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(''); setContacto(''); setCorreo(''); setTelefono('')
-    setCurso(''); setParticipantes(1); setModalidad('online'); setPrecio(0); setAplicaIva(true); setViaticos(0); setNotas('')
+    setTipo('curso'); setCurso(''); setParticipantes(1); setModalidad('online')
+    setDetalleServicio(''); setCondicionesManual('')
+    setPrecio(0); setAplicaIva(true); setViaticos(0); setNotas('')
   }
 
   function cargarEnForm(c) {
     setEditandoId(c.id); setFolio(c.folio || ''); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
-    setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setCurso(c.curso || '')
+    setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
     setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online')
+    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
   }
 
   function guardar() {
-    if (!empresa.trim() || !curso.trim()) { alert('Escribe empresa y curso.'); return }
+    if (!empresa.trim() || !curso.trim()) { alert(tipo === 'servicio' ? 'Escribe empresa y servicio.' : 'Escribe empresa y curso.'); return }
     setSaving(true)
     var payload = {
       folio: folio.trim() || nuevoFolio(), empresa: empresa.trim(), contacto: contacto.trim(),
-      correo: correo.trim(), telefono: telefono.trim(), curso: curso.trim(),
-      participantes: Number(participantes) || 1, modalidad: modalidad,
+      correo: correo.trim(), telefono: telefono.trim(), tipo: tipo, curso: curso.trim(),
+      participantes: tipo === 'servicio' ? null : (Number(participantes) || 1),
+      modalidad: tipo === 'servicio' ? null : modalidad,
+      detalle_servicio: tipo === 'servicio' ? detalleServicio.trim() : null,
+      condiciones_manual: tipo === 'servicio' ? condicionesManual.trim() : null,
       precio: Number(precio) || 0, aplica_iva: aplicaIva, viaticos: Number(viaticos) || 0,
       notas: notas.trim(), subtotal: subtotal, iva: iva, total: total,
       estado: 'guardada'
@@ -85,8 +94,9 @@ export default function CotizadorEspecial() {
 
   function duplicar(c) {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
-    setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setCurso(c.curso || '')
+    setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
     setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online')
+    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -97,11 +107,30 @@ export default function CotizadorEspecial() {
   }
 
   function generarPDF(c) {
-    var d = c || { folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, curso: curso, participantes: participantes, modalidad: modalidad, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
+    var d = c || { folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, tipo: tipo, curso: curso, participantes: participantes, modalidad: modalidad, detalle_servicio: detalleServicio, condiciones_manual: condicionesManual, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
+    var esServicio = d.tipo === 'servicio'
     var fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
     var st = (Number(d.precio)||0) + (Number(d.viaticos)||0)
     var iv = d.aplica_iva ? st * 0.16 : 0
     var tot = st + iv
+    var detalleCol = esServicio ? (d.detalle_servicio || '') : ((d.participantes||1) + ' persona(s) · ' + (d.modalidad||''))
+    // Condiciones: en cursos se imprimen fijas; en servicios solo si se escribieron a mano (si no, se omite la sección completa)
+    var condicionesHtml = ''
+    if (esServicio) {
+      if (d.condiciones_manual && d.condiciones_manual.trim()) {
+        condicionesHtml = '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
+          String(d.condiciones_manual).replace(/\n/g, '<br/>') + '</div>'
+      }
+    } else {
+      condicionesHtml = '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
+        '• Cotización válida por 90 días naturales.<br/>' +
+        '• Precios en pesos mexicanos (MXN). ' + (d.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.') + '<br/>' +
+        '• Incluye constancias con folio único verificable.<br/>' +
+        (d.modalidad === 'online'
+          ? '• El monto total deberá liquidarse un día antes de que comience el curso.<br/>'
+          : '• Incluye material didáctico.<br/>• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>') +
+        '• Contacto: WhatsApp 222 354 9353 · ' + EMAIL + '</div>'
+    }
     var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Cotización ' + d.folio + '</title>' +
       '<style>@page{size:letter;margin:20mm}body{font-family:Segoe UI,sans-serif;font-size:13px;color:#1e293b;line-height:1.5}' +
       '.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;padding-bottom:16px;border-bottom:3px solid #8B1A1A}' +
@@ -120,21 +149,14 @@ export default function CotizadorEspecial() {
       (d.correo ? '<p>Correo: ' + d.correo + '</p>' : '') +
       (d.telefono ? '<p>Teléfono: ' + d.telefono + '</p>' : '') + '</div>' +
       '<table><thead><tr><th>Concepto</th><th>Detalle</th><th style="text-align:right">Monto</th></tr></thead><tbody>' +
-      '<tr><td><strong>' + (d.curso||'') + '</strong></td><td>' + (d.participantes||1) + ' persona(s) · ' + (d.modalidad||'') + '</td><td style="text-align:right">' + money(d.precio) + '</td></tr>' +
+      '<tr><td><strong>' + (d.curso||'') + '</strong></td><td>' + detalleCol + '</td><td style="text-align:right">' + money(d.precio) + '</td></tr>' +
       (Number(d.viaticos) > 0 ? '<tr><td>Viáticos</td><td>Estimado</td><td style="text-align:right">' + money(d.viaticos) + '</td></tr>' : '') +
       '</tbody></table>' +
       '<table class="totales"><tr><td>Subtotal</td><td>' + money(st) + '</td></tr>' +
       (d.aplica_iva ? '<tr><td>IVA (16%)</td><td>' + money(iv) + '</td></tr>' : '') +
       '<tr class="gran"><td>Total</td><td>' + money(tot) + '</td></tr></table>' +
       (d.notas ? '<div style="margin-bottom:16px;padding:12px;background:#fffbeb;border-radius:8px;font-size:12px;color:#92400e"><strong>Notas:</strong> ' + d.notas + '</div>' : '') +
-      '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
-      '• Cotización válida por 90 días naturales.<br/>' +
-      '• Precios en pesos mexicanos (MXN). ' + (d.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.') + '<br/>' +
-      '• Incluye constancias con folio único verificable.<br/>' +
-      (d.modalidad === 'online'
-        ? '• El monto total deberá liquidarse un día antes de que comience el curso.<br/>'
-        : '• Incluye material didáctico.<br/>• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>') +
-      '• Contacto: WhatsApp 222 354 9353 · ' + EMAIL + '</div>' +
+      condicionesHtml +
       '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">' +
       '<p>Hablando con Datos — Consultoría y Capacitación · Puebla, México</p>' +
       '<p>Folio: ' + d.folio + ' · 222 354 9353 · ' + EMAIL + '</p></div>' +
@@ -144,7 +166,7 @@ export default function CotizadorEspecial() {
 
   function exportarExcel() {
     if (!historial.length) { alert('No hay cotizaciones.'); return }
-    var filas = historial.map(function(c) { return { Folio: c.folio, Empresa: c.empresa, Contacto: c.contacto, Correo: c.correo, Curso: c.curso, Participantes: c.participantes, Modalidad: c.modalidad, Precio: c.precio, IVA: c.iva, Total: c.total, Estado: c.estado, Notas: c.notas, Fecha: c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX') : '' } })
+    var filas = historial.map(function(c) { return { Folio: c.folio, Tipo: c.tipo === 'servicio' ? 'Servicio' : 'Curso', Empresa: c.empresa, Contacto: c.contacto, Correo: c.correo, 'Curso/Servicio': c.curso, 'Detalle servicio': c.detalle_servicio || '', Participantes: c.participantes || '', Modalidad: c.modalidad || '', Precio: c.precio, IVA: c.iva, Total: c.total, Estado: c.estado, Notas: c.notas, Fecha: c.created_at ? new Date(c.created_at).toLocaleDateString('es-MX') : '' } })
     var ws = XLSX.utils.json_to_sheet(filas); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cotizaciones')
     XLSX.writeFile(wb, 'cotizaciones_especiales_' + new Date().toISOString().slice(0, 10) + '.xlsx')
   }
@@ -188,21 +210,52 @@ export default function CotizadorEspecial() {
           <div><label style={LBL}>Correo</label><input value={correo} onChange={function(e){setCorreo(e.target.value)}} placeholder="correo@empresa.com" style={INP} /></div>
           <div><label style={LBL}>Teléfono</label><input value={telefono} onChange={function(e){setTelefono(e.target.value)}} placeholder="WhatsApp o teléfono" style={INP} /></div>
         </div>
+        <label style={LBL}>¿Qué se cotiza?</label>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          {[['curso', '🎓 Curso'], ['servicio', '🧰 Servicio']].map(function(t) {
+            return <button key={t[0]} type="button" onClick={function(){setTipo(t[0])}}
+              style={{ flex: 1, maxWidth: 220, padding: '9px', border: '2px solid ' + (tipo === t[0] ? '#8B1A1A' : '#e2e8f0'), borderRadius: 8, background: tipo === t[0] ? '#f9f0f0' : '#fff', color: tipo === t[0] ? '#8B1A1A' : '#475569', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>{t[1]}</button>
+          })}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14, marginBottom: 14 }}>
           <div>
-            <label style={LBL}>Curso</label>
-            <input list="cursos-esp" value={curso} onChange={function(e){setCurso(e.target.value)}} placeholder="Escribe o selecciona" style={INP} />
-            <datalist id="cursos-esp">{cursos.map(function(c){return <option key={c.id} value={c.nombre} />})}</datalist>
+            <label style={LBL}>{tipo === 'servicio' ? 'Servicio' : 'Curso'}</label>
+            {tipo === 'servicio' ? (
+              <input value={curso} onChange={function(e){setCurso(e.target.value)}} placeholder="Ej: Consultoría de implementación ISO 9001" style={INP} />
+            ) : (
+              <>
+                <input list="cursos-esp" value={curso} onChange={function(e){setCurso(e.target.value)}} placeholder="Escribe o selecciona" style={INP} />
+                <datalist id="cursos-esp">{cursos.map(function(c){return <option key={c.id} value={c.nombre} />})}</datalist>
+              </>
+            )}
           </div>
-          <div><label style={LBL}>Participantes</label><input type="number" min="1" value={participantes} onChange={function(e){setParticipantes(e.target.value)}} style={INP} /></div>
-          <div><label style={LBL}>Modalidad</label><select value={modalidad} onChange={function(e){setModalidad(e.target.value)}} style={INP}><option value="online">Online</option><option value="presencial">Presencial</option><option value="hibrido">Híbrido</option></select></div>
+          {tipo === 'curso' && <>
+            <div><label style={LBL}>Participantes</label><input type="number" min="1" value={participantes} onChange={function(e){setParticipantes(e.target.value)}} style={INP} /></div>
+            <div><label style={LBL}>Modalidad</label><select value={modalidad} onChange={function(e){setModalidad(e.target.value)}} style={INP}><option value="online">Online</option><option value="presencial">Presencial</option><option value="hibrido">Híbrido</option></select></div>
+          </>}
           <div><label style={LBL}>Precio total (MXN)</label><input type="number" min="0" step="100" value={precio} onChange={function(e){setPrecio(e.target.value)}} style={INP} /></div>
         </div>
+
+        {tipo === 'servicio' && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={LBL}>Detalle del servicio</label>
+            <textarea value={detalleServicio} onChange={function(e){setDetalleServicio(e.target.value)}} placeholder="Describe aquí lo que incluye: alcance, participantes, modalidad, entregables, etc." rows={3} style={Object.assign({}, INP, { resize: 'vertical' })} />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
           <label style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}><input type="checkbox" checked={aplicaIva} onChange={function(e){setAplicaIva(e.target.checked)}} /> Aplica IVA (16%)</label>
           <div><label style={LBL}>Viáticos</label><input type="number" min="0" step="100" value={viaticos} onChange={function(e){setViaticos(e.target.value)}} style={Object.assign({}, INP, { width: 140 })} /></div>
         </div>
         <div style={{ marginBottom: 14 }}><label style={LBL}>Notas</label><textarea value={notas} onChange={function(e){setNotas(e.target.value)}} placeholder="Notas para el cliente o internas" rows={2} style={Object.assign({}, INP, { resize: 'vertical' })} /></div>
+
+        {tipo === 'servicio' && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={LBL}>Condiciones (opcional — se imprimen tal cual las escribas; si lo dejas vacío, el PDF no lleva sección de condiciones)</label>
+            <textarea value={condicionesManual} onChange={function(e){setCondicionesManual(e.target.value)}} placeholder={'Ej:\n• Vigencia de la cotización: 30 días.\n• Forma de pago: 50% anticipo, 50% contra entrega.'} rows={3} style={Object.assign({}, INP, { resize: 'vertical' })} />
+          </div>
+        )}
 
         <div style={{ background: '#1e293b', borderRadius: 12, padding: '16px 22px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
           <div style={{ fontSize: 12, color: '#94a3b8' }}>Precio: {money(precio)}{Number(viaticos)>0 ? ' + Viáticos: '+money(viaticos) : ''}{aplicaIva ? ' + IVA: '+money(iva) : ''}</div>
@@ -233,8 +286,9 @@ export default function CotizadorEspecial() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div>
                     <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>{c.folio}</code>
+                    {c.tipo === 'servicio' && <span style={{ marginLeft: 8, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>🧰 Servicio</span>}
                     <span style={{ marginLeft: 10, fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{c.empresa}</span>
-                    <span style={{ marginLeft: 8, color: '#64748b', fontSize: 12 }}>{c.curso} · {c.participantes}p · {c.modalidad}</span>
+                    <span style={{ marginLeft: 8, color: '#64748b', fontSize: 12 }}>{c.curso}{c.tipo === 'servicio' ? '' : ' · ' + c.participantes + 'p · ' + c.modalidad}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 800, color: '#8B1A1A', fontSize: 15 }}>{money(c.total)}</span>

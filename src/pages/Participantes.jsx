@@ -595,6 +595,11 @@ function ModalEditarParticipante({ participante, empresas, onClose, onDone }) {
     empresa_manual: participante.empresa_manual || '',
     universidad: participante.universidad || '',
     carrera: participante.carrera || '',
+    perfil_profesional: participante.perfil_profesional || '',
+    habilidades_profesional: participante.habilidades_profesional || '',
+    experiencia_profesional: participante.experiencia_profesional || '',
+    linkedin_url: participante.linkedin_url || '',
+    disponible_oportunidades: participante.disponible_oportunidades || false,
   })
   const [saving, setSaving] = useState(false)
   const esEmpresa = participante.tipo === 'empresa' || !!(participante.empresa_id || participante.registrado_por_empresa)
@@ -612,6 +617,11 @@ function ModalEditarParticipante({ participante, empresas, onClose, onDone }) {
         puesto: datos.puesto,
         universidad: datos.universidad || null,
         carrera: datos.carrera || null,
+        perfil_profesional: datos.perfil_profesional || null,
+        habilidades_profesional: datos.habilidades_profesional || null,
+        experiencia_profesional: datos.experiencia_profesional || null,
+        linkedin_url: datos.linkedin_url || null,
+        disponible_oportunidades: datos.disponible_oportunidades,
       }
       // Permitir cambiar empresa (solo admin)
       if (esEmpresa && datos.empresa_id) {
@@ -666,6 +676,33 @@ function ModalEditarParticipante({ participante, empresas, onClose, onDone }) {
             <input value={datos.carrera} onChange={e => d('carrera')(e.target.value)} style={inputStyle} />
           </>
         )}
+
+        <h4 style={{ fontSize: 13, fontWeight: 800, color: '#1e293b', marginTop: 20, marginBottom: 4 }}>Perfil profesional</h4>
+        <p style={{ color: '#94a3b8', fontSize: 11, marginBottom: 10 }}>Normalmente lo llena el propio alumno desde su portal; aquí puedes verlo y corregirlo.</p>
+
+        <label style={labelStyle}>Perfil / resumen</label>
+        <textarea value={datos.perfil_profesional} onChange={e => d('perfil_profesional')(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Habilidades</label>
+        <textarea value={datos.habilidades_profesional} onChange={e => d('habilidades_profesional')(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>Experiencia</label>
+        <textarea value={datos.experiencia_profesional} onChange={e => d('experiencia_profesional')(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
+
+        <label style={{ ...labelStyle, marginTop: 12 }}>LinkedIn</label>
+        <input value={datos.linkedin_url} onChange={e => d('linkedin_url')(e.target.value)} placeholder="https://www.linkedin.com/in/..." style={inputStyle} />
+
+        {participante.cv_url && (
+          <div style={{ marginTop: 12 }}>
+            <div style={labelStyle}>CV</div>
+            <a href={participante.cv_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#1d4ed8', fontWeight: 600 }}>📎 Ver CV subido por el alumno</a>
+          </div>
+        )}
+
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', marginTop: 14, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 12px' }}>
+          <input type="checkbox" checked={datos.disponible_oportunidades} onChange={e => d('disponible_oportunidades')(e.target.checked)} style={{ accentColor: '#059669', width: 16, height: 16, marginTop: 2 }} />
+          <span style={{ fontSize: 12, color: '#166534' }}>Disponible para nuevas oportunidades laborales (consentimiento otorgado)</span>
+        </label>
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>

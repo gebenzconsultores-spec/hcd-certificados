@@ -61,19 +61,23 @@ export default function AdminCursosConfirmados() {
     const cursos = data || []
     // Calcular el número REAL de asistentes de cada curso: asignaciones (inscritos por admin)
     // + inscripciones (autoinscritos vía convocatoria, empresa o individual), sin duplicar
-    const [{ data: todasAsigs }, { data: todasInsc }] = await Promise.all([
+    const [{ data: todasAsigs }, { data: todasInsc }, { data: convocatorias }] = await Promise.all([
       supabase.from('asignaciones').select('id_compra, curso_nombre, fecha_programada, empleado_id'),
-      supabase.from('inscripciones').select('curso_nombre, fecha, participante_id')
+      supabase.from('inscripciones').select('curso_nombre, fecha, participante_id'),
+      supabase.from('proximos_cursos').select('curso_nombre, fecha, link_zoom')
     ])
     const asigs = todasAsigs || []
     const inscs = todasInsc || []
+    const convs = convocatorias || []
     const conConteo = cursos.map(c => {
       const idsAsig = c.id_compra
         ? asigs.filter(a => a.id_compra === c.id_compra).map(a => a.empleado_id)
         : asigs.filter(a => a.curso_nombre === c.curso_nombre && a.fecha_programada === c.fecha_inicio).map(a => a.empleado_id)
       const idsInsc = inscs.filter(i => i.curso_nombre === c.curso_nombre && i.fecha === c.fecha_inicio).map(i => i.participante_id)
       const unicos = new Set([...idsAsig, ...idsInsc].filter(Boolean))
-      return { ...c, num_participantes: unicos.size }
+      // Link de Zoom: viene de la convocatoria (proximos_cursos) ligada por curso + fecha
+      const conv = convs.find(v => v.curso_nombre === c.curso_nombre && v.fecha === c.fecha_inicio)
+      return { ...c, num_participantes: unicos.size, link_zoom: conv?.link_zoom || null }
     })
     setConfirmados(conConteo)
     // Cargar los días de cada curso (para mostrarlos en el calendario)
@@ -280,6 +284,7 @@ export default function AdminCursosConfirmados() {
               'Días': c.num_dias || '',
               'Participantes': c.num_participantes || 0,
               'Modalidad': c.modalidad || '',
+              'Link Zoom': c.link_zoom || '',
               'Estado': c.estado || '',
             })), `calendario_cursos_${new Date().toISOString().slice(0, 10)}.xlsx`, 'Cursos')}
               style={{ background: '#fff', color: '#059669', border: '1px solid #a7f3d0', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>⬇️ Excel</button>
@@ -440,6 +445,35 @@ export default function AdminCursosConfirmados() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Link de Zoom (viene de la convocatoria ligada por curso + fecha) */}
+            <div style={{ background: '#f8f9fb', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
+              <div style={{ color: '#64748b', fontSize: 11, marginBottom: 6 }}>🔗 Link de Zoom</div>
+              {detalle.link_zoom ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <a href={detalle.link_zoom} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{detalle.link_zoom}</a>
+                  <button onClick={() => { navigator.clipboard.writeText(detalle.link_zoom); alert('Link copiado ✅') }}
+                    style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 6, padding: '3px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Copiar</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input id={`zoom-${detalle.id}`} placeholder="https://zoom.us/j/..." style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 10px', fontSize: 12, outline: 'none' }} />
+                  <button onClick={async () => {
+                    const val = document.getElementById(`zoom-${detalle.id}`).value.trim()
+                    if (!val) return
+                    const { data: conv } = await supabase.from('proximos_cursos').select('id').eq('curso_nombre', detalle.curso_nombre).eq('fecha', detalle.fecha_inicio).maybeSingle()
+                    if (conv) {
+                      await supabase.from('proximos_cursos').update({ link_zoom: val }).eq('id', conv.id)
+                    } else {
+                      // estado 'cerrado' + mostrar_en 'ninguno': solo guarda el link, no publica convocatoria nueva en ningún portal
+                      await supabase.from('proximos_cursos').insert({ curso_nombre: detalle.curso_nombre, fecha: detalle.fecha_inicio, link_zoom: val, estado: 'cerrado', mostrar_en: 'ninguno' })
+                    }
+                    setDetalle({ ...detalle, link_zoom: val })
+                    await cargar()
+                  }} style={{ background: '#1d4ed8', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Guardar</button>
+                </div>
+              )}
             </div>
 
             {/* Días del curso */}

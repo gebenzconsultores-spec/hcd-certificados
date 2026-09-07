@@ -48,7 +48,7 @@ export default function AdminCandidatos() {
       supabase.from('empresas').select('id, nombre').order('nombre'),
       supabase.from('vacantes').select('*').order('created_at', { ascending: false }),
       supabase.from('candidato_envios').select('*'),
-      supabase.from('participantes').select('id, nombre, correo, empresa_id, registrado_por_empresa, disponible_oportunidades, tipo'),
+      supabase.from('participantes').select('id, nombre, correo, empresa_id, registrado_por_empresa, disponible_oportunidades, tipo, perfil_profesional, habilidades_profesional, experiencia_profesional, linkedin_url, cv_url'),
       supabase.from('postulaciones').select('*').order('created_at', { ascending: false }),
     ])
     setCandidatos(cand.data || [])
@@ -159,8 +159,8 @@ export default function AdminCandidatos() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
                         <button onClick={() => setModalEnviar({ candidato: c })} style={{ ...btnPrimary, fontSize: 12, padding: '7px 14px' }}>📨 Enviar a empresa</button>
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => setModalCand(c)} style={iconBtn}>✏️</button>
-                          <button onClick={() => eliminarCandidato(c)} style={{ ...iconBtn, color: '#dc2626', borderColor: '#fecaca' }}>🗑</button>
+                          <button onClick={() => setModalCand(c)} style={iconBtn}>✏️ Editar</button>
+                          <button onClick={() => eliminarCandidato(c)} style={{ ...iconBtn, color: '#dc2626', borderColor: '#fecaca' }}>🗑 Eliminar</button>
                         </div>
                       </div>
                     </div>
@@ -306,7 +306,7 @@ function ModalCandidato({ editando, onClose, onDone }) {
   const [f, setF] = useState({
     nombre: editando?.nombre || '', correo: editando?.correo || '', telefono: editando?.telefono || '',
     perfil: editando?.perfil || '', habilidades: editando?.habilidades || '', experiencia: editando?.experiencia || '',
-    cv_url: editando?.cv_url || '', estatus: editando?.estatus || 'disponible'
+    cv_url: editando?.cv_url || '', linkedin_url: editando?.linkedin_url || '', estatus: editando?.estatus || 'disponible'
   })
   const [saving, setSaving] = useState(false)
   const set = k => v => setF(p => ({ ...p, [k]: v }))
@@ -340,6 +340,7 @@ function ModalCandidato({ editando, onClose, onDone }) {
         <label style={lbl}>Habilidades</label><textarea value={f.habilidades} onChange={e => set('habilidades')(e.target.value)} rows={2} style={{ ...inp, resize: 'vertical' }} />
         <label style={lbl}>Experiencia</label><textarea value={f.experiencia} onChange={e => set('experiencia')(e.target.value)} rows={2} style={{ ...inp, resize: 'vertical' }} />
         <label style={lbl}>Link del CV (opcional)</label><input value={f.cv_url} onChange={e => set('cv_url')(e.target.value)} placeholder="https://…" style={inp} />
+        <label style={lbl}>LinkedIn (opcional)</label><input value={f.linkedin_url} onChange={e => set('linkedin_url')(e.target.value)} placeholder="https://www.linkedin.com/in/…" style={inp} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
           <button onClick={guardar} disabled={saving || !f.nombre.trim()} style={btnPrimary}>{saving ? 'Guardando...' : 'Guardar'}</button>
@@ -411,11 +412,9 @@ function ModalEnviar({ candidatoPre, empresaPre, vacantePre, candidatos, empresa
 
 // ─── Modal: promover empleado (con consentimiento) ────────────
 function ModalPromover({ empleado, empresaNombre, onClose, onDone }) {
-  const [perfil, setPerfil] = useState('')
-  const [habilidades, setHabilidades] = useState('')
-  const [experiencia, setExperiencia] = useState('')
   const [consentimiento, setConsentimiento] = useState(empleado.disponible_oportunidades || false)
   const [saving, setSaving] = useState(false)
+  const tieneAlgo = empleado.perfil_profesional || empleado.habilidades_profesional || empleado.experiencia_profesional || empleado.cv_url
 
   async function promover() {
     if (!consentimiento) { alert('Debes confirmar el consentimiento del empleado para promoverlo.'); return }
@@ -423,7 +422,10 @@ function ModalPromover({ empleado, empresaNombre, onClose, onDone }) {
     try {
       const { error } = await supabase.from('candidatos').insert({
         nombre: empleado.nombre, correo: empleado.correo || null,
-        perfil: perfil.trim() || null, habilidades: habilidades.trim() || null, experiencia: experiencia.trim() || null,
+        perfil: empleado.perfil_profesional || null,
+        habilidades: empleado.habilidades_profesional || null,
+        experiencia: empleado.experiencia_profesional || null,
+        cv_url: empleado.cv_url || null, linkedin_url: empleado.linkedin_url || null,
         origen: 'empleado_promovido', participante_id: empleado.id, estatus: 'disponible'
       })
       if (error) throw error
@@ -440,9 +442,20 @@ function ModalPromover({ empleado, empresaNombre, onClose, onDone }) {
         <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}><strong>{empleado.nombre}</strong> · {empresaNombre(empleado.empresa_id || empleado.registrado_por_empresa)}</p>
         <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 14 }}>Su empleador actual no se muestra a otras empresas; solo su perfil profesional.</p>
 
-        <label style={lbl}>Perfil / resumen</label><textarea value={perfil} onChange={e => setPerfil(e.target.value)} rows={3} style={{ ...inp, resize: 'vertical' }} />
-        <label style={lbl}>Habilidades</label><textarea value={habilidades} onChange={e => setHabilidades(e.target.value)} rows={2} style={{ ...inp, resize: 'vertical' }} />
-        <label style={lbl}>Experiencia</label><textarea value={experiencia} onChange={e => setExperiencia(e.target.value)} rows={2} style={{ ...inp, resize: 'vertical' }} />
+        <div style={{ background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px', marginBottom: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 10, textTransform: 'uppercase' }}>Lo que el alumno subió en su portal</div>
+          {!tieneAlgo ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>Este alumno aún no ha llenado su perfil profesional (perfil, habilidades, experiencia o CV) en su portal. Puedes promoverlo igual y lo completará después.</p>
+          ) : (
+            <>
+              <Campo label="Perfil / resumen" valor={empleado.perfil_profesional} />
+              <Campo label="Habilidades" valor={empleado.habilidades_profesional} />
+              <Campo label="Experiencia" valor={empleado.experiencia_profesional} />
+              {empleado.linkedin_url && <div style={{ marginBottom: 8 }}><div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>LinkedIn</div><a href={empleado.linkedin_url} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: '#1d4ed8' }}>{empleado.linkedin_url}</a></div>}
+              {empleado.cv_url && <a href={empleado.cv_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', color: '#1d4ed8', fontSize: 13, fontWeight: 600 }}>📎 Ver CV</a>}
+            </>
+          )}
+        </div>
 
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', marginTop: 16, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px' }}>
           <input type="checkbox" checked={consentimiento} onChange={e => setConsentimiento(e.target.checked)} style={{ accentColor: '#8B1A1A', width: 16, height: 16, marginTop: 2 }} />
@@ -451,9 +464,18 @@ function ModalPromover({ empleado, empresaNombre, onClose, onDone }) {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
           <button onClick={onClose} style={btnGhost}>Cancelar</button>
-          <button onClick={promover} disabled={saving || !consentimiento} style={btnPrimary}>{saving ? 'Promoviendo...' : 'Promover'}</button>
+          <button onClick={promover} disabled={saving || !consentimiento} style={btnPrimary}>{saving ? 'Promoviendo...' : '✅ Promover'}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function Campo({ label, valor }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 13, color: valor ? '#1e293b' : '#cbd5e1', whiteSpace: 'pre-wrap' }}>{valor || '— sin llenar —'}</div>
     </div>
   )
 }
