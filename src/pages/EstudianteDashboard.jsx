@@ -689,8 +689,8 @@ function ModalMisDatos({ estudiante, onClose, onActualizado }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20 }} onClick={onClose}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(440px,92vw)', boxShadow: '0 20px 60px rgba(0,0,0,.15)' }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 20, overflowY: 'auto' }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(440px,92vw)', maxHeight: '85vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', boxShadow: '0 20px 60px rgba(0,0,0,.15)', margin: 'auto' }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Mis datos</h3>
         <p style={{ color: '#64748b', fontSize: 12, marginBottom: 16 }}>Corrige tu información de contacto.</p>
 
