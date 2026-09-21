@@ -392,6 +392,7 @@ function RecompensasTab({ estudiante, onActualizado }) {
   const [canjes, setCanjes] = useState([])
   const [planes, setPlanes] = useState([])
   const [membresia, setMembresia] = useState(null)
+  const [notasGenerales, setNotasGenerales] = useState('')
   const [loading, setLoading] = useState(true)
   const [filtroCategoria, setFiltroCategoria] = useState('todas')
   const [canjeando, setCanjeando] = useState(null)
@@ -408,18 +409,20 @@ function RecompensasTab({ estudiante, onActualizado }) {
         onActualizado({ codigo_referido: nuevo })
       }
     } catch (_) {}
-    const [{ data: movs }, { data: cat }, { data: mis }, { data: pls }, { data: mem }] = await Promise.all([
+    const [{ data: movs }, { data: cat }, { data: mis }, { data: pls }, { data: mem }, { data: cfg }] = await Promise.all([
       supabase.from('tokens_movimientos').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }).limit(30),
       supabase.from('catalogo_canje').select('*').eq('activo', true).order('orden'),
       supabase.from('canjes').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }),
       supabase.from('membresias_planes').select('*').eq('activo', true).order('orden'),
       supabase.from('membresias_alumno').select('*').eq('participante_id', estudiante.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('membresias_config').select('notas_generales').eq('id', 1).maybeSingle(),
     ])
     setMovimientos(movs || [])
     setCatalogo(cat || [])
     setCanjes(mis || [])
     setPlanes(pls || [])
     setMembresia(mem || null)
+    setNotasGenerales(cfg?.notas_generales || '')
     setLoading(false)
   }
 
@@ -543,6 +546,11 @@ function RecompensasTab({ estudiante, onActualizado }) {
       {/* Membresías */}
       <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>💳 Membresías</div>
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Cursos recurrentes cada mes. Activación manual: sube tu comprobante de pago y nuestro equipo la activa.</div>
+      {notasGenerales && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 12, color: '#92400e', whiteSpace: 'pre-line' }}>
+          {notasGenerales}
+        </div>
+      )}
       {membresia && membresia.estado !== 'cancelada' && (
         <div style={{ background: (ESTADOS_MEMBRESIA[membresia.estado] || {}).bg || '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 18px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 12, color: '#1e293b' }}>Tu membresía <b>{(planes.find(p => p.clave === membresia.plan_clave) || {}).nombre || membresia.plan_clave}</b></div>
@@ -556,7 +564,10 @@ function RecompensasTab({ estudiante, onActualizado }) {
             <div style={{ fontSize: 24, fontWeight: 800, color: '#1e293b', margin: '6px 0' }}>${Number(plan.precio_mxn).toLocaleString('es-MX')} <span style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8' }}>MXN/mes</span></div>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>• {plan.descripcion}</div>
             {plan.beneficios_extra && (
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14, whiteSpace: 'pre-line' }}>{plan.beneficios_extra}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, whiteSpace: 'pre-line' }}>{plan.beneficios_extra}</div>
+            )}
+            {plan.tokens_mensuales > 0 && (
+              <div style={{ fontSize: 12, color: '#8B1A1A', fontWeight: 700, marginBottom: 14 }}>🎁 {plan.tokens_mensuales} tokens de regalo cada mes</div>
             )}
             <button onClick={() => setModalMembresia(plan)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               Solicitar membresía

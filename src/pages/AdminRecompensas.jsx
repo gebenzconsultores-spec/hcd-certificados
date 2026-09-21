@@ -250,6 +250,7 @@ function TabCanjes() {
 // ── Membresías ──────────────────────────────────────────
 function TabMembresias() {
   const [membresias, setMembresias] = useState([])
+  const [planesPorClave, setPlanesPorClave] = useState({})
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('todos')
   const [modalActivar, setModalActivar] = useState(null)
@@ -258,8 +259,14 @@ function TabMembresias() {
 
   async function cargar() {
     setLoading(true)
-    const { data } = await supabase.from('membresias_alumno').select('*, participante:participantes(nombre, correo, whatsapp)').order('created_at', { ascending: false })
+    const [{ data }, { data: pl }] = await Promise.all([
+      supabase.from('membresias_alumno').select('*, participante:participantes(nombre, correo, whatsapp)').order('created_at', { ascending: false }),
+      supabase.from('membresias_planes').select('clave, nombre, tokens_mensuales'),
+    ])
     setMembresias(data || [])
+    const mapa = {}
+    ;(pl || []).forEach(p => { mapa[p.clave] = p })
+    setPlanesPorClave(mapa)
     setLoading(false)
   }
 
@@ -298,6 +305,9 @@ function TabMembresias() {
                 {m.estado === 'pendiente_pago' && (
                   <button onClick={() => setModalActivar(m)} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Activar</button>
                 )}
+                {m.tokens_regalo_otorgados && (
+                  <span style={{ fontSize: 10, color: '#059669', fontWeight: 700 }}>✓ tokens regalados</span>
+                )}
                 {m.estado === 'activa' && (
                   <button onClick={() => cambiarEstado(m, 'vencida')} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Marcar vencida</button>
                 )}
@@ -312,35 +322,50 @@ function TabMembresias() {
       </div>
 
       {modalActivar && (
-        <ModalActivarMembresia membresia={modalActivar} onClose={() => setModalActivar(null)} onDone={() => { setModalActivar(null); cargar() }} />
+        <ModalActivarMembresia membresia={modalActivar} plan={planesPorClave[modalActivar.plan_clave]} onClose={() => setModalActivar(null)} onDone={() => { setModalActivar(null); cargar() }} />
       )}
     </div>
   )
 }
 
-function ModalActivarMembresia({ membresia, onClose, onDone }) {
+function ModalActivarMembresia({ membresia, plan, onClose, onDone }) {
   const hoy = new Date()
   const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, hoy.getDate())
   const [inicio, setInicio] = useState(hoy.toISOString().slice(0, 10))
   const [fin, setFin] = useState(finMes.toISOString().slice(0, 10))
   const [guardando, setGuardando] = useState(false)
+  const tokensRegalo = plan?.tokens_mensuales || 0
 
   async function activar() {
     setGuardando(true)
     const { error } = await supabase.from('membresias_alumno').update({ estado: 'activa', periodo_inicio: inicio, periodo_fin: fin }).eq('id', membresia.id)
+    if (error) { setGuardando(false); alert('Error: ' + error.message); return }
+
+    if (tokensRegalo > 0) {
+      try {
+        await otorgarTokens(membresia.participante_id, tokensRegalo, `Regalo mensual por membresía ${plan?.nombre || membresia.plan_clave}`, null, 'admin')
+        await supabase.from('membresias_alumno').update({ tokens_regalo_otorgados: true }).eq('id', membresia.id)
+      } catch (e) {
+        alert('La membresía se activó, pero no se pudieron otorgar los tokens de regalo automáticamente: ' + (e.message || ''))
+      }
+    }
     setGuardando(false)
-    if (error) { alert('Error: ' + error.message); return }
     onDone()
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 380, width: '100%' }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', marginBottom: 14 }}>Activar membresía {membresia.plan_clave}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#1e293b', marginBottom: 14 }}>Activar membresía {plan?.nombre || membresia.plan_clave}</div>
         <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Inicio del periodo</label>
         <input type="date" value={inicio} onChange={e => setInicio(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, marginBottom: 10, marginTop: 4 }} />
         <label style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Fin del periodo</label>
-        <input type="date" value={fin} onChange={e => setFin(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, marginBottom: 18, marginTop: 4 }} />
+        <input type="date" value={fin} onChange={e => setFin(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, marginBottom: 14, marginTop: 4 }} />
+        {tokensRegalo > 0 && (
+          <div style={{ background: '#fef2f2', color: '#8B1A1A', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 14 }}>
+            🎁 Al activar se otorgarán automáticamente {tokensRegalo} tokens de regalo de este mes.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onClose} style={{ background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#475569' }}>Cancelar</button>
           <button onClick={activar} disabled={guardando} style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 16px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -358,6 +383,7 @@ const ITEM_VACIO = { categoria: 'merchandising', nombre: '', descripcion: '', co
 function TabCatalogo() {
   const [items, setItems] = useState([])
   const [planes, setPlanes] = useState([])
+  const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
   const [nuevoItem, setNuevoItem] = useState(null)
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
@@ -366,13 +392,21 @@ function TabCatalogo() {
 
   async function cargar() {
     setLoading(true)
-    const [{ data: it }, { data: pl }] = await Promise.all([
+    const [{ data: it }, { data: pl }, { data: cfg }] = await Promise.all([
       supabase.from('catalogo_canje').select('*').order('orden'),
       supabase.from('membresias_planes').select('*').order('orden'),
+      supabase.from('membresias_config').select('*').eq('id', 1).maybeSingle(),
     ])
     setItems(it || [])
     setPlanes(pl || [])
+    setConfig(cfg || { id: 1, notas_generales: '' })
     setLoading(false)
+  }
+
+  async function guardarNotasGenerales(valor) {
+    const { error } = await supabase.from('membresias_config').upsert({ id: 1, notas_generales: valor })
+    if (error) { alert('Error: ' + error.message); return }
+    setConfig(prev => ({ ...(prev || { id: 1 }), notas_generales: valor }))
   }
 
   async function guardarItem(item, campo, valor) {
@@ -535,6 +569,10 @@ function TabCatalogo() {
                 <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Cursos Tipo C/mes</label>
                 <input type="number" defaultValue={p.cursos_tipo_c} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.cursos_tipo_c) guardarPlan(p, 'cursos_tipo_c', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
               </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>🎁 Tokens de regalo/mes</label>
+                <input type="number" defaultValue={p.tokens_mensuales} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== p.tokens_mensuales && v >= 0) guardarPlan(p, 'tokens_mensuales', v) }} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', marginTop: 3 }} />
+              </div>
             </div>
             <label style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>Descripción (cursos incluidos)</label>
             <textarea defaultValue={p.descripcion || ''} onBlur={e => { if (e.target.value !== p.descripcion) guardarPlan(p, 'descripcion', e.target.value) }} rows={2} style={{ width: '100%', padding: '6px 8px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12, marginTop: 3, marginBottom: 10, fontFamily: 'inherit', resize: 'vertical' }} />
@@ -543,6 +581,17 @@ function TabCatalogo() {
           </div>
         ))}
         {planes.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Sin planes todavía. Corre el SQL de recompensas para sembrar Lite/Pro/Master.</div>}
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 10 }}>Notas generales de membresías</div>
+        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>Este texto se muestra a todos los alumnos arriba de las membresías en su portal.</div>
+        <textarea
+          defaultValue={config?.notas_generales || ''}
+          onBlur={e => { if (e.target.value !== config?.notas_generales) guardarNotasGenerales(e.target.value) }}
+          rows={4}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, fontFamily: 'inherit', resize: 'vertical' }}
+        />
       </div>
     </div>
   )
