@@ -16,17 +16,42 @@ export default function AuditoriaEmpresa({ empresa }) {
 
   useEffect(() => { cargarCursosDados() }, [])
 
+  // Lista los cursos que la empresa REALMENTE tiene (certificados emitidos y/o exámenes
+  // presentados), sin importar por qué vía se tomaron (calendario, autoinscripción,
+  // convocatoria, etc.) — antes solo se leía de "cursos_confirmados" y por eso faltaban cursos.
   async function cargarCursosDados() {
     try {
-      const { data } = await supabase.from('cursos_confirmados')
-        .select('id, curso_id, curso_nombre, numero_curso, fecha_inicio')
-        .eq('empresa_id', empresa.id)
-        .order('fecha_inicio', { ascending: false })
-      const vistos = new Set()
-      const unicos = []
-      ;(data || []).forEach(cc => {
-        if (cc.curso_id && !vistos.has(cc.curso_id)) { vistos.add(cc.curso_id); unicos.push(cc) }
+      const [{ data: certs }, { data: resultados }] = await Promise.all([
+        supabase.from('certificados')
+          .select('curso_id, nombre_curso, fecha_emision, curso:cursos(numero_curso)')
+          .eq('empresa_id', empresa.id),
+        supabase.from('resultados_examen')
+          .select('curso_id, created_at, curso:cursos(nombre, numero_curso)')
+          .eq('empresa_id', empresa.id),
+      ])
+      const mapa = {}
+      ;(certs || []).forEach(c => {
+        if (!c.curso_id) return
+        const existente = mapa[c.curso_id]
+        if (!existente || (c.fecha_emision || '') > (existente.fecha || '')) {
+          mapa[c.curso_id] = {
+            curso_id: c.curso_id,
+            curso_nombre: c.nombre_curso || existente?.curso_nombre || 'Curso',
+            numero_curso: c.curso?.numero_curso || existente?.numero_curso,
+            fecha: c.fecha_emision || existente?.fecha,
+          }
+        }
       })
+      ;(resultados || []).forEach(r => {
+        if (!r.curso_id || mapa[r.curso_id]) return
+        mapa[r.curso_id] = {
+          curso_id: r.curso_id,
+          curso_nombre: r.curso?.nombre || 'Curso',
+          numero_curso: r.curso?.numero_curso,
+          fecha: r.created_at,
+        }
+      })
+      const unicos = Object.values(mapa).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
       setCursosDados(unicos)
     } catch (_) { setCursosDados([]) }
   }
@@ -160,8 +185,8 @@ donde cualquier reclutador o auditor puede validar su autenticidad.`
             <select value={cursoId} onChange={e => { setCursoId(e.target.value); setDatos(null) }} style={inp}>
               <option value="">— Todo mi historial —</option>
               {cursosDados.map(cc => (
-                <option key={cc.id} value={cc.curso_id}>
-                  {cc.numero_curso ? `#${cc.numero_curso} — ` : ''}{cc.curso_nombre}{cc.fecha_inicio ? ` · ${new Date(cc.fecha_inicio + 'T00:00:00').toLocaleDateString('es-MX')}` : ''}
+                <option key={cc.curso_id} value={cc.curso_id}>
+                  {cc.numero_curso ? `#${cc.numero_curso} — ` : ''}{cc.curso_nombre}{cc.fecha ? ` · ${new Date(cc.fecha).toLocaleDateString('es-MX')}` : ''}
                 </option>
               ))}
             </select>
