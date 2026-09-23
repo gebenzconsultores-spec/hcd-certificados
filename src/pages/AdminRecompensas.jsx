@@ -11,6 +11,14 @@ const TABS = [
 
 export default function AdminRecompensas() {
   const [tab, setTab] = useState('referidos')
+  // Participante a preseleccionar en "Referidos y tokens" cuando llegamos
+  // ahí desde el botón "🎁 Otorgar tokens" de otra pestaña (ej. Membresías).
+  const [participantePreseleccionado, setParticipantePreseleccionado] = useState(null)
+
+  function irAOtorgarTokens(participante) {
+    setParticipantePreseleccionado(participante)
+    setTab('referidos')
+  }
 
   return (
     <div style={{ padding: 'clamp(14px,3vw,28px)' }}>
@@ -28,16 +36,16 @@ export default function AdminRecompensas() {
         ))}
       </div>
 
-      {tab === 'referidos' && <TabReferidos />}
+      {tab === 'referidos' && <TabReferidos preseleccionado={participantePreseleccionado} onConsumirPreseleccion={() => setParticipantePreseleccionado(null)} />}
       {tab === 'canjes' && <TabCanjes />}
-      {tab === 'membresias' && <TabMembresias />}
+      {tab === 'membresias' && <TabMembresias onOtorgarTokens={irAOtorgarTokens} />}
       {tab === 'catalogo' && <TabCatalogo />}
     </div>
   )
 }
 
 // ── Referidos y tokens ──────────────────────────────────────────
-function TabReferidos() {
+function TabReferidos({ preseleccionado, onConsumirPreseleccion }) {
   const [busqueda, setBusqueda] = useState('')
   const [resultados, setResultados] = useState([])
   const [seleccionado, setSeleccionado] = useState(null)
@@ -46,6 +54,13 @@ function TabReferidos() {
   const [monto, setMonto] = useState('')
   const [concepto, setConcepto] = useState('')
   const [guardando, setGuardando] = useState(false)
+
+  useEffect(() => {
+    if (preseleccionado) {
+      seleccionar(preseleccionado)
+      onConsumirPreseleccion && onConsumirPreseleccion()
+    }
+  }, [preseleccionado])
 
   async function buscar(q) {
     setBusqueda(q)
@@ -248,7 +263,7 @@ function TabCanjes() {
 }
 
 // ── Membresías ──────────────────────────────────────────
-function TabMembresias() {
+function TabMembresias({ onOtorgarTokens }) {
   const [membresias, setMembresias] = useState([])
   const [planesPorClave, setPlanesPorClave] = useState({})
   const [loading, setLoading] = useState(true)
@@ -260,7 +275,7 @@ function TabMembresias() {
   async function cargar() {
     setLoading(true)
     const [{ data }, { data: pl }] = await Promise.all([
-      supabase.from('membresias_alumno').select('*, participante:participantes(nombre, correo, whatsapp)').order('created_at', { ascending: false }),
+      supabase.from('membresias_alumno').select('*, participante:participantes(id, nombre, correo, whatsapp, codigo_referido, tokens_balance)').order('created_at', { ascending: false }),
       supabase.from('membresias_planes').select('clave, nombre, tokens_mensuales'),
     ])
     setMembresias(data || [])
@@ -307,6 +322,12 @@ function TabMembresias() {
                 )}
                 {m.tokens_regalo_otorgados && (
                   <span style={{ fontSize: 10, color: '#059669', fontWeight: 700 }}>✓ tokens regalados</span>
+                )}
+                {m.participante && onOtorgarTokens && (
+                  <button onClick={() => onOtorgarTokens(m.participante)} title="Otorgar o ajustar tokens manualmente a este participante"
+                    style={{ background: '#fef2f2', color: '#8B1A1A', border: '1px solid #fecaca', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                    🎁 Otorgar tokens
+                  </button>
                 )}
                 {m.estado === 'activa' && (
                   <button onClick={() => cambiarEstado(m, 'vencida')} style={{ background: '#f1f5f9', color: '#475569', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Marcar vencida</button>

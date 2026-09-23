@@ -5,6 +5,7 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined) // undefined = cargando
+  const [tardando, setTardando] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -22,8 +23,17 @@ export function AuthProvider({ children }) {
     return () => { mounted = false; subscription.unsubscribe() }
   }, [])
 
+  // Si tras 7s seguimos sin resolver la sesión (ej. conexión lenta o el
+  // cliente de Supabase se quedó colgado), lo señalamos para poder avisarle
+  // al usuario que le dé refresh en vez de dejarlo viendo el spinner infinito.
+  useEffect(() => {
+    if (session !== undefined) { setTardando(false); return }
+    const t = setTimeout(() => setTardando(true), 7000)
+    return () => clearTimeout(t)
+  }, [session])
+
   return (
-    <AuthContext.Provider value={{ session, loading: session === undefined }}>
+    <AuthContext.Provider value={{ session, loading: session === undefined, tardando }}>
       {children}
     </AuthContext.Provider>
   )

@@ -32,7 +32,7 @@ const NAV = [
 ]
 
 export default function AdminLayout() {
-  const { session, loading } = useAuth()
+  const { session, loading, tardando } = useAuth()
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -48,10 +48,21 @@ export default function AdminLayout() {
   }, [])
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb', padding: 20 }}>
       <div style={{ textAlign: 'center' }}>
         <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#8B1A1A', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
         <div style={{ color: '#64748b', fontSize: 13 }}>Cargando panel...</div>
+        {tardando && (
+          <div style={{ marginTop: 18, maxWidth: 280 }}>
+            <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+              Esto está tardando más de lo normal. Si no carga en unos segundos, dale clic a recargar.
+            </div>
+            <button onClick={() => window.location.reload()}
+              style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              🔄 Recargar página
+            </button>
+          </div>
+        )}
         <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     </div>
