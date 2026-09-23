@@ -194,6 +194,17 @@ export default function PuestosEmpresa(props) {
     if(existe){supabase.from('puesto_cursos').delete().eq('id',existe.id).then(function(){cargar()})}
     else{supabase.from('puesto_cursos').insert({empresa_id:empresa.id,puesto_id:pid,curso_nombre:nombre}).then(function(){cargar()})}
   }
+  // Oculta una sugerencia del área para este puesto (la empresa decide que no aplica y sube las suyas)
+  function ocultarSugerido(puesto,nombre){
+    if(!confirm('¿Quitar "'+nombre+'" de las sugerencias para este puesto? No se borra ningún requisito ya asignado, solo deja de sugerirse.'))return
+    var actuales=parseList(puesto.sugeridos_ocultos)
+    if(actuales.indexOf(nombre)!==-1)return
+    var nuevos=actuales.concat([nombre])
+    supabase.from('puestos').update({sugeridos_ocultos:JSON.stringify(nuevos)}).eq('id',puesto.id).then(function(r){if(r.error){alert('Error: '+r.error.message);return}cargar()})
+  }
+  function restaurarSugeridos(puesto){
+    supabase.from('puestos').update({sugeridos_ocultos:JSON.stringify([])}).eq('id',puesto.id).then(function(r){if(r.error){alert('Error: '+r.error.message);return}cargar()})
+  }
   function toggleCapacitado(pid,emp,curso){
     var existe=diagnosticos.find(function(d){return d.puesto_id===pid&&d.empleado_id===emp.id&&d.curso_id===(curso.id||null)&&d.curso_nombre===curso.nombre})
     if(existe){supabase.from('diagnostico_empleado').update({capacitado:!existe.capacitado}).eq('id',existe.id).then(function(){cargar()})}
@@ -398,16 +409,24 @@ export default function PuestosEmpresa(props) {
         {puestos.length===0?<div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:14,padding:40,textAlign:'center',color:'#94a3b8'}}>Primero define tus puestos.</div>:
           puestos.map(function(puesto){
             var curs=puestoCursos.filter(function(pc){return pc.puesto_id===puesto.id})
-            var sugeridos=cursosSugeridosPorArea(puesto.area)
+            var sugeridosOcultos=parseList(puesto.sugeridos_ocultos)
+            var sugeridos=cursosSugeridosPorArea(puesto.area).filter(function(n){return sugeridosOcultos.indexOf(n)===-1})
             var nuevoReq=nuevoReqPorPuesto[puesto.id]||''
             function setNuevoReq(v){setNuevoReqPorPuesto(function(prev){var next=Object.assign({},prev);next[puesto.id]=v;return next})}
             return <div key={puesto.id} style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'14px 18px',marginBottom:16}}>
               <div style={{fontWeight:800,color:'#8B1A1A',fontSize:15,marginBottom:10}}>🎯 {puesto.nombre} <span style={{fontWeight:400,fontSize:12,color:'#94a3b8'}}>({puesto.area||'sin área'})</span></div>
 
               {/* Cursos sugeridos según el área + generales */}
-              <div style={{fontSize:12,fontWeight:700,marginBottom:6}}>Cursos sugeridos para esta área:</div>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:6,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                <span>Cursos sugeridos para esta área:</span>
+                {sugeridosOcultos.length>0&&<button onClick={function(){restaurarSugeridos(puesto)}} style={{background:'none',border:'none',color:'#1d4ed8',fontSize:11,fontWeight:600,cursor:'pointer',padding:0}}>↺ Restaurar {sugeridosOcultos.length} sugerencia{sugeridosOcultos.length!==1?'s':''} oculta{sugeridosOcultos.length!==1?'s':''}</button>}
+              </div>
               <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:10}}>
-                {sugeridos.map(function(nombre){var act=curs.find(function(pc){return pc.curso_nombre===nombre});return <button key={nombre} onClick={function(){toggleCursoManual(puesto.id,nombre)}} style={{padding:'5px 12px',borderRadius:20,border:'1px solid '+(act?'#059669':'#e2e8f0'),background:act?'#f0fdf4':'#fff',color:act?'#059669':'#475569',fontSize:11,fontWeight:act?700:400,cursor:'pointer'}}>{act?'✓ ':''}{nombre}</button>})}
+                {sugeridos.length===0&&<span style={{fontSize:11,color:'#94a3b8'}}>Sin sugerencias (las quitaste todas). Agrega las tuyas abajo.</span>}
+                {sugeridos.map(function(nombre){var act=curs.find(function(pc){return pc.curso_nombre===nombre});return <span key={nombre} style={{display:'inline-flex',alignItems:'center',borderRadius:20,border:'1px solid '+(act?'#059669':'#e2e8f0'),background:act?'#f0fdf4':'#fff',overflow:'hidden'}}>
+                  <button onClick={function(){toggleCursoManual(puesto.id,nombre)}} style={{padding:'5px 4px 5px 12px',border:'none',background:'none',color:act?'#059669':'#475569',fontSize:11,fontWeight:act?700:400,cursor:'pointer'}}>{act?'✓ ':''}{nombre}</button>
+                  <button onClick={function(){ocultarSugerido(puesto,nombre)}} title="Quitar esta sugerencia" style={{padding:'5px 10px 5px 4px',border:'none',background:'none',color:'#cbd5e1',fontSize:12,fontWeight:700,cursor:'pointer',lineHeight:1}}>×</button>
+                </span>})}
               </div>
 
               {/* Cursos HCD */}

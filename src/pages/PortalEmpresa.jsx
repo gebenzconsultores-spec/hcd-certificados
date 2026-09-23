@@ -10,6 +10,7 @@ import PromocionesEmpresa from './PromocionesEmpresa.jsx'
 import RentaEmpresa from './RentaEmpresa.jsx'
 import { LinkTerminos } from './TerminosPrivacidad.jsx'
 import PuestosEmpresa from './PuestosEmpresa.jsx'
+import GuiaEmpresa from './GuiaEmpresa.jsx'
 
 const WA_SOPORTE = '522223549353'
 
@@ -132,6 +133,7 @@ export function EmpresaDashboard() {
   const soloLectura = pruebaVencida && empresa.tipo_acceso === 'invitado' && !empresa.exento_pago
 
   const TABS = [
+    { id: 'guia', label: '❓ Guía' },
     { id: 'resumen', label: '📊 Resumen' },
     { id: 'empleados', label: '👥 Empleados' },
     { id: 'cursos', label: '📚 Catálogo de cursos' },
@@ -165,6 +167,9 @@ export function EmpresaDashboard() {
             {empresa.id_empresa && <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>{empresa.id_empresa}</code>}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setTab('guia')} style={{ background: '#fff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#1d4ed8', cursor: 'pointer', fontWeight: 600 }}>
+              ❓ Guía
+            </button>
             <button onClick={() => setModalEval(true)} style={{ background: '#fff', border: '1px solid #fde047', borderRadius: 8, padding: '7px 14px', fontSize: 13, color: '#a16207', cursor: 'pointer', fontWeight: 600 }}>
               ⭐ Evaluar HCD
             </button>
@@ -245,6 +250,7 @@ export function EmpresaDashboard() {
 
             <BannerConvocatoria empresa={empresa} />
 
+            {tab === 'guia' && <GuiaEmpresa onIrATab={setTab} />}
             {tab === 'resumen' && <TabResumen empresa={empresa} empleados={empleados} asignaciones={asignaciones} certificados={certificados} cursos={cursos} />}
             {tab === 'empleados' && <TabEmpleados empresa={empresa} empleados={empleados} recargar={() => cargar(empresa)} />}
             {tab === 'cursos' && <TabCursos empresa={empresa} cursos={cursos} microcursos={microcursos} empleados={empleados} recargar={() => cargar(empresa)} />}
