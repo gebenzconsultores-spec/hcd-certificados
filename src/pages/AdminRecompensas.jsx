@@ -530,6 +530,7 @@ function TabCatalogo() {
             <tr style={{ textAlign: 'left', color: '#94a3b8', borderBottom: '1px solid #e2e8f0' }}>
               <th style={{ padding: '8px 6px' }}>Categoría</th>
               <th style={{ padding: '8px 6px' }}>Ítem</th>
+              <th style={{ padding: '8px 6px' }}>Descripción</th>
               <th style={{ padding: '8px 6px' }}>Costo tokens</th>
               <th style={{ padding: '8px 6px' }}>Costo real MXN</th>
               <th style={{ padding: '8px 6px' }}>Activo</th>
@@ -539,8 +540,17 @@ function TabCatalogo() {
           <tbody>
             {items.map(i => (
               <tr key={i.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: '8px 6px' }}>{CATEGORIAS_CANJE[i.categoria] || i.categoria}</td>
-                <td style={{ padding: '8px 6px', fontWeight: 700, color: '#1e293b' }}>{i.nombre}</td>
+                <td style={{ padding: '8px 6px' }}>
+                  <select defaultValue={i.categoria} onChange={e => guardarItem(i, 'categoria', e.target.value)} style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}>
+                    {Object.entries(CATEGORIAS_CANJE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: '8px 6px' }}>
+                  <input type="text" defaultValue={i.nombre} onBlur={e => { const v = e.target.value.trim(); if (v && v !== i.nombre) guardarItem(i, 'nombre', v) }} style={{ width: 140, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }} />
+                </td>
+                <td style={{ padding: '8px 6px' }}>
+                  <input type="text" defaultValue={i.descripcion || ''} onBlur={e => { const v = e.target.value.trim(); if (v !== (i.descripcion || '')) guardarItem(i, 'descripcion', v || null) }} style={{ width: 180, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
+                </td>
                 <td style={{ padding: '8px 6px' }}>
                   <input type="number" defaultValue={i.costo_tokens} onBlur={e => { const v = parseInt(e.target.value, 10); if (v !== i.costo_tokens && v > 0) guardarItem(i, 'costo_tokens', v) }} style={{ width: 70, padding: '4px 6px', borderRadius: 6, border: '1px solid #e2e8f0' }} />
                 </td>
@@ -555,7 +565,7 @@ function TabCatalogo() {
                 </td>
               </tr>
             ))}
-            {items.length === 0 && <tr><td colSpan={6} style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Sin ítems todavía. Corre el SQL de recompensas o agrega uno con "+ Nuevo ítem".</td></tr>}
+            {items.length === 0 && <tr><td colSpan={7} style={{ padding: 16, textAlign: 'center', color: '#94a3b8' }}>Sin ítems todavía. Corre el SQL de recompensas o agrega uno con "+ Nuevo ítem".</td></tr>}
           </tbody>
         </table>
       </div>
