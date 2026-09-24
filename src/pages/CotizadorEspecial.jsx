@@ -4,6 +4,12 @@ import * as XLSX from 'xlsx'
 
 const EMAIL = 'ventas@hablandocondatos.com.mx'
 const money = function(n) { return '$' + (Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) }
+// Duración predefinida del curso (en horas, tal como está en el catálogo) a texto legible.
+function duracionLegible(horas) {
+  var h = Number(horas)
+  if (!h) return ''
+  return h + ' hora' + (h === 1 ? '' : 's')
+}
 
 export default function CotizadorEspecial() {
   var [cursos, setCursos] = useState([])
@@ -21,6 +27,7 @@ export default function CotizadorEspecial() {
   var [curso, setCurso] = useState('')
   var [participantes, setParticipantes] = useState(1)
   var [modalidad, setModalidad] = useState('online')
+  var [duracion, setDuracion] = useState('')
   var [detalleServicio, setDetalleServicio] = useState('')
   var [condicionesManual, setCondicionesManual] = useState('')
   var [precio, setPrecio] = useState(0)
@@ -55,7 +62,7 @@ export default function CotizadorEspecial() {
 
   function limpiarForm() {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(''); setContacto(''); setCorreo(''); setTelefono('')
-    setTipo('curso'); setCurso(''); setParticipantes(1); setModalidad('online')
+    setTipo('curso'); setCurso(''); setParticipantes(1); setModalidad('online'); setDuracion('')
     setDetalleServicio(''); setCondicionesManual('')
     setPrecio(0); setAplicaIva(true); setViaticos(0); setNotas('')
   }
@@ -63,9 +70,18 @@ export default function CotizadorEspecial() {
   function cargarEnForm(c) {
     setEditandoId(c.id); setFolio(c.folio || ''); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
     setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
-    setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online')
+    setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online'); setDuracion(c.duracion || '')
     setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
+  }
+
+  // Al escribir/elegir un curso del catálogo, precarga su duración (editable después).
+  function onCursoChange(v) {
+    setCurso(v)
+    if (tipo === 'curso') {
+      var m = cursos.find(function(c) { return c.nombre === v })
+      if (m) setDuracion(duracionLegible(m.duracion))
+    }
   }
 
   function guardar() {
@@ -76,6 +92,7 @@ export default function CotizadorEspecial() {
       correo: correo.trim(), telefono: telefono.trim(), tipo: tipo, curso: curso.trim(),
       participantes: tipo === 'servicio' ? null : (Number(participantes) || 1),
       modalidad: tipo === 'servicio' ? null : modalidad,
+      duracion: tipo === 'servicio' ? null : duracion.trim(),
       detalle_servicio: tipo === 'servicio' ? detalleServicio.trim() : null,
       condiciones_manual: tipo === 'servicio' ? condicionesManual.trim() : null,
       precio: Number(precio) || 0, aplica_iva: aplicaIva, viaticos: Number(viaticos) || 0,
@@ -95,7 +112,7 @@ export default function CotizadorEspecial() {
   function duplicar(c) {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
     setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
-    setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online')
+    setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online'); setDuracion(c.duracion || '')
     setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -107,13 +124,13 @@ export default function CotizadorEspecial() {
   }
 
   function generarPDF(c) {
-    var d = c || { folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, tipo: tipo, curso: curso, participantes: participantes, modalidad: modalidad, detalle_servicio: detalleServicio, condiciones_manual: condicionesManual, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
+    var d = c || { folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, tipo: tipo, curso: curso, participantes: participantes, modalidad: modalidad, duracion: duracion, detalle_servicio: detalleServicio, condiciones_manual: condicionesManual, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
     var esServicio = d.tipo === 'servicio'
     var fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
     var st = (Number(d.precio)||0) + (Number(d.viaticos)||0)
     var iv = d.aplica_iva ? st * 0.16 : 0
     var tot = st + iv
-    var detalleCol = esServicio ? (d.detalle_servicio || '') : ((d.participantes||1) + ' persona(s) · ' + (d.modalidad||''))
+    var detalleCol = esServicio ? (d.detalle_servicio || '') : ((d.participantes||1) + ' persona(s) · ' + (d.modalidad||'') + (d.duracion ? ' · ' + d.duracion : ''))
     // Condiciones: en cursos se imprimen fijas; en servicios solo si se escribieron a mano (si no, se omite la sección completa)
     var condicionesHtml = ''
     if (esServicio) {
@@ -127,7 +144,7 @@ export default function CotizadorEspecial() {
         '• Precios en pesos mexicanos (MXN). ' + (d.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.') + '<br/>' +
         '• Incluye constancias con folio único verificable.<br/>' +
         (d.modalidad === 'online'
-          ? '• El monto total deberá liquidarse un día antes de que comience el curso.<br/>'
+          ? '• El monto total deberá liquidarse un día antes de que comience el curso, o contar con una orden de compra.<br/>'
           : '• Incluye material didáctico.<br/>• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>') +
         '• Contacto: WhatsApp 222 354 9353 · ' + EMAIL + '</div>'
     }
@@ -225,7 +242,7 @@ export default function CotizadorEspecial() {
               <input value={curso} onChange={function(e){setCurso(e.target.value)}} placeholder="Ej: Consultoría de implementación ISO 9001" style={INP} />
             ) : (
               <>
-                <input list="cursos-esp" value={curso} onChange={function(e){setCurso(e.target.value)}} placeholder="Escribe o selecciona" style={INP} />
+                <input list="cursos-esp" value={curso} onChange={function(e){onCursoChange(e.target.value)}} placeholder="Escribe o selecciona" style={INP} />
                 <datalist id="cursos-esp">{cursos.map(function(c){return <option key={c.id} value={c.nombre} />})}</datalist>
               </>
             )}
@@ -233,6 +250,7 @@ export default function CotizadorEspecial() {
           {tipo === 'curso' && <>
             <div><label style={LBL}>Participantes</label><input type="number" min="1" value={participantes} onChange={function(e){setParticipantes(e.target.value)}} style={INP} /></div>
             <div><label style={LBL}>Modalidad</label><select value={modalidad} onChange={function(e){setModalidad(e.target.value)}} style={INP}><option value="online">Online</option><option value="presencial">Presencial</option><option value="hibrido">Híbrido</option></select></div>
+            <div><label style={LBL}>Duración</label><input value={duracion} onChange={function(e){setDuracion(e.target.value)}} placeholder="Ej: 8 horas" style={INP} /></div>
           </>}
           <div><label style={LBL}>Precio total (MXN)</label><input type="number" min="0" step="100" value={precio} onChange={function(e){setPrecio(e.target.value)}} style={INP} /></div>
         </div>
@@ -288,7 +306,7 @@ export default function CotizadorEspecial() {
                     <code style={{ background: '#f9f0f0', color: '#8B1A1A', padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>{c.folio}</code>
                     {c.tipo === 'servicio' && <span style={{ marginLeft: 8, background: '#eff6ff', color: '#1d4ed8', padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700 }}>🧰 Servicio</span>}
                     <span style={{ marginLeft: 10, fontWeight: 700, color: '#1e293b', fontSize: 14 }}>{c.empresa}</span>
-                    <span style={{ marginLeft: 8, color: '#64748b', fontSize: 12 }}>{c.curso}{c.tipo === 'servicio' ? '' : ' · ' + c.participantes + 'p · ' + c.modalidad}</span>
+                    <span style={{ marginLeft: 8, color: '#64748b', fontSize: 12 }}>{c.curso}{c.tipo === 'servicio' ? '' : ' · ' + c.participantes + 'p · ' + c.modalidad + (c.duracion ? ' · ' + c.duracion : '')}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 800, color: '#8B1A1A', fontSize: 15 }}>{money(c.total)}</span>
