@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, sesionGuardadaLocal } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined) // undefined = cargando
   const [tardando, setTardando] = useState(false)
+  // Sesión que ya estaba guardada en este navegador: permite pintar el panel
+  // al instante aunque Supabase tarde en confirmar/renovar el token.
+  const [sesionLocal] = useState(() => sesionGuardadaLocal())
 
   useEffect(() => {
     let mounted = true
@@ -22,7 +25,7 @@ export function AuthProvider({ children }) {
     // 2) Respaldo: leemos la sesión persistida
     supabase.auth.getSession().then(({ data }) => {
       if (mounted) setSession(prev => (prev === undefined ? (data.session ?? null) : prev))
-    })
+    }).catch(() => {})
 
     return () => { mounted = false; subscription.unsubscribe() }
   }, [])
@@ -32,12 +35,12 @@ export function AuthProvider({ children }) {
   // al usuario que le dé refresh en vez de dejarlo viendo el spinner infinito.
   useEffect(() => {
     if (session !== undefined) { setTardando(false); return }
-    const t = setTimeout(() => setTardando(true), 7000)
+    const t = setTimeout(() => setTardando(true), 8000)
     return () => clearTimeout(t)
   }, [session])
 
   return (
-    <AuthContext.Provider value={{ session, loading: session === undefined, tardando }}>
+    <AuthContext.Provider value={{ session, loading: session === undefined, tardando, sesionLocal }}>
       {children}
     </AuthContext.Provider>
   )

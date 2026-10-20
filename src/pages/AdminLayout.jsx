@@ -32,7 +32,10 @@ const NAV = [
 ]
 
 export default function AdminLayout() {
-  const { session, loading, tardando } = useAuth()
+  const { session, loading, tardando, sesionLocal } = useAuth()
+  // Si ya hay sesión guardada en este navegador, mostramos el panel de inmediato
+  // mientras Supabase confirma/renueva el acceso en segundo plano.
+  const ses = session || (loading ? sesionLocal : null)
   const navigate = useNavigate()
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -47,28 +50,18 @@ export default function AdminLayout() {
     return () => window.removeEventListener('resize', onR)
   }, [])
 
-  if (loading) return (
+  if (loading && !ses) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fb', padding: 20 }}>
+      <BarraCarga />
       <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#8B1A1A', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+        <div style={{ width: 40, height: 40, border: '3px solid #e2e8f0', borderTopColor: '#8B1A1A', borderRadius: '50%', animation: 'hcdspin 1s linear infinite', margin: '0 auto 12px' }} />
         <div style={{ color: '#64748b', fontSize: 13 }}>Cargando panel...</div>
-        {tardando && (
-          <div style={{ marginTop: 18, maxWidth: 280 }}>
-            <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
-              Esto está tardando más de lo normal. Si no carga en unos segundos, dale clic a recargar.
-            </div>
-            <button onClick={() => window.location.reload()}
-              style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 20px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-              🔄 Recargar página
-            </button>
-          </div>
-        )}
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        {tardando && <AvisoLento />}
       </div>
     </div>
   )
 
-  if (!session) return null
+  if (!ses) return null
 
   const navLinks = (
     <>
@@ -104,7 +97,7 @@ export default function AdminLayout() {
 
   const footer = (
     <div style={{ padding: '14px 16px', borderTop: '1px solid #e2e8f0' }}>
-      <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.user.email}</div>
+      <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ses.user?.email}</div>
       <button onClick={() => navigate('/restablecer')}
         style={{ width: '100%', background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px', fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 6 }}>
         🔑 Cambiar contraseña
@@ -144,7 +137,7 @@ export default function AdminLayout() {
         )}
 
         <div style={{ padding: '14px 14px 28px', overflowX: 'auto' }}>
-          <Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
+          {loading && <BarraCarga />}{loading && tardando && <AvisoLento enLinea />}<Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
         </div>
       </div>
     )
@@ -174,9 +167,36 @@ export default function AdminLayout() {
           <Notificaciones />
         </div>
         <div style={{ padding: '12px 32px 28px' }}>
-          <Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
+          {loading && <BarraCarga />}{loading && tardando && <AvisoLento enLinea />}<Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
         </div>
       </main>
+    </div>
+  )
+}
+
+// Barra animada arriba de la pantalla mientras se conecta con el servidor
+function BarraCarga() {
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 3, zIndex: 2000, overflow: 'hidden', background: '#f1d5d5' }}>
+      <div style={{ position: 'absolute', top: 0, bottom: 0, width: '35%', background: '#8B1A1A', animation: 'hcdbarra 1.1s ease-in-out infinite' }} />
+      <style>{`@keyframes hcdbarra { 0% { left: -35% } 100% { left: 100% } } @keyframes hcdspin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
+// Aviso cuando la conexión tarda: invita a recargar (F5)
+function AvisoLento({ enLinea }) {
+  return (
+    <div style={enLinea
+      ? { background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 16px', margin: '0 0 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }
+      : { marginTop: 18, maxWidth: 300 }}>
+      <div style={{ color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>
+        La conexión con el servidor está lenta. Si no termina de cargar, presiona <strong>F5</strong> o el botón de recargar.
+      </div>
+      <button onClick={() => window.location.reload()}
+        style={{ background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginTop: enLinea ? 0 : 10, whiteSpace: 'nowrap' }}>
+        🔄 Recargar (F5)
+      </button>
     </div>
   )
 }

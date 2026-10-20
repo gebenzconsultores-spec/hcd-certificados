@@ -3,7 +3,36 @@ import { createClient } from '@supabase/supabase-js'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+// fetch con límite de tiempo: si Supabase no responde, cortamos la petición
+// en vez de dejar la pantalla colgada para siempre (supabase-js reintenta solo).
+// No aplica a Storage (subir comprobantes/PDF puede tardar más).
+function fetchConLimite(url, opciones = {}) {
+  const u = String(url)
+  const ms = u.includes('/auth/v1/') ? 10000 : u.includes('/rest/v1/') ? 30000 : 0
+  if (!ms || opciones.signal) return fetch(url, opciones)
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), ms)
+  return fetch(url, { ...opciones, signal: ctrl.signal }).finally(() => clearTimeout(t))
+}
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: { fetch: fetchConLimite },
+})
+
+// Sesión guardada en este navegador (sin esperar a la red). Sirve para mostrar
+// el panel de inmediato mientras Supabase confirma/renueva la sesión.
+export function sesionGuardadaLocal() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (!k || !k.startsWith('sb-') || !k.endsWith('-auth-token')) continue
+      const raw = JSON.parse(localStorage.getItem(k) || 'null')
+      const s = raw && (raw.currentSession || raw)
+      if (s && s.refresh_token && s.user) return s
+    }
+  } catch (_) {}
+  return null
+}
 
 // ── CURSOS ──────────────────────────────────────────────────────────────────
 export async function getCursos() {
