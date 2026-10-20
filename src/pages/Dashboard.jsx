@@ -9,9 +9,9 @@ export default function Dashboard() {
   useEffect(() => {
     async function cargar() {
       const [c, e, p, cert] = await Promise.all([
-        supabase.from('cursos').select('id', { count: 'exact' }),
-        supabase.from('empresas').select('id', { count: 'exact' }),
-        supabase.from('participantes').select('id', { count: 'exact' }),
+        supabase.from('cursos').select('id', { count: 'exact', head: true }),
+        supabase.from('empresas').select('id', { count: 'exact', head: true }),
+        supabase.from('participantes').select('id', { count: 'exact', head: true }),
         supabase.from('certificados').select('id, modalidad, created_at, id_unico, nombre_participante, nombre_curso', { count: 'exact' }).order('created_at', { ascending: false }).limit(8)
       ])
       const pres = cert.data?.filter(x => x.modalidad === 'presencial').length || 0

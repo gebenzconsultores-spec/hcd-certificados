@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import Notificaciones from './Notificaciones.jsx'
 import { useAuth } from '../hooks/useAuth.jsx'
 import { logout } from '../lib/supabase'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', icon: '◉', end: true },
@@ -105,6 +105,10 @@ export default function AdminLayout() {
   const footer = (
     <div style={{ padding: '14px 16px', borderTop: '1px solid #e2e8f0' }}>
       <div style={{ color: '#94a3b8', fontSize: 10, marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{session.user.email}</div>
+      <button onClick={() => navigate('/restablecer')}
+        style={{ width: '100%', background: 'none', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px', fontSize: 12, color: '#475569', cursor: 'pointer', marginBottom: 6 }}>
+        🔑 Cambiar contraseña
+      </button>
       <button onClick={() => { logout(); navigate('/login') }}
         style={{ width: '100%', background: '#f1f5f9', border: 'none', borderRadius: 8, padding: '8px', fontSize: 12, color: '#475569', cursor: 'pointer' }}>
         Cerrar sesión
@@ -140,7 +144,7 @@ export default function AdminLayout() {
         )}
 
         <div style={{ padding: '14px 14px 28px', overflowX: 'auto' }}>
-          <Outlet />
+          <Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
         </div>
       </div>
     )
@@ -170,7 +174,7 @@ export default function AdminLayout() {
           <Notificaciones />
         </div>
         <div style={{ padding: '12px 32px 28px' }}>
-          <Outlet />
+          <Suspense fallback={<div style={{ color: '#94a3b8', fontSize: 13, padding: 30 }}>Cargando sección...</div>}><Outlet /></Suspense>
         </div>
       </main>
     </div>

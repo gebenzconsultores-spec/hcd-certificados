@@ -1,47 +1,73 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth.jsx'
+
+// Carga diferida por página: cada pantalla se descarga solo cuando se visita,
+// así un alumno que abre su examen no baja todo el panel admin (Excel, PDF, etc.).
+// Si tras un deploy nuevo falla la descarga de una pantalla vieja, recarga 1 vez.
+const K_RECARGA = 'hcd_recarga_chunk'
+const ss = {
+  get: k => { try { return sessionStorage.getItem(k) } catch (_) { return null } },
+  set: (k, v) => { try { sessionStorage.setItem(k, v) } catch (_) {} },
+  del: k => { try { sessionStorage.removeItem(k) } catch (_) {} },
+}
+function cargar(fn) {
+  return lazy(() => fn()
+    .then(m => { ss.del(K_RECARGA); return m })
+    .catch(err => {
+      if (!ss.get(K_RECARGA)) { ss.set(K_RECARGA, '1'); window.location.reload(); return new Promise(() => {}) }
+      throw err
+    }))
+}
+
 // Públicas
-import Bienvenida from './pages/Bienvenida.jsx'
-import Login from './pages/Login.jsx'
-import Verificar from './pages/Verificar.jsx'
-import ExamenPublico from './pages/ExamenPublico.jsx'
-import CotizadorPublico from './pages/CotizadorPublico.jsx'
+const Bienvenida = cargar(() => import('./pages/Bienvenida.jsx'))
+const Login = cargar(() => import('./pages/Login.jsx'))
+const RestablecerPassword = cargar(() => import('./pages/RestablecerPassword.jsx'))
+const Verificar = cargar(() => import('./pages/Verificar.jsx'))
+const ExamenPublico = cargar(() => import('./pages/ExamenPublico.jsx'))
+const CotizadorPublico = cargar(() => import('./pages/CotizadorPublico.jsx'))
 // Accesos empresa y estudiante
-import EmpresaAcceso from './pages/EmpresaAcceso.jsx'
-import EstudianteAcceso from './pages/EstudianteAcceso.jsx'
-import EstudianteDashboard from './pages/EstudianteDashboard.jsx'
-import { EmpresaDashboard } from './pages/PortalEmpresa.jsx'
+const EmpresaAcceso = cargar(() => import('./pages/EmpresaAcceso.jsx'))
+const EstudianteAcceso = cargar(() => import('./pages/EstudianteAcceso.jsx'))
+const EstudianteDashboard = cargar(() => import('./pages/EstudianteDashboard.jsx'))
+const EmpresaDashboard = cargar(() => import('./pages/PortalEmpresa.jsx').then(m => ({ default: m.EmpresaDashboard })))
 // Admin
-import AdminLayout from './pages/AdminLayout.jsx'
-import Dashboard from './pages/Dashboard.jsx'
-import Cursos from './pages/Cursos.jsx'
-import Empresas from './pages/Empresas.jsx'
-import Vendedores from './pages/Vendedores.jsx'
-import Participantes from './pages/Participantes.jsx'
-import Certificados from './pages/Certificados.jsx'
-import Auditoria from './pages/Auditoria.jsx'
-import AdminCotizaciones from './pages/AdminCotizaciones.jsx'
-import RentaPlataforma from './pages/RentaPlataforma.jsx'
-import AdminVentas from './pages/AdminVentas.jsx'
-import AdminMicrocursos from './pages/AdminMicrocursos.jsx'
-import AdminEquipo from './pages/AdminEquipo.jsx'
-import AdminPrecios from './pages/AdminPrecios.jsx'
-import AdminCompras from './pages/AdminCompras.jsx'
-import AdminCotizadorConfig from './pages/AdminCotizadorConfig.jsx'
-import CotizadorEspecial from './pages/CotizadorEspecial.jsx'
-import AdminProximosCursos from './pages/AdminProximosCursos.jsx'
-import AdminCursosConfirmados from './pages/AdminCursosConfirmados.jsx'
-import AdminCandidatos from './pages/AdminCandidatos.jsx'
-import AdminComisiones from './pages/AdminComisiones.jsx'
-import AdminEvaluaciones from './pages/AdminEvaluaciones.jsx'
-import AdminSeguimiento from './pages/AdminSeguimiento.jsx'
-import AdminRecompensas from './pages/AdminRecompensas.jsx'
+const AdminLayout = cargar(() => import('./pages/AdminLayout.jsx'))
+const Dashboard = cargar(() => import('./pages/Dashboard.jsx'))
+const Cursos = cargar(() => import('./pages/Cursos.jsx'))
+const Empresas = cargar(() => import('./pages/Empresas.jsx'))
+const Vendedores = cargar(() => import('./pages/Vendedores.jsx'))
+const Participantes = cargar(() => import('./pages/Participantes.jsx'))
+const Certificados = cargar(() => import('./pages/Certificados.jsx'))
+const Auditoria = cargar(() => import('./pages/Auditoria.jsx'))
+const AdminCotizaciones = cargar(() => import('./pages/AdminCotizaciones.jsx'))
+const RentaPlataforma = cargar(() => import('./pages/RentaPlataforma.jsx'))
+const AdminVentas = cargar(() => import('./pages/AdminVentas.jsx'))
+const AdminMicrocursos = cargar(() => import('./pages/AdminMicrocursos.jsx'))
+const AdminEquipo = cargar(() => import('./pages/AdminEquipo.jsx'))
+const AdminPrecios = cargar(() => import('./pages/AdminPrecios.jsx'))
+const AdminCompras = cargar(() => import('./pages/AdminCompras.jsx'))
+const AdminCotizadorConfig = cargar(() => import('./pages/AdminCotizadorConfig.jsx'))
+const CotizadorEspecial = cargar(() => import('./pages/CotizadorEspecial.jsx'))
+const AdminProximosCursos = cargar(() => import('./pages/AdminProximosCursos.jsx'))
+const AdminCursosConfirmados = cargar(() => import('./pages/AdminCursosConfirmados.jsx'))
+const AdminCandidatos = cargar(() => import('./pages/AdminCandidatos.jsx'))
+const AdminComisiones = cargar(() => import('./pages/AdminComisiones.jsx'))
+const AdminEvaluaciones = cargar(() => import('./pages/AdminEvaluaciones.jsx'))
+const AdminSeguimiento = cargar(() => import('./pages/AdminSeguimiento.jsx'))
+const AdminRecompensas = cargar(() => import('./pages/AdminRecompensas.jsx'))
+
+const Cargando = () => (
+  <div style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: 13 }}>Cargando...</div>
+)
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AuthProvider>
       <BrowserRouter>
+        <Suspense fallback={<Cargando />}>
         <Routes>
           {/* ── PÚBLICAS ── */}
           <Route path="/" element={<Bienvenida />} />
@@ -49,6 +75,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="/examen/:cursoId" element={<ExamenPublico />} />
           <Route path="/cotizar" element={<CotizadorPublico />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/restablecer" element={<RestablecerPassword />} />
           {/* ── ACCESO EMPRESA ── */}
           <Route path="/empresa/acceso" element={<EmpresaAcceso />} />
           <Route path="/empresa/dashboard" element={<EmpresaDashboard />} />
@@ -83,6 +110,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   </React.StrictMode>

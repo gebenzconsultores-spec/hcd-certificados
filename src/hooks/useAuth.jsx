@@ -11,8 +11,12 @@ export function AuthProvider({ children }) {
     let mounted = true
 
     // 1) Suscripción: supabase-js dispara la sesión restaurada (INITIAL_SESSION)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((evento, s) => {
       if (mounted) setSession(s ?? null)
+      // Link de "Reset password" del correo: llevar a la pantalla para poner contraseña nueva
+      if (evento === 'PASSWORD_RECOVERY' && window.location.pathname !== '/restablecer') {
+        window.location.replace('/restablecer')
+      }
     })
 
     // 2) Respaldo: leemos la sesión persistida

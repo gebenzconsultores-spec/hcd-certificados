@@ -1,13 +1,23 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase, getExamenPorCurso, guardarResultadoExamen, crearParticipante, crearCertificado, siguienteConsecutivo } from '../lib/supabase'
-import { generarYAbrirCertificado } from '../lib/certificado'
+import EvaluacionCursoForm from './EvaluacionCursoForm.jsx'
 
 const MINIMO = 0.7 // 70% mínimo aprobatorio
+const SEG_POR_PREGUNTA = 45 // tiempo del examen: 45 s por pregunta (10 preguntas = 7:30)
+
+// Mezcla el orden de las preguntas en cada intento (las opciones no se tocan)
+function mezclar(lista) {
+  const a = [...lista]
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]] }
+  return a
+}
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(2, '0')}`
 
 export default function ExamenPublico() {
   const { cursoId } = useParams()
-  const [fase, setFase] = useState('cargando') // cargando | examen | resultado | bloqueado
+  // cargando | bloqueado | evaluacion | instrucciones | examen | interrumpido | resultado
+  const [fase, setFase] = useState('cargando')
   const [curso, setCurso] = useState(null)
   const [preguntas, setPreguntas] = useState([])
   const [participante, setParticipante] = useState({ nombre: '', correo: '', whatsapp: '', empresa: '', es_universitario: false, universidad: '', carrera: '' })
@@ -20,6 +30,11 @@ export default function ExamenPublico() {
   const [alumno, setAlumno] = useState(null)
   const [mensajeBloqueo, setMensajeBloqueo] = useState('')
   const enviandoRef = useRef(false)
+  // Cronómetro y control de salida de pestaña
+  const [finExamen, setFinExamen] = useState(null) // timestamp (ms) en que se acaba el tiempo
+  const [restante, setRestante] = useState(0)      // segundos restantes
+  const [interrupciones, setInterrupciones] = useState(0)
+  const enviarRef = useRef(null)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onR = () => setIsMobile(window.innerWidth < 640)
@@ -153,7 +168,14 @@ export default function ExamenPublico() {
           }
         }
 
-        setFase('examen')
+        // Antes del examen el alumno debe calificar el curso (una sola vez)
+        let yaEvaluo = false
+        try {
+          const { data: evs } = await supabase.from('evaluaciones_curso')
+            .select('id, curso_id, curso_nombre').eq('participante_id', registro.id)
+          yaEvaluo = (evs || []).some(e => String(e.curso_id) === String(cursoId) || (data?.nombre && e.curso_nombre === data.nombre))
+        } catch (_) {}
+        setFase(yaEvaluo ? 'instrucciones' : 'evaluacion')
       } else {
         setMensajeBloqueo('Para presentar el examen, entra desde el Portal de Estudiante con tu ID.')
         setFase('bloqueado')
@@ -167,12 +189,52 @@ export default function ExamenPublico() {
     setFase('examen')
   }
 
+  const tiempoTotal = preguntas.length * SEG_POR_PREGUNTA
+
+  function comenzarExamen() {
+    enviandoRef.current = false
+    setRespuestas({})
+    setPreguntas(prev => mezclar(prev))
+    setFinExamen(Date.now() + tiempoTotal * 1000)
+    setRestante(tiempoTotal)
+    setFase('examen')
+    window.scrollTo(0, 0)
+  }
+
+  // Cronómetro: al llegar a 0 se envía solo con lo que lleve contestado
+  useEffect(() => {
+    if (fase !== 'examen' || !finExamen) return
+    const tick = () => {
+      const s = Math.ceil((finExamen - Date.now()) / 1000)
+      setRestante(Math.max(0, s))
+      if (s <= 0) { clearInterval(id); enviarRef.current && enviarRef.current(true) }
+    }
+    const id = setInterval(tick, 500)
+    tick()
+    return () => clearInterval(id)
+  }, [fase, finExamen])
+
+  // Si sale de la pestaña / cambia de app / minimiza, el examen se cierra y debe reiniciarlo
+  useEffect(() => {
+    if (fase !== 'examen') return
+    const alSalir = () => {
+      if (!document.hidden || enviandoRef.current) return
+      setRespuestas({})
+      setFinExamen(null)
+      setInterrupciones(n => n + 1)
+      setFase('interrumpido')
+    }
+    document.addEventListener('visibilitychange', alSalir)
+    return () => document.removeEventListener('visibilitychange', alSalir)
+  }, [fase])
+
   function seleccionar(preguntaId, opcion) {
     setRespuestas(p => ({ ...p, [preguntaId]: opcion }))
   }
 
-  async function enviarExamen() {
+  async function enviarExamen(porTiempo = false) {
     if (enviandoRef.current) return
+    if (porTiempo !== true && Object.keys(respuestas).length < preguntas.length) return
     enviandoRef.current = true
     setLoading(true)
     try {
@@ -284,7 +346,8 @@ export default function ExamenPublico() {
       } catch (_) {}
     }
 
-    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert, respuestas: { ...respuestas } })
+    setResultado({ correctas, total: preguntas.length, calificacion: Math.round(calificacion * 100), aprobado, cert: certData, esDeEmpresa: !!empresaIdCert, respuestas: { ...respuestas }, porTiempo: porTiempo === true })
+    setFinExamen(null)
     setFase('resultado')
     } catch (e) {
       alert('Hubo un problema al enviar tu examen. Vuelve a intentarlo.')
@@ -294,11 +357,13 @@ export default function ExamenPublico() {
     }
   }
 
+  enviarRef.current = enviarExamen
+
   function repetir() {
     enviandoRef.current = false
     setRespuestas({})
     setIntento(i => i + 1)
-    setFase('examen')
+    setFase('instrucciones')
     setResultado(null)
   }
 
@@ -331,9 +396,72 @@ export default function ExamenPublico() {
           </div>
         )}
 
+        {/* FASE EVALUACIÓN DEL CURSO (obligatoria antes del examen) */}
+        {fase === 'evaluacion' && alumno && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: isMobile ? '22px 16px' : '30px 32px' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Paso 1 de 2 · Antes de tu examen</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Califica tu curso</h2>
+            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 6 }}>{curso.nombre}</p>
+            <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>Tu opinión es confidencial y nos ayuda a mejorar. Al terminar se habilita tu examen.</p>
+            <EvaluacionCursoForm estudiante={alumno} curso={{ curso_id: cursoId, curso_nombre: curso.nombre }}
+              textoBoton="Guardar y continuar al examen →"
+              onDone={() => { setFase('instrucciones'); window.scrollTo(0, 0) }} />
+          </div>
+        )}
+
+        {/* FASE INSTRUCCIONES (antes de iniciar el cronómetro) */}
+        {fase === 'instrucciones' && (
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: isMobile ? '22px 16px' : '30px 32px' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>{intento > 1 ? `Intento ${intento}` : 'Paso 2 de 2 · Examen'}</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 14 }}>{curso.nombre}</h2>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+              <div style={chip}>📝 {preguntas.length} preguntas</div>
+              <div style={chip}>⏱ {mmss(tiempoTotal)} minutos en total</div>
+              <div style={chip}>✅ Apruebas con 70%</div>
+            </div>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 18px', marginBottom: 20 }}>
+              <div style={{ fontWeight: 700, color: '#92400e', fontSize: 14, marginBottom: 8 }}>Antes de comenzar, lee esto:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, color: '#78350f', fontSize: 13, lineHeight: 1.7 }}>
+                <li>El tiempo empieza a correr al presionar <strong>Comenzar examen</strong> ({SEG_POR_PREGUNTA} segundos por pregunta).</li>
+                <li>Si se acaba el tiempo, tu examen se envía solo con lo que hayas contestado.</li>
+                <li><strong>No cambies de pestaña, no abras otra app ni minimices la ventana.</strong> Si lo haces, el examen se cierra, tus respuestas se borran y tendrás que iniciarlo de nuevo.</li>
+                <li>En celular: activa "No molestar" para que una llamada o notificación no te saque del examen.</li>
+              </ul>
+            </div>
+            <button onClick={comenzarExamen} disabled={preguntas.length === 0}
+              style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              {preguntas.length === 0 ? 'Este curso aún no tiene preguntas de examen' : 'Comenzar examen'}
+            </button>
+          </div>
+        )}
+
+        {/* FASE INTERRUMPIDO (salió de la pestaña) */}
+        {fase === 'interrumpido' && (
+          <div style={{ background: '#fff', border: '2px solid #dc2626', borderRadius: 16, padding: isMobile ? '26px 18px' : '36px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#dc2626', marginBottom: 8 }}>El examen se cerró</h2>
+            <p style={{ color: '#475569', fontSize: 14, marginBottom: 6, lineHeight: 1.6 }}>
+              Saliste de la ventana del examen (cambiaste de pestaña, de aplicación o la minimizaste). Por seguridad tus respuestas se borraron.
+            </p>
+            <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 22 }}>Interrupciones: {interrupciones}</p>
+            <button onClick={() => setFase('instrucciones')}
+              style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+              Volver a iniciar el examen
+            </button>
+          </div>
+        )}
+
         {/* FASE EXAMEN */}
         {fase === 'examen' && (
           <div>
+            {/* Cronómetro fijo arriba */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 20, background: restante <= 60 ? '#dc2626' : '#1e293b', color: '#fff', borderRadius: 10, padding: '10px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,.12)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>⏱ Tiempo restante</span>
+              <span style={{ fontSize: 20, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{mmss(restante)}</span>
+            </div>
+            <div style={{ height: 4, background: '#e2e8f0', borderRadius: 4, marginTop: -8, marginBottom: 16, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${tiempoTotal ? (restante / tiempoTotal) * 100 : 0}%`, background: restante <= 60 ? '#dc2626' : '#8B1A1A', transition: 'width .5s linear' }} />
+            </div>
             {alumno && (
               <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 16px', marginBottom: 16 }}>
                 <span style={{ color: '#15803d', fontSize: 13 }}>✓ Presentando como <strong>{alumno.nombre}</strong>{alumno.id_empleado ? ` (${alumno.id_empleado})` : ''}</span>
@@ -367,8 +495,8 @@ export default function ExamenPublico() {
               )
             })}
 
-            <button onClick={enviarExamen}
-              disabled={loading || Object.keys(respuestas).length < preguntas.length}
+            <button onClick={() => enviarExamen(restante <= 0)}
+              disabled={loading || (Object.keys(respuestas).length < preguntas.length && restante > 0)}
               style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer', marginTop: 8 }}>
               {loading ? 'Enviando...' : 'Enviar examen'}
             </button>
@@ -387,6 +515,9 @@ export default function ExamenPublico() {
             <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, color: resultado.aprobado ? '#15803d' : '#dc2626', marginBottom: 8 }}>
               {resultado.aprobado ? '¡Felicidades, aprobaste!' : 'No aprobaste esta vez'}
             </h2>
+            {resultado.porTiempo && (
+              <p style={{ color: '#b45309', fontSize: 13, marginBottom: 10 }}>⏱ Se acabó el tiempo: tu examen se envió automáticamente.</p>
+            )}
             <p style={{ color: '#64748b', fontSize: 15, marginBottom: 24 }}>
               Obtuviste <strong>{resultado.calificacion}%</strong> — {resultado.correctas} de {resultado.total} respuestas correctas
               <br /><span style={{ fontSize: 13, color: '#94a3b8' }}>(mínimo para aprobar: 70%)</span>
@@ -466,6 +597,8 @@ export default function ExamenPublico() {
     </div>
   )
 }
+
+const chip = { background: '#f1f5f9', color: '#334155', borderRadius: 20, padding: '6px 14px', fontSize: 13, fontWeight: 600 }
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
