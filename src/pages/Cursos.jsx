@@ -634,6 +634,23 @@ export default function Cursos() {
           <div style={{ ...modalStyle, width: 640, maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <h3 style={modalTitle}>Examen · {modalExamen.nombre || modalExamen.titulo}</h3>
 
+            {modalExamen.nombre && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, background: modalExamen.preguntas_aleatorias ? '#f0fdf4' : '#f8f9fb', border: `1px solid ${modalExamen.preguntas_aleatorias ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: 10, padding: '12px 14px', marginBottom: 16, cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!modalExamen.preguntas_aleatorias} style={{ accentColor: '#059669', width: 18, height: 18 }}
+                  onChange={async e => {
+                    const v = e.target.checked
+                    const { error } = await supabase.from('cursos').update({ preguntas_aleatorias: v }).eq('id', modalExamen.id)
+                    if (error) { alert('No se pudo guardar. ¿Ya corriste el SQL de preguntas_aleatorias?\n\n' + error.message); return }
+                    setModalExamen(m => ({ ...m, preguntas_aleatorias: v }))
+                    setCursos(cs => cs.map(c => c.id === modalExamen.id ? { ...c, preguntas_aleatorias: v } : c))
+                  }} />
+                <span>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#1e293b' }}>🔀 Preguntas en orden aleatorio</span>
+                  <span style={{ display: 'block', fontSize: 11, color: '#64748b' }}>Cada alumno (y cada intento) ve las preguntas en distinto orden. Se guarda al instante.</span>
+                </span>
+              </label>
+            )}
+
             <div style={{ background: '#f8f9fb', border: '1px solid #e2e8f0', borderRadius: 10, padding: '12px 14px', marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 8 }}>📤 Cargar preguntas desde Excel</div>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

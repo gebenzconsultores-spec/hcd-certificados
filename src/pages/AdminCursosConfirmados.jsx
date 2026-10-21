@@ -476,6 +476,9 @@ export default function AdminCursosConfirmados() {
               )}
             </div>
 
+            {/* Foto grupal y frase para "Comparte tu logro" de los alumnos */}
+            <FotoGrupal key={detalle.id} detalle={detalle} onGuardado={cambios => { setDetalle(d => ({ ...d, ...cambios })); cargar() }} />
+
             {/* Días del curso */}
             {(() => {
               const dias = diasCurso.filter(d => d.curso_confirmado_id === detalle.id).sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -1206,3 +1209,88 @@ const lbl = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151',
 const inp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }
 
 const navBtn = { background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 16px', fontSize: 13, color: '#475569', cursor: 'pointer', fontWeight: 600 }
+
+// ─── Foto grupal del curso (la usan los alumnos en "Comparte tu logro") ───
+async function reducirImagen(file, maxLado = 1600) {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url })
+    const esc = Math.min(1, maxLado / Math.max(img.width, img.height))
+    const cv = document.createElement('canvas')
+    cv.width = Math.round(img.width * esc); cv.height = Math.round(img.height * esc)
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height)
+    return await new Promise(res => cv.toBlob(b => res(b || file), 'image/jpeg', 0.86))
+  } catch (_) { return file } finally { URL.revokeObjectURL(url) }
+}
+
+function FotoGrupal({ detalle, onGuardado }) {
+  const [subiendo, setSubiendo] = useState(false)
+  const [frase, setFrase] = useState(detalle.frase_compartir || '')
+  const [guardandoFrase, setGuardandoFrase] = useState(false)
+
+  async function subir(file) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Sube una imagen (JPG o PNG).'); return }
+    setSubiendo(true)
+    try {
+      const blob = await reducirImagen(file)
+      const nombre = `grupo_${detalle.id}_${Date.now()}.jpg`
+      const { error: upErr } = await supabase.storage.from('fotos-grupales').upload(nombre, blob, { upsert: true, contentType: 'image/jpeg' })
+      if (upErr) { alert('No se pudo subir la foto. ¿Ya corriste el SQL que crea el bucket "fotos-grupales"?\n\nDetalle: ' + upErr.message); return }
+      const { data } = supabase.storage.from('fotos-grupales').getPublicUrl(nombre)
+      const { error } = await supabase.from('cursos_confirmados').update({ foto_grupal_url: data.publicUrl }).eq('id', detalle.id)
+      if (error) { alert('La foto se subió pero no se guardó en el curso: ' + error.message); return }
+      onGuardado({ foto_grupal_url: data.publicUrl })
+    } catch (e) {
+      alert('Error al subir la foto: ' + (e.message || ''))
+    } finally { setSubiendo(false) }
+  }
+
+  async function quitar() {
+    if (!window.confirm('¿Quitar la foto grupal de este curso?')) return
+    await supabase.from('cursos_confirmados').update({ foto_grupal_url: null }).eq('id', detalle.id)
+    onGuardado({ foto_grupal_url: null })
+  }
+
+  async function guardarFrase() {
+    setGuardandoFrase(true)
+    const { error } = await supabase.from('cursos_confirmados').update({ frase_compartir: frase.trim() || null }).eq('id', detalle.id)
+    setGuardandoFrase(false)
+    if (error) { alert('No se pudo guardar la frase: ' + error.message); return }
+    onGuardado({ frase_compartir: frase.trim() || null })
+  }
+
+  return (
+    <div style={{ background: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+      <div style={{ color: '#9d174d', fontSize: 12, fontWeight: 700, marginBottom: 4 }}>📸 FOTO GRUPAL PARA "COMPARTE TU LOGRO"</div>
+      <p style={{ color: '#64748b', fontSize: 11, marginBottom: 10 }}>Los alumnos que aprueben la publicarán en sus redes junto con el nombre del curso y su frase.</p>
+      {detalle.foto_grupal_url ? (
+        <div style={{ marginBottom: 10 }}>
+          <img src={detalle.foto_grupal_url} alt="Foto grupal" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 8, border: '1px solid #e2e8f0' }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <label style={{ background: '#fff', color: '#9d174d', border: '1px solid #fbcfe8', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              {subiendo ? 'Subiendo...' : 'Cambiar foto'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendo} onChange={e => { subir(e.target.files[0]); e.target.value = '' }} />
+            </label>
+            <button onClick={quitar} style={{ background: '#fff', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>Quitar</button>
+          </div>
+        </div>
+      ) : (
+        <label style={{ display: 'block', textAlign: 'center', background: '#fff', border: '2px dashed #f9a8d4', borderRadius: 8, padding: '18px 12px', color: '#9d174d', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}>
+          {subiendo ? 'Subiendo foto...' : '+ Subir foto del grupo'}
+          <input type="file" accept="image/*" style={{ display: 'none' }} disabled={subiendo} onChange={e => { subir(e.target.files[0]); e.target.value = '' }} />
+        </label>
+      )}
+      <div style={{ color: '#64748b', fontSize: 11, marginBottom: 4 }}>Frase sugerida (opcional; el alumno la puede editar. Usa {'{curso}'} para poner el nombre del curso)</div>
+      <textarea value={frase} onChange={e => setFrase(e.target.value)} rows={3}
+        placeholder={'¡Lo logré! 🎓 Concluí el curso "{curso}" con Hablando con Datos. ¡Se los recomiendo muchísimo! 💪'}
+        style={{ width: '100%', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 10px', fontSize: 12, boxSizing: 'border-box', resize: 'vertical', fontFamily: 'inherit' }} />
+      {(frase.trim() || null) !== (detalle.frase_compartir || null) && (
+        <button onClick={guardarFrase} disabled={guardandoFrase}
+          style={{ marginTop: 6, background: '#9d174d', color: '#fff', border: 'none', borderRadius: 6, padding: '5px 14px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+          {guardandoFrase ? 'Guardando...' : 'Guardar frase'}
+        </button>
+      )}
+    </div>
+  )
+}

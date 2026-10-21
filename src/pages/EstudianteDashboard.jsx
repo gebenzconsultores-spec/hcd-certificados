@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { LinkTerminos } from './TerminosPrivacidad.jsx'
+import EvaluacionCursoForm from './EvaluacionCursoForm.jsx'
+import ModalCompartirLogro from './CompartirLogro.jsx'
 import { generarYAbrirCertificado } from '../lib/certificado'
 import { asegurarCodigoReferido, linkReferido, canjearItem, CATEGORIAS_CANJE, ESTADOS_CANJE, ESTADOS_MEMBRESIA } from '../lib/tokens'
 
@@ -34,6 +36,7 @@ export default function EstudianteDashboard() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('asignados')
   const [modalDatos, setModalDatos] = useState(false)
+  const [compartirCert, setCompartirCert] = useState(null)
 
   useEffect(() => {
     const data = sessionStorage.getItem('estudiante_portal')
@@ -289,6 +292,10 @@ export default function EstudianteDashboard() {
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: '#fff', background: '#0A66C2', padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, textDecoration: 'none' }}>
                         in Agregar a LinkedIn
                       </a>
+                      <button onClick={() => setCompartirCert(cert)}
+                        style={{ background: '#8B1A1A', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                        🎉 Compartir mi logro
+                      </button>
                     </div>
                   </div>
                 )
@@ -371,6 +378,10 @@ export default function EstudianteDashboard() {
         )}
       </div>
 
+      {compartirCert && (
+        <ModalCompartirLogro onClose={() => setCompartirCert(null)}
+          datos={{ cursoId: compartirCert.curso_id, cursoNombre: compartirCert.nombre_curso, nombre: estudiante.nombre, idCertificado: compartirCert.id_unico, fechaCurso: compartirCert.fecha_curso }} />
+      )}
       {modalDatos && (
         <ModalMisDatos estudiante={estudiante} onClose={() => setModalDatos(false)} onActualizado={(nuevos) => setEstudiante(e => ({ ...e, ...nuevos }))} />
       )}
@@ -791,10 +802,9 @@ function CursosAsignados({ estudiante, certificados }) {
                 Presentar examen →
               </a>
             )}
-            <div style={{ marginTop: 10 }}>
-              <EvaluacionBadge ev={evalDe(a.curso_nombre)} hecho={yaHecho} />
-            </div>
-            <BotonManualCurso estudiante={estudiante} cursoId={a.curso_id} cursoNombre={a.curso_nombre} aprobado={certificados.some(cert => cert.nombre_curso === a.curso_nombre)} />
+            <AccionesCurso estudiante={estudiante} cursoId={a.curso_id} cursoNombre={a.curso_nombre}
+              aprobado={certificados.some(cert => cert.nombre_curso === a.curso_nombre)}
+              ev={evalDe(a.curso_nombre)} onEvaluado={cargarEvaluaciones} />
           </div>
         )
       })}
@@ -804,7 +814,7 @@ function CursosAsignados({ estudiante, certificados }) {
 
 // ─── Mis cursos (individual: solo los desbloqueados) ──────────
 // ─── Botón: descargar manual del curso (solo si aprobó, una sola vez) ───
-function BotonManualCurso({ estudiante, cursoId, cursoNombre, aprobado }) {
+function BotonManualCurso({ estudiante, cursoId, cursoNombre, aprobado, onDescargado }) {
   const [manualUrl, setManualUrl] = useState(null)
   const [descargado, setDescargado] = useState(false)
   const [bajando, setBajando] = useState(false)
@@ -833,6 +843,7 @@ function BotonManualCurso({ estudiante, cursoId, cursoNombre, aprobado }) {
     setBajando(true)
     try {
       window.open(manualUrl, '_blank', 'noopener')
+      onDescargado && onDescargado()
       await supabase.from('manuales_descargados').insert({ participante_id: estudiante.id, curso_id: cursoId, curso_nombre: cursoNombre })
     } catch (_) {}
     setDescargado(true)
@@ -1004,10 +1015,9 @@ function MisCursosIndividual({ estudiante, certificados }) {
                 Presentar examen →
               </a>
             )}
-            <div style={{ marginTop: 10 }}>
-              <EvaluacionBadge ev={evalDe(c.curso_nombre)} hecho={yaHecho} />
-            </div>
-            <BotonManualCurso estudiante={estudiante} cursoId={c.curso_id} cursoNombre={c.curso_nombre} aprobado={certificados.some(cert => cert.nombre_curso === c.curso_nombre)} />
+            <AccionesCurso estudiante={estudiante} cursoId={c.curso_id} cursoNombre={c.curso_nombre}
+              aprobado={certificados.some(cert => cert.nombre_curso === c.curso_nombre)}
+              ev={evalDe(c.curso_nombre)} onEvaluado={cargarEvaluaciones} />
           </div>
         )
       })}
@@ -1015,12 +1025,48 @@ function MisCursosIndividual({ estudiante, certificados }) {
   )
 }
 
-// ─── Calificación del curso: se hace antes del examen (ver EvaluacionCursoForm) ───
-// En la tarjeta solo se muestra si ya lo calificó.
-function EvaluacionBadge({ ev, hecho }) {
-  if (!ev && hecho) return null
-  if (!ev) return <span style={{ fontSize: 11, color: '#94a3b8' }}>La calificación del curso se hace antes del examen</span>
-  return <span style={{ display: 'inline-block', background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 7, padding: '5px 10px', fontSize: 12, fontWeight: 600 }}>★ {ev.calificacion}/5 · Curso calificado</span>
+// ─── Calificación del curso (opcional) + manual ───
+// La calificación ya no es obligatoria: se ofrece al descargar el manual (se
+// puede cerrar) y queda el botón para hacerlo después.
+function AccionesCurso({ estudiante, cursoId, cursoNombre, aprobado, ev, onEvaluado }) {
+  const [modal, setModal] = useState(null) // null | 'normal' | 'manual'
+  return (
+    <>
+      <div style={{ marginTop: 10 }}>
+        {ev ? (
+          <button onClick={() => setModal('normal')} title="Editar mi calificación"
+            style={{ background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', borderRadius: 7, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ★ {ev.calificacion}/5 · Curso calificado
+          </button>
+        ) : (
+          <button onClick={() => setModal('normal')}
+            style={{ background: '#f8f9fb', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 7, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ⭐ Calificar curso <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span>
+          </button>
+        )}
+      </div>
+      <BotonManualCurso estudiante={estudiante} cursoId={cursoId} cursoNombre={cursoNombre} aprobado={aprobado}
+        onDescargado={() => { if (!ev) setModal('manual') }} />
+      {modal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)', padding: 16, overflowY: 'auto' }} onClick={() => setModal(null)}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 'clamp(20px,5vw,28px) clamp(18px,5vw,32px)', width: 'min(500px,94vw)', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,.15)', margin: 'auto' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+              <div>
+                {modal === 'manual' && <div style={{ background: '#f0fdf4', color: '#166534', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600, marginBottom: 10 }}>📘 Tu manual se abrió en otra pestaña.</div>}
+                <h3 style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginBottom: 2 }}>{modal === 'manual' ? '¿Nos ayudas calificando el curso?' : 'Califica tu curso'}</h3>
+                <p style={{ color: '#64748b', fontSize: 13 }}>{cursoNombre}</p>
+                <p style={{ color: '#94a3b8', fontSize: 11, marginTop: 2 }}>Es opcional: puedes cerrar y hacerlo después desde aquí.</p>
+              </div>
+              <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: 20, color: '#64748b', cursor: 'pointer' }}>✕</button>
+            </div>
+            <EvaluacionCursoForm estudiante={estudiante} curso={{ curso_id: cursoId, curso_nombre: cursoNombre }} evaluacion={ev}
+              textoBoton="Enviar calificación" onCancel={() => setModal(null)}
+              onDone={() => { setModal(null); onEvaluado && onEvaluado(); alert('✅ ¡Gracias por tu opinión! Nos ayuda a mejorar.') }} />
+          </div>
+        </div>
+      )}
+    </>
+  )
 }
 function DesbloquearCurso({ estudiante, cursosDisponibles, onDone }) {
   const [idCompra, setIdCompra] = useState('')

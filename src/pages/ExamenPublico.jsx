@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase, getExamenPorCurso, guardarResultadoExamen, crearParticipante, crearCertificado, siguienteConsecutivo } from '../lib/supabase'
-import EvaluacionCursoForm from './EvaluacionCursoForm.jsx'
+import ModalCompartirLogro from './CompartirLogro.jsx'
 
 const MINIMO = 0.7 // 70% mínimo aprobatorio
 const SEG_POR_PREGUNTA = 45 // tiempo del examen: 45 s por pregunta (10 preguntas = 7:30)
@@ -16,7 +16,7 @@ const mmss = s => `${Math.floor(s / 60)}:${String(Math.max(0, s) % 60).padStart(
 
 export default function ExamenPublico() {
   const { cursoId } = useParams()
-  // cargando | bloqueado | evaluacion | instrucciones | examen | interrumpido | resultado
+  // cargando | bloqueado | datos | instrucciones | examen | interrumpido | resultado
   const [fase, setFase] = useState('cargando')
   const [curso, setCurso] = useState(null)
   const [preguntas, setPreguntas] = useState([])
@@ -35,6 +35,7 @@ export default function ExamenPublico() {
   const [restante, setRestante] = useState(0)      // segundos restantes
   const [interrupciones, setInterrupciones] = useState(0)
   const enviarRef = useRef(null)
+  const [compartir, setCompartir] = useState(false)
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onR = () => setIsMobile(window.innerWidth < 640)
@@ -102,10 +103,10 @@ export default function ExamenPublico() {
           let certPrev = null
           if (ultimo.aprobado) {
             try {
-              const { data: cc } = await supabase.from('certificados').select('id_unico')
+              const { data: cc } = await supabase.from('certificados').select('id_unico, fecha_curso')
                 .eq('participante_id', registro.id).eq('curso_id', cursoId)
                 .order('created_at', { ascending: false }).limit(1)
-              if (cc && cc[0]) certPrev = { id_unico: cc[0].id_unico }
+              if (cc && cc[0]) certPrev = { id_unico: cc[0].id_unico, fecha_curso: cc[0].fecha_curso }
             } catch (_) {}
           }
           setIntento(Number(ultimo.intento) || 1)
@@ -168,14 +169,8 @@ export default function ExamenPublico() {
           }
         }
 
-        // Antes del examen el alumno debe calificar el curso (una sola vez)
-        let yaEvaluo = false
-        try {
-          const { data: evs } = await supabase.from('evaluaciones_curso')
-            .select('id, curso_id, curso_nombre').eq('participante_id', registro.id)
-          yaEvaluo = (evs || []).some(e => String(e.curso_id) === String(cursoId) || (data?.nombre && e.curso_nombre === data.nombre))
-        } catch (_) {}
-        setFase(yaEvaluo ? 'instrucciones' : 'evaluacion')
+        // Antes del examen el alumno confirma sus datos (correo obligatorio)
+        setFase('datos')
       } else {
         setMensajeBloqueo('Para presentar el examen, entra desde el Portal de Estudiante con tu ID.')
         setFase('bloqueado')
@@ -194,7 +189,7 @@ export default function ExamenPublico() {
   function comenzarExamen() {
     enviandoRef.current = false
     setRespuestas({})
-    setPreguntas(prev => mezclar(prev))
+    if (curso?.preguntas_aleatorias) setPreguntas(prev => mezclar(prev))
     setFinExamen(Date.now() + tiempoTotal * 1000)
     setRestante(tiempoTotal)
     setFase('examen')
@@ -217,15 +212,18 @@ export default function ExamenPublico() {
   // Si sale de la pestaña / cambia de app / minimiza, el examen se cierra y debe reiniciarlo
   useEffect(() => {
     if (fase !== 'examen') return
-    const alSalir = () => {
-      if (!document.hidden || enviandoRef.current) return
+    const alSalir = (ev) => {
+      if (enviandoRef.current) return
+      // visibilitychange: cambió de pestaña / app / minimizó. blur: hizo clic en otra ventana o programa.
+      if (ev && ev.type === 'visibilitychange' && !document.hidden) return
       setRespuestas({})
       setFinExamen(null)
       setInterrupciones(n => n + 1)
       setFase('interrumpido')
     }
     document.addEventListener('visibilitychange', alSalir)
-    return () => document.removeEventListener('visibilitychange', alSalir)
+    window.addEventListener('blur', alSalir)
+    return () => { document.removeEventListener('visibilitychange', alSalir); window.removeEventListener('blur', alSalir) }
   }, [fase])
 
   function seleccionar(preguntaId, opcion) {
@@ -396,17 +394,14 @@ export default function ExamenPublico() {
           </div>
         )}
 
-        {/* FASE EVALUACIÓN DEL CURSO (obligatoria antes del examen) */}
-        {fase === 'evaluacion' && alumno && (
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: isMobile ? '22px 16px' : '30px 32px' }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Paso 1 de 2 · Antes de tu examen</div>
-            <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Califica tu curso</h2>
-            <p style={{ color: '#64748b', fontSize: 14, marginBottom: 6 }}>{curso.nombre}</p>
-            <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 8 }}>Tu opinión es confidencial y nos ayuda a mejorar. Al terminar se habilita tu examen.</p>
-            <EvaluacionCursoForm estudiante={alumno} curso={{ curso_id: cursoId, curso_nombre: curso.nombre }}
-              textoBoton="Guardar y continuar al examen →"
-              onDone={() => { setFase('instrucciones'); window.scrollTo(0, 0) }} />
-          </div>
+        {/* FASE DATOS: confirma sus datos antes del examen (correo obligatorio) */}
+        {fase === 'datos' && alumno && (
+          <DatosAntesDeExamen alumno={alumno} isMobile={isMobile} cursoNombre={curso.nombre}
+            onListo={(nuevos) => {
+              setAlumno(a => ({ ...a, ...nuevos }))
+              setParticipante(p => ({ ...p, ...nuevos }))
+              setFase('instrucciones'); window.scrollTo(0, 0)
+            }} />
         )}
 
         {/* FASE INSTRUCCIONES (antes de iniciar el cronómetro) */}
@@ -541,6 +536,21 @@ export default function ExamenPublico() {
               </div>
             )}
 
+            {resultado.aprobado && alumno && (
+              <div style={{ background: 'linear-gradient(135deg,#8B1A1A,#b91c1c)', borderRadius: 12, padding: '18px 20px', marginBottom: 20, color: '#fff' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>🎉 Comparte tu logro</div>
+                <div style={{ fontSize: 13, opacity: .9, marginBottom: 12 }}>Publica en tus redes la foto de tu grupo y cuéntale a todos que lo lograste.</div>
+                <button onClick={() => setCompartir(true)}
+                  style={{ background: '#fff', color: '#8B1A1A', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>
+                  Compartir en redes →
+                </button>
+              </div>
+            )}
+            {compartir && (
+              <ModalCompartirLogro onClose={() => setCompartir(false)}
+                datos={{ cursoId, cursoNombre: curso.nombre, nombre: alumno?.nombre || participante.nombre, idCertificado: resultado.cert?.id_unico, fechaCurso: resultado.cert?.fecha_curso }} />
+            )}
+
             {!resultado.aprobado && (
               <button onClick={repetir}
                 style={{ background: '#1e293b', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 28px', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
@@ -594,6 +604,56 @@ export default function ExamenPublico() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Paso previo al examen: confirmar/corregir datos. Correo obligatorio, WhatsApp opcional.
+function DatosAntesDeExamen({ alumno, isMobile, cursoNombre, onListo }) {
+  const [d, setD] = useState({ nombre: alumno.nombre || '', correo: alumno.correo || '', whatsapp: alumno.whatsapp || '' })
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const set = k => e => setD(p => ({ ...p, [k]: e.target.value }))
+
+  async function continuar() {
+    const nombre = d.nombre.trim(), correo = d.correo.trim(), whatsapp = d.whatsapp.trim()
+    if (!nombre) { setError('Escribe tu nombre completo (así aparecerá en tu certificado).'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) { setError('Escribe un correo válido, es obligatorio.'); return }
+    setError(''); setGuardando(true)
+    const nuevos = { nombre, correo, whatsapp }
+    try {
+      const { error: err } = await supabase.from('participantes').update(nuevos).eq('id', alumno.id)
+      if (err) throw err
+      try { await supabase.from('asignaciones').update({ empleado_nombre: nombre }).eq('empleado_id', alumno.id) } catch (_) {}
+      try {
+        const ses = JSON.parse(sessionStorage.getItem('estudiante_portal') || '{}')
+        sessionStorage.setItem('estudiante_portal', JSON.stringify({ ...ses, ...nuevos }))
+      } catch (_) {}
+      onListo(nuevos)
+    } catch (e) {
+      setError('No se pudieron guardar tus datos: ' + (e.message || 'intenta de nuevo.'))
+    } finally { setGuardando(false) }
+  }
+
+  const lbl = { display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 5, marginTop: 14 }
+  const inp = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '11px 12px', fontSize: 15, outline: 'none', color: '#1e293b', boxSizing: 'border-box' }
+  return (
+    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 16, padding: isMobile ? '22px 16px' : '30px 32px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#8B1A1A', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6 }}>Paso 1 de 2 · Mis datos</div>
+      <h2 style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', marginBottom: 4 }}>Confirma tus datos</h2>
+      <p style={{ color: '#64748b', fontSize: 13, marginBottom: 4 }}>{cursoNombre}</p>
+      <p style={{ color: '#94a3b8', fontSize: 12 }}>Revisa que estén correctos: tu nombre aparecerá así en tu certificado.</p>
+      <label style={lbl}>Nombre completo *</label>
+      <input value={d.nombre} onChange={set('nombre')} style={inp} autoComplete="name" />
+      <label style={lbl}>Correo electrónico *</label>
+      <input type="email" value={d.correo} onChange={set('correo')} placeholder="tucorreo@ejemplo.com" style={inp} autoComplete="email" />
+      <label style={lbl}>WhatsApp <span style={{ color: '#94a3b8', fontWeight: 400 }}>(opcional)</span></label>
+      <input type="tel" value={d.whatsapp} onChange={set('whatsapp')} placeholder="10 dígitos" style={inp} autoComplete="tel" />
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', color: '#991b1b', fontSize: 13, marginTop: 14 }}>{error}</div>}
+      <button onClick={continuar} disabled={guardando}
+        style={{ width: '100%', marginTop: 20, background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 10, padding: 14, fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>
+        {guardando ? 'Guardando...' : 'Guardar y continuar →'}
+      </button>
     </div>
   )
 }
