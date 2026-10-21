@@ -37,6 +37,7 @@ export default function EstudianteDashboard() {
   const [tab, setTab] = useState('asignados')
   const [modalDatos, setModalDatos] = useState(false)
   const [compartirCert, setCompartirCert] = useState(null)
+  const [membresia, setMembresia] = useState(null) // membresía ACTIVA (Lite/Pro/Master) o null
 
   useEffect(() => {
     const data = sessionStorage.getItem('estudiante_portal')
@@ -71,6 +72,20 @@ export default function EstudianteDashboard() {
       asig = r.data || []
     } catch (_) { asig = [] }
     setAsignaciones(asig)
+    // ¿Tiene membresía activa (cualquier plan)? Habilita PDF de constancias y microcredenciales
+    try {
+      const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' })
+      const { data: mems } = await supabase.from('membresias_alumno').select('*')
+        .eq('participante_id', est.id).eq('estado', 'activa').order('periodo_fin', { ascending: false })
+      const vigente = (mems || []).find(m => !m.periodo_fin || String(m.periodo_fin).slice(0, 10) >= hoy) || null
+      if (vigente) {
+        try {
+          const { data: plan } = await supabase.from('membresias_planes').select('nombre').eq('clave', vigente.plan_clave).maybeSingle()
+          vigente.plan_nombre = plan?.nombre || vigente.plan_clave
+        } catch (_) { vigente.plan_nombre = vigente.plan_clave }
+      }
+      setMembresia(vigente)
+    } catch (_) { setMembresia(null) }
     // Refrescar el consentimiento de oportunidades desde la BD (por si cambió)
     try {
       const { data: yo } = await supabase.from('participantes').select('disponible_oportunidades, perfil_profesional, habilidades_profesional, experiencia_profesional, linkedin_url, cv_url, codigo_referido, tokens_balance').eq('id', est.id).maybeSingle()
@@ -93,9 +108,21 @@ export default function EstudianteDashboard() {
   // REGLA DE DESCARGA:
   // - Si es de empresa (tiene empresa_id): NO descarga, mensaje RH
   // - Si es individual: 1 descarga gratis, luego mensaje de contacto
+  // - Con MEMBRESÍA activa (cualquier plan): descarga sus constancias en PDF sin límite
   const esDeEmpresa = !!estudiante?.empresa_id
+  const conMembresia = !!membresia
 
   async function intentarDescargar(cert) {
+    if (conMembresia) {
+      await generarYAbrirCertificado(cert)
+      try {
+        await supabase.from('certificados').update({
+          descargas_count: (cert.descargas_count || 0) + 1,
+          primera_descarga: cert.primera_descarga || new Date().toISOString()
+        }).eq('id', cert.id)
+      } catch (_) {}
+      return
+    }
     if (esDeEmpresa) return // no debería llamarse, el botón está bloqueado
 
     // Individual: verificar contador de descargas
@@ -193,6 +220,16 @@ export default function EstudianteDashboard() {
           const micros = asignaciones.filter(a => a.tipo === 'microcurso' || a.microcurso_titulo)
           return (
           <div>
+            {conMembresia ? (
+              <div style={{ background: 'linear-gradient(135deg,#1d4ed8,#1e3a8a)', borderRadius: 14, padding: '18px 22px', marginBottom: 16, color: '#fff' }}>
+                <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>⭐ Acceso a microcredenciales incluido en tu membresía {membresia.plan_nombre}</div>
+                <div style={{ fontSize: 13, opacity: .9 }}>Estamos construyendo la plataforma de microcredenciales: cursos cortos con examen y certificación verificable. Cuando esté lista aparecerá aquí y tú ya tendrás acceso.</div>
+              </div>
+            ) : (
+              <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 14, padding: '14px 18px', marginBottom: 16, color: '#475569', fontSize: 13 }}>
+                🔒 Las microcredenciales se incluyen con cualquier membresía (Lite, Pro o Master). Conócelas en la pestaña <button onClick={() => setTab('recompensas')} style={{ background: 'none', border: 'none', color: '#1d4ed8', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13 }}>Recompensas y Membresía</button>.
+              </div>
+            )}
             {micros.length === 0 ? (
               <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 40, textAlign: 'center', color: '#94a3b8' }}>
                 Aún no tienes microcredenciales asignadas.
@@ -231,7 +268,13 @@ export default function EstudianteDashboard() {
         {tab === 'certificados' && (
           <div>
             {/* Aviso según tipo */}
-            {esDeEmpresa ? (
+            {conMembresia ? (
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+                <p style={{ color: '#166534', fontSize: 13 }}>
+                  ⭐ Tu <strong>membresía {membresia.plan_nombre}</strong> incluye la descarga de tus constancias en PDF siempre que las necesites.
+                </p>
+              </div>
+            ) : esDeEmpresa ? (
               <div style={{ background: '#fef9c3', border: '1px solid #fde047', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
                 <p style={{ color: '#713f12', fontSize: 13 }}>
                   ℹ️ Tus certificados son gestionados por tu empresa. Para obtener una copia, solicítala a tu <strong>departamento de Recursos Humanos</strong>.
@@ -264,7 +307,12 @@ export default function EstudianteDashboard() {
                       </p>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                      {esDeEmpresa ? (
+                      {conMembresia ? (
+                        <button onClick={() => intentarDescargar(cert)}
+                          style={{ background: '#059669', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                          📥 Descargar PDF
+                        </button>
+                      ) : esDeEmpresa ? (
                         <a href={`https://wa.me/${WA_SOPORTE}?text=${encodeURIComponent('Hola, soy ' + estudiante.nombre + ' y necesito información sobre mi certificado ' + cert.id_unico)}`}
                           target="_blank"
                           style={{ background: '#f1f5f9', color: '#64748b', padding: '8px 16px', borderRadius: 8, fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>
@@ -578,8 +626,11 @@ function RecompensasTab({ estudiante, onActualizado }) {
               <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, whiteSpace: 'pre-line' }}>{plan.beneficios_extra}</div>
             )}
             {plan.tokens_mensuales > 0 && (
-              <div style={{ fontSize: 12, color: '#8B1A1A', fontWeight: 700, marginBottom: 14 }}>🎁 {plan.tokens_mensuales} tokens de regalo cada mes</div>
+              <div style={{ fontSize: 12, color: '#8B1A1A', fontWeight: 700, marginBottom: 8 }}>🎁 {plan.tokens_mensuales} tokens de regalo cada mes</div>
             )}
+            <div style={{ fontSize: 12, color: '#166534', fontWeight: 600, marginBottom: 14, lineHeight: 1.6 }}>
+              📜 Descarga de tus constancias en PDF<br />⚡ Acceso a microcredenciales (próximamente)
+            </div>
             <button onClick={() => setModalMembresia(plan)} style={{ width: '100%', background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 0', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               Solicitar membresía
             </button>

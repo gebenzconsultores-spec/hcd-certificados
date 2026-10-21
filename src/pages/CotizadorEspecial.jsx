@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 
 const EMAIL = 'ventas@hablandocondatos.com.mx'
+const OPCIONES_PAGO = ['De contado', 'Pago contra entrega', 'De acuerdo a las condiciones establecidas']
 const money = function(n) { return '$' + (Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 }) }
 // Duración predefinida del curso (en horas, tal como está en el catálogo) a texto legible.
 function duracionLegible(horas) {
@@ -30,6 +31,8 @@ export default function CotizadorEspecial() {
   var [duracion, setDuracion] = useState('')
   var [detalleServicio, setDetalleServicio] = useState('')
   var [condicionesManual, setCondicionesManual] = useState('')
+  var [condicionesPago, setCondicionesPago] = useState('')
+  var [compartiendo, setCompartiendo] = useState(null) // cotización que se está compartiendo
   var [precio, setPrecio] = useState(0)
   var [aplicaIva, setAplicaIva] = useState(true)
   var [viaticos, setViaticos] = useState(0)
@@ -63,7 +66,7 @@ export default function CotizadorEspecial() {
   function limpiarForm() {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(''); setContacto(''); setCorreo(''); setTelefono('')
     setTipo('curso'); setCurso(''); setParticipantes(1); setModalidad('online'); setDuracion('')
-    setDetalleServicio(''); setCondicionesManual('')
+    setDetalleServicio(''); setCondicionesManual(''); setCondicionesPago('')
     setPrecio(0); setAplicaIva(true); setViaticos(0); setNotas('')
   }
 
@@ -71,7 +74,7 @@ export default function CotizadorEspecial() {
     setEditandoId(c.id); setFolio(c.folio || ''); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
     setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
     setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online'); setDuracion(c.duracion || '')
-    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
+    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || ''); setCondicionesPago(c.condiciones_pago || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
   }
 
@@ -95,6 +98,7 @@ export default function CotizadorEspecial() {
       duracion: tipo === 'servicio' ? null : duracion.trim(),
       detalle_servicio: tipo === 'servicio' ? detalleServicio.trim() : null,
       condiciones_manual: tipo === 'servicio' ? condicionesManual.trim() : null,
+      condiciones_pago: condicionesPago.trim() || null,
       precio: Number(precio) || 0, aplica_iva: aplicaIva, viaticos: Number(viaticos) || 0,
       notas: notas.trim(), subtotal: subtotal, iva: iva, total: total,
       estado: 'guardada'
@@ -113,7 +117,7 @@ export default function CotizadorEspecial() {
     setEditandoId(null); setFolio(nuevoFolio()); setEmpresa(c.empresa || ''); setContacto(c.contacto || '')
     setCorreo(c.correo || ''); setTelefono(c.telefono || ''); setTipo(c.tipo || 'curso'); setCurso(c.curso || '')
     setParticipantes(c.participantes || 1); setModalidad(c.modalidad || 'online'); setDuracion(c.duracion || '')
-    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || '')
+    setDetalleServicio(c.detalle_servicio || ''); setCondicionesManual(c.condiciones_manual || ''); setCondicionesPago(c.condiciones_pago || '')
     setPrecio(c.precio || 0); setAplicaIva(c.aplica_iva !== false); setViaticos(c.viaticos || 0); setNotas(c.notas || '')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -123,8 +127,17 @@ export default function CotizadorEspecial() {
     supabase.from('cotizaciones_especiales').delete().eq('id', c.id).then(function() { cargar() })
   }
 
+  function datosForm() {
+    return { id: editandoId, folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, tipo: tipo, curso: curso, participantes: participantes, modalidad: modalidad, duracion: duracion, detalle_servicio: detalleServicio, condiciones_manual: condicionesManual, condiciones_pago: condicionesPago, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
+  }
+
   function generarPDF(c) {
-    var d = c || { folio: folio, empresa: empresa, contacto: contacto, correo: correo, telefono: telefono, tipo: tipo, curso: curso, participantes: participantes, modalidad: modalidad, duracion: duracion, detalle_servicio: detalleServicio, condiciones_manual: condicionesManual, precio: precio, aplica_iva: aplicaIva, viaticos: viaticos, notas: notas, subtotal: subtotal, iva: iva, total: total }
+    var html = construirHTMLCotizacion(c || datosForm()) +
+      '<script>window.onload=function(){window.print()}<\/script>'
+    var w = window.open('', '_blank'); w.document.write(html); w.document.close()
+  }
+
+  function construirHTMLCotizacion(d) {
     var esServicio = d.tipo === 'servicio'
     var fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
     var st = (Number(d.precio)||0) + (Number(d.viaticos)||0)
@@ -133,18 +146,22 @@ export default function CotizadorEspecial() {
     var detalleCol = esServicio ? (d.detalle_servicio || '') : ((d.participantes||1) + ' persona(s) · ' + (d.modalidad||'') + (d.duracion ? ' · ' + d.duracion : ''))
     // Condiciones: en cursos se imprimen fijas; en servicios solo si se escribieron a mano (si no, se omite la sección completa)
     var condicionesHtml = ''
+    var pago = (d.condiciones_pago || '').trim()
+    var lineaPago = pago ? '• <strong>Condiciones de pago:</strong> ' + pago + '<br/>' : ''
     if (esServicio) {
-      if (d.condiciones_manual && d.condiciones_manual.trim()) {
+      var manual = (d.condiciones_manual || '').trim()
+      if (manual || pago) {
         condicionesHtml = '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
-          String(d.condiciones_manual).replace(/\n/g, '<br/>') + '</div>'
+          lineaPago + String(manual).replace(/\n/g, '<br/>') + '</div>'
       }
     } else {
       condicionesHtml = '<div class="condiciones"><h3 style="margin-bottom:8px;color:#1e293b">Condiciones</h3>' +
         '• Cotización válida por 90 días naturales.<br/>' +
         '• Precios en pesos mexicanos (MXN). ' + (d.aplica_iva ? 'IVA del 16% incluido.' : 'Precio sin IVA.') + '<br/>' +
         '• Incluye constancias con folio único verificable.<br/>' +
+        lineaPago +
         (d.modalidad === 'online'
-          ? '• El monto total deberá liquidarse un día antes de que comience el curso, o contar con una orden de compra.<br/>'
+          ? (pago ? '' : '• El monto total deberá liquidarse un día antes de que comience el curso, o contar con una orden de compra.<br/>')
           : '• Incluye material didáctico.<br/>• La empresa deberá proporcionar y/o gestionar: aula de capacitación, pizarrón, proyector, conexión eléctrica y de preferencia acceso a internet (opcional, de acuerdo a los protocolos de seguridad de la empresa).<br/>') +
         '• Contacto: WhatsApp 222 354 9353 · ' + EMAIL + '</div>'
     }
@@ -177,8 +194,8 @@ export default function CotizadorEspecial() {
       '<div style="text-align:center;margin-top:24px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8">' +
       '<p>Hablando con Datos — Consultoría y Capacitación · Puebla, México</p>' +
       '<p>Folio: ' + d.folio + ' · 222 354 9353 · ' + EMAIL + '</p></div>' +
-      '<script>window.onload=function(){window.print()}<\/script></body></html>'
-    var w = window.open('', '_blank'); w.document.write(html); w.document.close()
+      '</body></html>'
+    return html
   }
 
   function exportarExcel() {
@@ -266,6 +283,18 @@ export default function CotizadorEspecial() {
           <label style={{ fontSize: 13, color: '#475569', cursor: 'pointer' }}><input type="checkbox" checked={aplicaIva} onChange={function(e){setAplicaIva(e.target.checked)}} /> Aplica IVA (16%)</label>
           <div><label style={LBL}>Viáticos</label><input type="number" min="0" step="100" value={viaticos} onChange={function(e){setViaticos(e.target.value)}} style={Object.assign({}, INP, { width: 140 })} /></div>
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={LBL}>Condiciones de pago <span style={{ fontWeight: 400, color: '#94a3b8' }}>(elige una o escribe la tuya)</span></label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {OPCIONES_PAGO.map(function(op) {
+              var activo = condicionesPago === op
+              return <button key={op} type="button" onClick={function(){ setCondicionesPago(activo ? '' : op) }}
+                style={{ padding: '6px 12px', borderRadius: 20, border: '1.5px solid ' + (activo ? '#8B1A1A' : '#e2e8f0'), background: activo ? '#f9f0f0' : '#fff', color: activo ? '#8B1A1A' : '#475569', fontSize: 12, fontWeight: activo ? 700 : 500, cursor: 'pointer' }}>{op}</button>
+            })}
+          </div>
+          <input value={condicionesPago} onChange={function(e){setCondicionesPago(e.target.value)}} placeholder="Ej: 50% de anticipo y 50% al concluir el curso" style={INP} />
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>Se imprime en las condiciones del PDF. Si lo dejas vacío, en cursos online se usa el texto de siempre (liquidar un día antes u orden de compra).</div>
+        </div>
         <div style={{ marginBottom: 14 }}><label style={LBL}>Notas</label><textarea value={notas} onChange={function(e){setNotas(e.target.value)}} placeholder="Notas para el cliente o internas" rows={2} style={Object.assign({}, INP, { resize: 'vertical' })} /></div>
 
         {tipo === 'servicio' && (
@@ -284,8 +313,19 @@ export default function CotizadorEspecial() {
           <button onClick={guardar} disabled={saving} style={BTN}>{saving ? 'Guardando...' : editandoId ? '💾 Actualizar cotización' : '💾 Guardar cotización'}</button>
           <button onClick={function(){guardar(); setTimeout(function(){}, 500)}} disabled={saving} style={Object.assign({}, BTN, { background: '#1e293b' })}>{saving ? 'Guardando...' : '💾📄 Guardar + PDF'}</button>
           <button onClick={function(){generarPDF(null)}} style={Object.assign({}, BTN, { background: '#fff', color: '#475569', border: '1px solid #e2e8f0' })}>📄 Solo PDF (sin guardar)</button>
+          <button onClick={function(){ if (!empresa.trim() || !curso.trim()) { alert('Completa al menos empresa y curso/servicio.'); return } setCompartiendo(datosForm()) }} style={Object.assign({}, BTN, { background: '#059669' })}>📤 Enviar por WhatsApp / correo</button>
         </div>
       </div>
+
+      {compartiendo && (
+        <CompartirCotizacion d={compartiendo} html={construirHTMLCotizacion(compartiendo)}
+          onClose={function(){ setCompartiendo(null) }}
+          onEnviada={function(){
+            if (compartiendo.id && (!compartiendo.estado || compartiendo.estado === 'guardada' || compartiendo.estado === 'borrador')) {
+              supabase.from('cotizaciones_especiales').update({ estado: 'enviada' }).eq('id', compartiendo.id).then(function(){ cargar() })
+            }
+          }} />
+      )}
 
       {/* ═══ HISTORIAL ═══ */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
@@ -317,6 +357,7 @@ export default function CotizadorEspecial() {
                   <button onClick={function(){cargarEnForm(c)}} style={BTN2}>✏️ Editar</button>
                   <button onClick={function(){duplicar(c)}} style={BTN2}>📋 Duplicar (nueva)</button>
                   <button onClick={function(){generarPDF(c)}} style={Object.assign({}, BTN2, { color: '#1e293b', fontWeight: 700 })}>📄 PDF</button>
+                  <button onClick={function(){setCompartiendo(c)}} style={Object.assign({}, BTN2, { color: '#059669', fontWeight: 700, borderColor: '#a7f3d0' })}>📤 Enviar</button>
                   <select value={c.estado} onChange={function(e){supabase.from('cotizaciones_especiales').update({estado:e.target.value}).eq('id',c.id).then(function(){cargar()})}} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '5px 8px', fontSize: 11, cursor: 'pointer' }}>
                     <option value="borrador">Borrador</option><option value="guardada">Guardada</option><option value="enviada">Enviada</option><option value="aceptada">Aceptada</option>
                   </select>
@@ -337,3 +378,150 @@ var BTN = { background: '#8B1A1A', color: '#fff', border: 'none', borderRadius: 
 var BTN2 = { background: '#f8f9fb', color: '#475569', border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 12px', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }
 var INP = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, boxSizing: 'border-box' }
 var LBL = { display: 'block', fontWeight: 600, fontSize: 12, color: '#475569', marginBottom: 4, marginTop: 12 }
+
+// ─── Compartir cotización: genera el PDF, lo sube y arma WhatsApp / correo ───
+function soloDigitos(t) { return String(t || '').replace(/\D/g, '') }
+function telWhatsApp(t) {
+  var d = soloDigitos(t)
+  if (d.length === 10) return '52' + d          // número mexicano a 10 dígitos
+  if (d.length === 12 && d.indexOf('52') === 0) return d
+  return d
+}
+
+async function htmlAPdf(html) {
+  var mods = await Promise.all([import('html2canvas'), import('jspdf')])
+  var html2canvas = mods[0].default
+  var jsPDF = mods[1].jsPDF || mods[1].default
+  var ANCHO = 816 // carta a 96 dpi
+  var iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:' + ANCHO + 'px;height:1200px;border:0;'
+  document.body.appendChild(iframe)
+  try {
+    await new Promise(function(res) {
+      iframe.onload = res
+      iframe.srcdoc = html.replace('</head>', '<style>html,body{margin:0;background:#fff}body{padding:48px 56px;width:' + ANCHO + 'px;box-sizing:border-box}</style></head>')
+    })
+    var doc = iframe.contentDocument
+    try { await doc.fonts.ready } catch (_) {}
+    // Alto real del contenido (si no, el cuerpo toma el alto del iframe y sale una hoja en blanco)
+    iframe.style.height = '10px'
+    var alto = Math.max(doc.body.scrollHeight, doc.documentElement.scrollHeight)
+    iframe.style.height = alto + 'px'
+    var canvas = await html2canvas(doc.body, { scale: 2, width: ANCHO, height: alto, windowWidth: ANCHO, windowHeight: alto, backgroundColor: '#ffffff' })
+    var pdf = new jsPDF({ unit: 'pt', format: 'letter' })
+    var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight()
+    var pxPorPagina = Math.floor(canvas.width * ph / pw)
+    for (var y = 0, pag = 0; y < canvas.height; y += pxPorPagina, pag++) {
+      if (pag > 0 && canvas.height - y < 40) break // sobrante mínimo: no crear hoja en blanco
+      var trozo = document.createElement('canvas')
+      trozo.width = canvas.width; trozo.height = Math.min(pxPorPagina, canvas.height - y)
+      trozo.getContext('2d').drawImage(canvas, 0, y, canvas.width, trozo.height, 0, 0, canvas.width, trozo.height)
+      if (pag > 0) pdf.addPage()
+      pdf.addImage(trozo.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, trozo.height * pw / canvas.width)
+    }
+    return pdf.output('blob')
+  } finally { iframe.remove() }
+}
+
+function CompartirCotizacion({ d, html, onClose, onEnviada }) {
+  var [estado, setEstado] = useState('generando') // generando | listo | error
+  var [blob, setBlob] = useState(null)
+  var [url, setUrl] = useState(null)
+  var [aviso, setAviso] = useState('')
+  var nombreArchivo = 'Cotizacion-' + String(d.folio || 'HCD').replace(/[^a-zA-Z0-9-]/g, '') + '.pdf'
+
+  useEffect(function() {
+    var vivo = true
+    ;(async function() {
+      try {
+        var b = await htmlAPdf(html)
+        if (!vivo) return
+        setBlob(b)
+        var ruta = 'COT-' + String(d.folio || '').replace(/[^a-zA-Z0-9-]/g, '') + '-' + Math.random().toString(36).slice(2, 10) + '.pdf'
+        var up = await supabase.storage.from('cotizaciones').upload(ruta, b, { contentType: 'application/pdf', upsert: true })
+        if (up.error) {
+          setAviso('No se pudo subir el PDF para generar el enlace (¿ya corriste el SQL del bucket "cotizaciones"?). Aún puedes descargarlo y adjuntarlo.')
+        } else {
+          var pub = supabase.storage.from('cotizaciones').getPublicUrl(ruta).data.publicUrl
+          if (!vivo) return
+          setUrl(pub)
+          if (d.id) supabase.from('cotizaciones_especiales').update({ pdf_url: pub }).eq('id', d.id).then(function(){})
+        }
+        setEstado('listo')
+      } catch (e) {
+        if (vivo) { setEstado('error'); setAviso('No se pudo generar el PDF: ' + (e.message || '')) }
+      }
+    })()
+    return function() { vivo = false }
+  }, [])
+
+  var saludo = 'Hola' + (d.contacto ? ' ' + d.contacto.split(' ')[0] : '') + ', '
+  var mensaje = saludo + 'te comparto la cotización ' + (d.folio || '') + ' de Hablando con Datos para "' + (d.curso || '') + '"' +
+    (d.total ? ' por ' + money(d.total) : '') + '.' +
+    (url ? '\n\nPuedes verla y descargarla aquí: ' + url : '') +
+    '\n\nQuedo atento a cualquier duda.\nHablando con Datos · 222 354 9353'
+
+  function descargar() {
+    if (!blob) return
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nombreArchivo
+    document.body.appendChild(a); a.click(); a.remove()
+  }
+  function porWhatsApp() {
+    var tel = telWhatsApp(d.telefono)
+    window.open('https://wa.me/' + (tel || '') + '?text=' + encodeURIComponent(mensaje), '_blank', 'noopener')
+    if (!url) descargar()
+    onEnviada && onEnviada()
+  }
+  function porCorreo() {
+    var asunto = 'Cotización ' + (d.folio || '') + ' — Hablando con Datos'
+    window.location.href = 'mailto:' + encodeURIComponent(d.correo || '') + '?subject=' + encodeURIComponent(asunto) + '&body=' + encodeURIComponent(mensaje)
+    if (!url) descargar()
+    onEnviada && onEnviada()
+  }
+  async function compartirArchivo() {
+    try {
+      var f = new File([blob], nombreArchivo, { type: 'application/pdf' })
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], text: mensaje, title: 'Cotización ' + (d.folio || '') }); onEnviada && onEnviada() }
+    } catch (_) {}
+  }
+  function copiar() {
+    if (!url) return
+    navigator.clipboard.writeText(url).then(function(){ setAviso('Enlace copiado ✅') }, function(){})
+  }
+
+  var puedeArchivo = typeof navigator !== 'undefined' && navigator.canShare && blob && navigator.canShare({ files: [new File([blob], 'x.pdf', { type: 'application/pdf' })] })
+  var B = function(bg, col) { return { width: '100%', background: bg, color: col || '#fff', border: col ? '1px solid #e2e8f0' : 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 8 } }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: '24px 26px', width: 'min(440px,100%)', maxHeight: '90vh', overflowY: 'auto' }} onClick={function(e){ e.stopPropagation() }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <h3 style={{ fontSize: 17, fontWeight: 800, color: '#1e293b' }}>📤 Enviar cotización {d.folio}</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#64748b', cursor: 'pointer' }}>✕</button>
+        </div>
+        <p style={{ color: '#64748b', fontSize: 13, marginBottom: 16 }}>{d.empresa}{d.contacto ? ' · ' + d.contacto : ''}</p>
+
+        {estado === 'generando' && <div style={{ textAlign: 'center', color: '#64748b', fontSize: 13, padding: '24px 0' }}>Generando PDF y enlace…</div>}
+
+        {estado !== 'generando' && (
+          <div>
+            <button onClick={porWhatsApp} disabled={!blob} style={B('#25D366')}>WhatsApp{d.telefono ? ' · ' + d.telefono : ''}</button>
+            <button onClick={porCorreo} disabled={!blob} style={B('#1d4ed8')}>Correo{d.correo ? ' · ' + d.correo : ''}</button>
+            {puedeArchivo && <button onClick={compartirArchivo} style={B('#8B1A1A')}>📲 Compartir el PDF (otras apps)</button>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={descargar} disabled={!blob} style={Object.assign(B('#f8f9fb', '#334155'), { flex: 1 })}>⬇️ Descargar PDF</button>
+              {url && <button onClick={copiar} style={Object.assign(B('#f8f9fb', '#334155'), { flex: 1 })}>🔗 Copiar enlace</button>}
+            </div>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 6, lineHeight: 1.5 }}>
+              {url
+                ? 'El mensaje lleva un enlace para que el cliente vea y descargue el PDF.'
+                : 'Sin enlace: al enviar se descarga el PDF para que lo adjuntes tú.'}
+              {!d.telefono && ' No hay teléfono: WhatsApp te dejará elegir el contacto.'}
+            </p>
+          </div>
+        )}
+        {aviso && <div style={{ background: estado === 'error' ? '#fef2f2' : '#fffbeb', border: '1px solid ' + (estado === 'error' ? '#fecaca' : '#fde68a'), color: estado === 'error' ? '#991b1b' : '#92400e', borderRadius: 8, padding: '10px 12px', fontSize: 12, marginTop: 10 }}>{aviso}</div>}
+      </div>
+    </div>
+  )
+}

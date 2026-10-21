@@ -420,7 +420,7 @@ export default function ExamenPublico() {
                 <li>El tiempo empieza a correr al presionar <strong>Comenzar examen</strong> ({SEG_POR_PREGUNTA} segundos por pregunta).</li>
                 <li>Si se acaba el tiempo, tu examen se envía solo con lo que hayas contestado.</li>
                 <li><strong>No cambies de pestaña, no abras otra app ni minimices la ventana.</strong> Si lo haces, el examen se cierra, tus respuestas se borran y tendrás que iniciarlo de nuevo.</li>
-                <li>En celular: activa "No molestar" para que una llamada o notificación no te saque del examen.</li>
+                <li>Te sugerimos activar la opción "No molestar" para que una llamada o notificación no te saque del examen.</li>
               </ul>
             </div>
             <button onClick={comenzarExamen} disabled={preguntas.length === 0}
